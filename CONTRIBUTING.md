@@ -55,6 +55,10 @@ For deployment and macOS LaunchAgent instructions, see
 [`deploy/README.md`](deploy/README.md). Those commands are not required for ordinary
 development.
 
+If the machine already supervises the BFF as a LaunchAgent, see
+[docs/operations.md](docs/operations.md) for how to pull and restart it, and for why the
+OpenCode agent runtime must not be restarted alongside it.
+
 ## Understand the boundaries
 
 The request path is:

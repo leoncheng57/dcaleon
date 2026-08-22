@@ -144,6 +144,10 @@ npm ci
 npm run service:install -- --port=3210
 ```
 
+To update an already-installed service with new code, see
+[`docs/operations.md`](../docs/operations.md); it also explains why the OpenCode agent
+runtime must not be restarted along with the BFF.
+
 Use `npm run service:install -- --port=3211` to choose another supervised port.
 Port `3000` is rejected because `npm run dev` uses it by default. Installation is
 idempotent on both hosts: it rebuilds the app, then replaces exactly one thing —

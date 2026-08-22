@@ -429,7 +429,8 @@ requirement rather than a substitute for these content controls.
 See [`docs/architecture.md`](docs/architecture.md) for conversation and event flows, state
 ownership, safety boundaries, and the extension map. See
 [`docs/subagents.md`](docs/subagents.md) for child-session lifecycles, permissions, and safe
-parallel work.
+parallel work. See [`docs/operations.md`](docs/operations.md) for updating and restarting a
+supervised BFF, and for why the agent runtime is not safe to restart with it.
 
 ## Safety
 
