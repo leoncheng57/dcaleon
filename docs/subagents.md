@@ -444,6 +444,8 @@ Known gaps and limits:
 
 The proposed [persistent side-agent conversations RFC](persistent-side-agents-rfc.md) describes
 an application-owned correlation and answer-delivery bridge for reusable, multi-turn specialists.
+Its [design package](persistent-side-agent-design-package.md) collects the supporting contracts,
+probes, threat model, prototype, rollout plan, and failure catalogue.
 
 ## Choosing a parallelism model
 

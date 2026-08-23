@@ -2,6 +2,10 @@
 
 Status: **Proposed**
 
+Companion artifacts, executable probes, contracts, security analysis, implementation planning,
+operations guidance, and the interactive prototype are collected in the
+[persistent side-agent design package](persistent-side-agent-design-package.md).
+
 ## Summary
 
 Add named side agents that retain their own OpenCode child session and can answer an arbitrary
