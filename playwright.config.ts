@@ -151,6 +151,23 @@ export const appServer = {
       directory: process.cwd(),
     }]),
     DSH_EXPERIMENT_LEDGER: `/tmp/custom-dca-opencode-dsh-ledger-${PORT}.json`,
+    CLAUDE_RUNTIME_ENABLED: "true",
+    // Unsafe path (mock binary, no Seatbelt) is refused unless NODE_ENV=test,
+    // which is set on the server command above, never on the build.
+    CLAUDE_TEST_UNSAFE: "true",
+    CLAUDE_CLI_VERSION: "2.1.257",
+    CLAUDE_BINARY: `${process.cwd()}/tests/e2e/mock-claude.mjs`,
+    CLAUDE_STATE_DIR: `/tmp/custom-dca-opencode-claude-state-${PORT}`,
+    CLAUDE_PRESETS_JSON: JSON.stringify([
+      { id: "e2e-readonly", label: "E2E read-only", model: "mock-claude", effort: "high", permissionMode: "default", mode: "read-only" },
+      { id: "e2e-build", label: "E2E Build", model: "mock-claude", permissionMode: "acceptEdits", mode: "build" },
+    ]),
+    CLAUDE_WORKSPACES_JSON: JSON.stringify([{
+      id: "claude-e2e-workspace",
+      label: "Claude E2E workspace",
+      directory: process.cwd(),
+    }]),
+    CLAUDE_EXPERIMENT_LEDGER: `/tmp/custom-dca-opencode-claude-ledger-${PORT}.json`,
   },
 };
 

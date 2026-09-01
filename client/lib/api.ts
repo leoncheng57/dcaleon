@@ -151,6 +151,38 @@ export interface DshConfigResponse {
   presets: DshPresetSummary[];
   workspaces: DshWorkspaceSummary[];
 }
+
+export type ClaudePresetMode = "read-only" | "build";
+export interface ClaudePresetSummary {
+  id: string;
+  label: string;
+  model: string;
+  effort?: string;
+  permissionMode: string;
+  mode: ClaudePresetMode;
+}
+export interface ClaudeWorkspaceSummary {
+  id: string;
+  label: string;
+}
+export interface ClaudeConfigResponse {
+  enabled: true;
+  configured: boolean;
+  cliVersion: string;
+  sandbox: "seatbelt" | "test-unsafe";
+  presets: ClaudePresetSummary[];
+  workspaces: ClaudeWorkspaceSummary[];
+}
+export interface ClaudeSessionSummary {
+  id: string;
+  title: string;
+  presetId: string;
+  workspaceId: string;
+  mode: ClaudePresetMode;
+  createdAt: string;
+  updatedAt: string;
+  running: boolean;
+}
 export type DshTrajectoryCategory = "turn" | "request" | "message" | "tool" | "compaction" | "child" | "status" | "error";
 export interface DshTrajectoryUsage {
   inputTokens: number;
@@ -696,7 +728,7 @@ function scoped(path: string, directory: string, extra: Record<string, string> =
 
 export const api = {
   health: () => fetch("/api/health").then((r) => json<HealthResponse>(r)),
-  appConfig: () => fetch("/api/app-config").then((r) => json<{ publicAppUrl: string | null; dshEnabled: boolean }>(r)),
+  appConfig: () => fetch("/api/app-config").then((r) => json<{ publicAppUrl: string | null; dshEnabled: boolean; claudeEnabled: boolean }>(r)),
   projects: () => fetch("/api/projects").then((r) => json<{ root: string; projects: DiscoveredProject[] }>(r)),
   projectPins: () => fetch("/api/project-pins").then((r) => json<{ directories: string[] }>(r)),
   saveProjectPins: (directories: string[]) =>
@@ -757,6 +789,25 @@ export const api = {
   cancelDsh: (id: string) => fetch(`/api/dsh/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
   dshEventsUrl: (id: string) => `/api/dsh/events?${new URLSearchParams({ sessionId: id })}`,
+
+  claudeConfig: () => fetch("/api/claude/config").then((r) => json<ClaudeConfigResponse>(r)),
+  claudeSessions: () => fetch("/api/claude/sessions").then((r) => json<{ sessions: ClaudeSessionSummary[] }>(r)),
+  createClaudeSession: (input: { presetId: string; workspaceId: string; title?: string }) =>
+    fetch("/api/claude/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
+  claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
+    json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
+  promptClaude: (id: string, text: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  }).then((r) => json<{ accepted: boolean }>(r)),
+  cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
+    json<{ cancelled: boolean }>(r)),
+  claudeEventsUrl: (id: string) => `/api/claude/events?${new URLSearchParams({ sessionId: id })}`,
   dshTrajectory: (id: string, options: { limit?: number; before?: number } = {}) => {
     const query = new URLSearchParams({ limit: String(options.limit ?? 200) });
     if (options.before !== undefined) query.set("before", String(options.before));

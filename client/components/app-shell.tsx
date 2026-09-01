@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FlaskConical, ListTodo, Moon, RefreshCw, Sun } from "lucide-react";
+import { FlaskConical, ListTodo, Moon, RefreshCw, Sparkles, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -39,6 +39,8 @@ function documentTitle(pathname: string): string {
   if (pathname === "/observability") return `Observability | ${APP_NAME}`;
   if (pathname === "/dsh") return `DSH Lab | ${APP_NAME}`;
   if (pathname.startsWith("/dsh/sessions/")) return `DSH Session | ${APP_NAME}`;
+  if (pathname === "/claude") return `Claude Lab | ${APP_NAME}`;
+  if (pathname.startsWith("/claude/sessions/")) return `Claude Session | ${APP_NAME}`;
   if (pathname === "/playbooks") return `Playbooks | ${APP_NAME}`;
   if (pathname === "/playbooks/workflows") return `Workflows | Playbooks | ${APP_NAME}`;
   if (pathname.startsWith("/playbooks/workflows/")) return `Workflow | Playbooks | ${APP_NAME}`;
@@ -58,6 +60,7 @@ export function AppShell() {
   const [paletteStatus, setPaletteStatus] = useState<string | undefined>();
   const [refreshing, setRefreshing] = useState(false);
   const [dshEnabled, setDshEnabled] = useState(false);
+  const [claudeEnabled, setClaudeEnabled] = useState(false);
   const paletteRequest = useRef(0);
 
   useEffect(() => {
@@ -69,7 +72,7 @@ export function AppShell() {
     directory ? `${path}?${new URLSearchParams({ directory })}` : path;
 
   useEffect(() => {
-    void api.appConfig().then((config) => setDshEnabled(config.dshEnabled)).catch(() => undefined);
+    void api.appConfig().then((config) => { setDshEnabled(config.dshEnabled); setClaudeEnabled(config.claudeEnabled); }).catch(() => undefined);
   }, []);
 
   const openPhoneTransfer = async () => {
@@ -148,6 +151,7 @@ export function AppShell() {
       { id: "planning", title: "Planning", to: "/planning", keywords: ["issues", "pull requests", "roadmap", "github"] },
       { id: "observability", title: "Observability", to: "/observability", keywords: ["logs", "audit", "deployment", "health", "processes"] },
       ...(dshEnabled ? [{ id: "dsh", title: "DSH lab", to: "/dsh", keywords: ["deepseek", "harness", "experiment"] }] : []),
+      ...(claudeEnabled ? [{ id: "claude", title: "Claude lab", to: "/claude", keywords: ["claude", "anthropic", "code", "binary"] }] : []),
       { id: "playbooks", title: "Playbooks", to: "/playbooks", keywords: ["workflows", "procedures"] },
     ],
     actions: [
@@ -235,6 +239,18 @@ export function AppShell() {
             >
               <FlaskConical aria-hidden="true" size={16} />
               <span className="hidden sm:inline">DSH</span>
+            </NavLink>
+          )}
+          {claudeEnabled && (
+            <NavLink
+              aria-label="Claude lab"
+              className={({ isActive }) => `inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold pointer-coarse:size-11 sm:w-auto sm:px-2 ${isActive ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-action-ghost)] hover:bg-[var(--color-background-action-ghost-hover)]"}`}
+              title="Claude lab"
+              to="/claude"
+              data-testid="claude-nav"
+            >
+              <Sparkles aria-hidden="true" size={16} />
+              <span className="hidden sm:inline">Claude</span>
             </NavLink>
           )}
           <NavLink

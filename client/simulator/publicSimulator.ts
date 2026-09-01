@@ -1,5 +1,7 @@
 import type {
   AppSettings,
+  ClaudeConfigResponse,
+  ClaudeSessionSummary,
   DshConfigResponse,
   DshSessionSummary,
   DshTrajectoryEvent,
@@ -102,6 +104,26 @@ const dshConfig: DshConfigResponse = {
   presets: [{ id: DSH_PRESET_ID, label: "Preview preset", provider: "simulator", model: "sim-preview-v1", fingerprint: "0".repeat(64), mode: "read-only" }],
   workspaces: [{ id: DSH_WORKSPACE_ID, label: "Preview workspace" }],
 };
+
+const CLAUDE_PRESET_ID = "claude-preview-preset";
+const CLAUDE_WORKSPACE_ID = "claude-preview-workspace";
+
+const claudeConfig: ClaudeConfigResponse = {
+  enabled: true,
+  configured: true,
+  cliVersion: "2.1.257",
+  sandbox: "seatbelt",
+  presets: [{ id: CLAUDE_PRESET_ID, label: "Preview preset", model: "sim-preview-v1", effort: "high", permissionMode: "default", mode: "read-only" }],
+  workspaces: [{ id: CLAUDE_WORKSPACE_ID, label: "Preview workspace" }],
+};
+
+interface ClaudeFixtureSession extends ClaudeSessionSummary {
+  events: TranscriptEvent[];
+}
+
+function claudeSummary(session: ClaudeFixtureSession): ClaudeSessionSummary {
+  return { id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, mode: session.mode, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running };
+}
 
 interface DshFixtureSession extends DshSessionSummary {
   events: TranscriptEvent[];
@@ -247,6 +269,8 @@ export function createPublicSimulator(): typeof fetch {
   // DSH fixture state — mutable per tab, reset on page reload.
   const dshSessions: DshFixtureSession[] = [makeDshSeedSession()];
   let dshCounter = 0;
+  const claudeSessions: ClaudeFixtureSession[] = [];
+  let claudeCounter = 0;
 
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const raw = input instanceof Request ? input.url : String(input);
@@ -257,7 +281,7 @@ export function createPublicSimulator(): typeof fetch {
     const path = url.pathname;
 
     if (path === "/api/health") return response({ healthy: true, upstream: { url: "simulator://opencode", reachable: true, version: "1.18.23+dca.2", expected: "1.18.23+dca.2", versionMatches: true }, events: { connected: true } });
-    if (path === "/api/app-config") return response({ publicAppUrl: null, dshEnabled: true });
+    if (path === "/api/app-config") return response({ publicAppUrl: null, dshEnabled: true, claudeEnabled: true });
     if (path === "/api/projects") return response({ root: "/tmp", projects: [{ name: "mock-project", relativePath: "mock-project", directory: SIMULATOR_DIRECTORY, kind: "repository" }, { name: "mock-second-project", relativePath: "mock-second-project", directory: SECOND_DIRECTORY, kind: "repository" }] });
     if (path === "/api/project-pins") {
       if (method === "PATCH") projectPins = Array.isArray(body.directories) ? body.directories : projectPins;
@@ -570,6 +594,69 @@ export function createPublicSimulator(): typeof fetch {
       // GET /api/dsh/sessions/:id — session + normalized events
       if (!dshRest) return response({ session: dshSummary(dshSession), events: dshSession.events });
     }
+
+    if (path === "/api/claude/config") return response(claudeConfig);
+
+    if (path === "/api/claude/sessions" && method === "POST") {
+      const selectedPreset = claudeConfig.presets.find((item) => item.id === body.presetId);
+      const selectedWorkspace = claudeConfig.workspaces.find((item) => item.id === body.workspaceId);
+      if (!selectedPreset || !selectedWorkspace) return response({ error: "presetId and workspaceId must be allowlisted" }, 400);
+      const now = new Date().toISOString();
+      const session: ClaudeFixtureSession = {
+        id: `claude-sim-${++claudeCounter}`,
+        title: typeof body.title === "string" ? body.title.trim().slice(0, 120) || "New Claude conversation" : "New Claude conversation",
+        presetId: selectedPreset.id,
+        workspaceId: selectedWorkspace.id,
+        mode: selectedPreset.mode,
+        createdAt: now,
+        updatedAt: now,
+        running: false,
+        events: [],
+      };
+      claudeSessions.unshift(session);
+      return response({ session: claudeSummary(session) }, 201);
+    }
+    if (path === "/api/claude/sessions") {
+      return response({ sessions: claudeSessions.map(claudeSummary) });
+    }
+
+    const claudeSessionRoute = routeMatch(path, /^\/api\/claude\/sessions\/([^/]+)(.*)$/u);
+    if (claudeSessionRoute) {
+      const claudeId = decodeURIComponent(claudeSessionRoute[1]);
+      const claudeRest = claudeSessionRoute[2];
+      const claudeSession = claudeSessions.find((item) => item.id === claudeId);
+      if (!claudeSession) return response({ error: "Claude session not found" }, 404);
+
+      if (claudeRest === "/prompt" && method === "POST") {
+        const text = typeof body.text === "string" ? body.text.trim() : "";
+        if (!text || text.length > 40_000) return response({ error: "text must contain 1-40000 characters" }, 400);
+        if (claudeSession.running) return response({ error: "Claude session is already running" }, 409);
+        const now = new Date().toISOString();
+        const userMsgId = `claude-user-${++claudeCounter}`;
+        const agentMsgId = `claude-agent-${++claudeCounter}`;
+        claudeSession.events.push(
+          { id: `claude-evt-u-${claudeCounter}`, messageId: userMsgId, timestamp: now, kind: "user", text, reminders: [], workflows: [], attachments: [] },
+          { id: `claude-evt-a-${claudeCounter}`, messageId: agentMsgId, timestamp: now, kind: "agent", text: "Simulated Claude fixture response. No claude binary or model provider was called." },
+        );
+        claudeSession.updatedAt = now;
+        return response({ accepted: true }, 202);
+      }
+
+      if (claudeRest === "/cancel" && method === "POST") {
+        const wasCancelled = claudeSession.running;
+        claudeSession.running = false;
+        if (wasCancelled) {
+          const now = new Date().toISOString();
+          claudeSession.events.push({ id: `claude-evt-cancel-${++claudeCounter}`, messageId: `claude-cancel-${claudeCounter}`, timestamp: now, kind: "status", label: "Cancelled by user" });
+          claudeSession.updatedAt = now;
+        }
+        return response({ cancelled: wasCancelled });
+      }
+
+      if (!claudeRest) return response({ session: claudeSummary(claudeSession), events: claudeSession.events });
+    }
+
+    if (path === "/api/claude/events") return response({ error: "Claude events SSE is not available in the public simulator. Poll GET /api/claude/sessions/:id instead." }, 501);
 
     // /api/dsh/events is SSE (EventSource). The fixture adapter intercepts
     // fetch() but not new EventSource(). The client's `dshEventsUrl` helper

@@ -31,7 +31,7 @@
     "test:e2e:host": "playwright test",
     "test:e2e:docker": "tsx scripts/e2e-docker.ts",
     "test:e2e:docker:proof": "tsx scripts/e2e-docker-proof.ts",
-    "test:contract:host": "vitest run tests/host-contract.test.ts tests/launchd.test.ts tests/dev-preflight.test.ts tests/git-fixture.test.ts tests/e2e-state-files.test.ts",
+    "test:contract:host": "vitest run tests/host-contract.test.ts tests/launchd.test.ts tests/dev-preflight.test.ts tests/git-fixture.test.ts tests/e2e-state-files.test.ts tests/claude-seatbelt.test.ts",
     "test:preview": "playwright test --config playwright.preview.config.ts",
     "preview:package": "tsx scripts/pr-preview.ts package",
     "screenshots": "tsx scripts/run-pr-screenshots.ts",

@@ -42,6 +42,8 @@ import { recentRoutes } from "./routes/recents.js";
 import { parsePublicAppUrl } from "./publicAppUrl.js";
 import { readDshConfig } from "./dsh/config.js";
 import { dshRoutes } from "./routes/dsh.js";
+import { readClaudeConfig } from "./claude/config.js";
+import { claudeRoutes } from "./routes/claude.js";
 import { parseLiveBrowserConfig } from "./browser/policy.js";
 import { liveBrowserRoutes } from "./browser/routes.js";
 
@@ -52,6 +54,7 @@ const PORT = Number(process.env.PORT || 3000);
 const opencode = readOpencodeConfig();
 const publicAppUrl = parsePublicAppUrl(process.env.PUBLIC_APP_URL);
 const dsh = readDshConfig();
+const claude = readClaudeConfig();
 
 app.use(express.json({ limit: "20mb" }));
 
@@ -96,12 +99,13 @@ app.use("/api", forgeRoutes());
 app.use("/api", planningRoutes());
 app.use("/api", reminderRoutes());
 app.use("/api", workflowRoutes());
-app.use("/api", appConfigRoutes(publicAppUrl, dsh.enabled));
+app.use("/api", appConfigRoutes(publicAppUrl, dsh.enabled, claude.enabled));
 app.use("/api", projectRoutes());
 app.use("/api", observabilityRoutes(opencode, PORT));
 app.use("/api", modelPinRoutes());
 app.use("/api", recentRoutes(opencode));
 app.use("/api", dshRoutes(dsh));
+app.use("/api", claudeRoutes(claude));
 const opencodePort = Number(new URL(opencode.baseUrl).port || 80);
 app.use("/api", previewRoutes(parseAllowedPorts(process.env.PREVIEW_ALLOWED_PORTS, [PORT, opencodePort])));
 
@@ -137,6 +141,7 @@ app.get("/api/health", async (_req, res) => {
       },
       events: { connected: bus.isConnected() },
       dsh: { enabled: dsh.enabled, configured: dsh.configured, sdkVersion: dsh.sdkVersion, sandbox: dsh.sandbox },
+      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, sandbox: claude.sandbox },
     });
   } catch (error) {
     res.status(503).json({

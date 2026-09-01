@@ -14,6 +14,8 @@ import { ObservabilityPage } from "./pages/Observability.js";
 import { PlanningPage } from "./pages/Planning.js";
 import { DshPage } from "./pages/Dsh.js";
 import { DshConversationPage } from "./pages/DshConversation.js";
+import { ClaudePage } from "./pages/Claude.js";
+import { ClaudeConversationPage } from "./pages/ClaudeConversation.js";
 import { AppShell } from "./components/app-shell.js";
 import { ThemeEffects } from "./components/theme-effects.js";
 import { NotificationCenterProvider } from "./lib/useNotificationCenter.js";
@@ -56,6 +58,8 @@ async function start(): Promise<void> {
         <Route path="/observability" element={<ObservabilityPage />} />
                 <Route path="/dsh" element={<DshPage />} />
                 <Route path="/dsh/sessions/:id" element={<DshConversationPage />} />
+                <Route path="/claude" element={<ClaudePage />} />
+                <Route path="/claude/sessions/:id" element={<ClaudeConversationPage />} />
                 <Route path="/playbooks" element={playbookPage(<PlaybooksPage />)} />
                 <Route path="/playbooks/workflows" element={playbookPage(<PlaybooksPage />)} />
                 <Route path="/playbooks/workflows/:id" element={playbookPage(<WorkflowPlaybookPage />)} />
