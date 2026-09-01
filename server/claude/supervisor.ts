@@ -101,11 +101,17 @@ export function claudeSeatbeltProfile(input: {
  * must deny instead.
  */
 export function claudeSettings(preset: ClaudePreset): Record<string, unknown> {
-  const deny = preset.mode === "read-only" ? ["Write", "Edit", "MultiEdit", "NotebookEdit"] : [];
+  const mutation = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
+  const readOnly = preset.mode === "read-only";
+  // Headless `claude` denies a mutation tool that no rule explicitly allows, even
+  // under `acceptEdits` — so Build must allow them by name (Seatbelt still confines
+  // the writes to the workspace). Read-only denies them at the tool layer too, with
+  // Seatbelt as the hard backstop.
   return {
     permissions: {
       defaultMode: preset.permissionMode,
-      deny,
+      allow: readOnly ? [] : mutation,
+      deny: readOnly ? mutation : [],
       ask: [],
     },
   };

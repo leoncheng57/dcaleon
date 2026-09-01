@@ -43,6 +43,10 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
   credential from the Keychain, the profile keeps HOME real and grants Keychain read — so
   Seatbelt confines workspace writes but does not isolate the credential store. The
   write-confinement is asserted on macOS in `tests/claude-seatbelt.test.ts`.
+- **Build writes:** a Build preset uses `permissionMode: "bypassPermissions"`. Headless
+  `claude` denies a write that no rule pre-approves, so the permission prompt cannot be the
+  gate here — Seatbelt is. Verified against the real binary: a read-only session is denied
+  a workspace write; a Build session writes, and only inside the workspace.
 - **Version:** `CLAUDE_CLI_VERSION` is pinned and re-asserted against the `system/init`
   frame; a mismatch fails the turn. The binary auto-updates and the wire format is
   undocumented, so drift must fail closed rather than mis-parse.

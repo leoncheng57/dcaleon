@@ -61,11 +61,15 @@ describe("Claude supervisor", () => {
     expect(ro).toContain("SecurityServer");
   });
 
-  it("maps read-only to a settings file that denies the mutation tools", () => {
-    const ro = claudeSettings(preset) as { permissions: { deny: string[]; ask: string[] } };
+  it("denies mutation tools in read-only and allows them by name in Build", () => {
+    const ro = claudeSettings(preset) as { permissions: { allow: string[]; deny: string[]; ask: string[] } };
     expect(ro.permissions.deny).toEqual(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+    expect(ro.permissions.allow).toEqual([]);
     expect(ro.permissions.ask).toEqual([]);
-    const build = claudeSettings(buildPreset) as { permissions: { deny: string[] } };
+    // Build must allow by name — headless claude denies a mutation tool no rule
+    // explicitly allows, even under acceptEdits. Seatbelt still confines the writes.
+    const build = claudeSettings(buildPreset) as { permissions: { allow: string[]; deny: string[] } };
+    expect(build.permissions.allow).toEqual(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
     expect(build.permissions.deny).toEqual([]);
   });
 
