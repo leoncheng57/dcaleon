@@ -46,6 +46,8 @@ export const SCREENSHOT_ROUTES: ReadonlyArray<{ readonly pattern: RegExp; readon
   { pattern: /^\/playbooks(?:\/(?:workflows|reminders)(?:\/[A-Za-z0-9_-]+)?)?$/, stableRoot: "opencode-playbooks" },
   { pattern: /^\/dsh$/, stableRoot: "dsh-home" },
   { pattern: /^\/dsh\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "dsh-conversation" },
+  { pattern: /^\/claude$/, stableRoot: "claude-home" },
+  { pattern: /^\/claude\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "claude-conversation" },
 ];
 
 /**

@@ -31,10 +31,13 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
 ## Boundaries
 
 - **Credential:** the BFF never reads or forwards the Claude credential. `claude`
-  authenticates from its own macOS Keychain item; the minimal supervisor env allowlist
-  forwards no credential variable. Reading the credential to broker a token is precisely
-  what Anthropic's policy prohibits for third-party tools, and precisely what this lane
-  must never do.
+  authenticates from its own macOS Keychain item; the supervisor env allowlist forwards no
+  credential variable. Reading the credential to broker a token is precisely what
+  Anthropic's policy prohibits for third-party tools, and precisely what this lane must
+  never do. The allowlist does carry the user *identity* (`USER`/`LOGNAME`/
+  `__CF_USER_TEXT_ENCODING`, synthesized when absent), because macOS resolves the login
+  Keychain by user — without `$USER`, even an un-sandboxed `claude` reports "Not logged
+  in". Identity is not a credential.
 - **Filesystem:** macOS Seatbelt is the write authority. Read-only presets get no
   workspace write; Build adds only the allowlisted workspace. Because `claude` reads its
   credential from the Keychain, the profile keeps HOME real and grants Keychain read — so

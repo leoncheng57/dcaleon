@@ -2,7 +2,7 @@ import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import type { Readable } from "node:stream";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import path from "node:path";
 
 import type { ClaudeConfig, ClaudePreset, ClaudeWorkspace } from "./config.js";
@@ -19,11 +19,28 @@ export interface ClaudeFrame {
 // Only these cross into the child. No credential var is forwarded: `claude`
 // authenticates from its own Keychain item, and the BFF never brokers auth.
 // HOME stays the real HOME so the binary can find that Keychain and its config.
-const SAFE_ENV = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL"] as const;
+// USER/LOGNAME/__CF_USER_TEXT_ENCODING are the user IDENTITY (not a credential):
+// macOS resolves the login Keychain by user, and without USER even an
+// un-sandboxed `claude` reports "Not logged in". A launchd-supervised BFF has a
+// minimal env that lacks these, so they are synthesized from the process user
+// when absent. This is an allowlist by design — a credential var in `source`
+// (ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, ...) is never copied through.
+const SAFE_ENV = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "__CF_USER_TEXT_ENCODING"] as const;
 
 export function claudeSupervisorEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const key of SAFE_ENV) if (source[key]) environment[key] = source[key];
+  if (!environment.USER || !environment.LOGNAME || !environment.__CF_USER_TEXT_ENCODING) {
+    try {
+      const info = userInfo();
+      environment.USER ??= info.username;
+      environment.LOGNAME ??= info.username;
+      environment.__CF_USER_TEXT_ENCODING ??= `0x${info.uid.toString(16).toUpperCase()}:0x0:0x0`;
+    } catch {
+      // userInfo() can throw in exotic setups (no passwd entry); a USER already
+      // in `source` still covers the common case, so fail soft.
+    }
+  }
   return environment;
 }
 

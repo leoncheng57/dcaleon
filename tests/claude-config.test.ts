@@ -19,7 +19,8 @@ async function fixture() {
   return { root, workspace, binary };
 }
 
-function baseEnv(item: Awaited<ReturnType<typeof fixture>>): NodeJS.ProcessEnv {
+/** The allowlist inputs, without the platform escape hatch. */
+function coreEnv(item: Awaited<ReturnType<typeof fixture>>): NodeJS.ProcessEnv {
   return {
     CLAUDE_RUNTIME_ENABLED: "true",
     CLAUDE_BINARY: item.binary,
@@ -30,6 +31,12 @@ function baseEnv(item: Awaited<ReturnType<typeof fixture>>): NodeJS.ProcessEnv {
     ]),
     CLAUDE_WORKSPACES_JSON: JSON.stringify([{ id: "ws", label: "Workspace", directory: item.workspace }]),
   };
+}
+
+// Seatbelt is macOS-only, so a non-darwin CI run must declare itself a test to
+// configure at all — mirrors the DSH config tests. sandbox is then "test-unsafe".
+function baseEnv(item: Awaited<ReturnType<typeof fixture>>): NodeJS.ProcessEnv {
+  return { ...coreEnv(item), NODE_ENV: "test", CLAUDE_TEST_UNSAFE: "true" };
 }
 
 describe("Claude runtime configuration", () => {
@@ -49,6 +56,12 @@ describe("Claude runtime configuration", () => {
     expect(config.binaryPath).toBe(realpathSync(item.binary));
     expect(config.presets[0]).toMatchObject({ id: "readonly", model: "claude-opus-5", mode: "read-only", permissionMode: "default" });
     expect(config.workspaces[0]).toMatchObject({ id: "ws", label: "Workspace" });
+  });
+
+  it.runIf(process.platform === "darwin")("defaults to the seatbelt sandbox on macOS", async () => {
+    const item = await fixture();
+    const config = readClaudeConfig(coreEnv(item));
+    expect(config.configured).toBe(true);
     expect(config.sandbox).toBe("seatbelt");
   });
 
@@ -96,13 +109,13 @@ describe("Claude runtime configuration", () => {
 
   it("refuses the unsafe path outside an explicit test process", async () => {
     const item = await fixture();
-    for (const nodeEnv of ["production", "development", undefined]) {
-      const config = readClaudeConfig({ ...baseEnv(item), CLAUDE_TEST_UNSAFE: "true", ...(nodeEnv === undefined ? {} : { NODE_ENV: nodeEnv }) });
+    for (const nodeEnv of ["production", "development"]) {
+      const config = readClaudeConfig({ ...coreEnv(item), CLAUDE_TEST_UNSAFE: "true", NODE_ENV: nodeEnv });
       expect(config.configured).toBe(false);
       expect(config.sandbox).toBe("seatbelt");
       expect(config.errors.join(" ")).toContain("CLAUDE_TEST_UNSAFE is test-only");
     }
-    expect(readClaudeConfig({ ...baseEnv(item), CLAUDE_TEST_UNSAFE: "true", NODE_ENV: "test" }).sandbox).toBe("test-unsafe");
+    expect(readClaudeConfig({ ...coreEnv(item), CLAUDE_TEST_UNSAFE: "true", NODE_ENV: "test" }).sandbox).toBe("test-unsafe");
   });
 
   it("rejects a state directory that overlaps a workspace", async () => {

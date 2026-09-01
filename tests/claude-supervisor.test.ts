@@ -37,6 +37,19 @@ describe("Claude supervisor", () => {
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
   });
 
+  it("provides the user identity claude needs to find its Keychain, synthesizing it when absent", () => {
+    // Passed through when present.
+    const forwarded = claudeSupervisorEnvironment({ PATH: "/bin", HOME: "/home/x", USER: "alice", LOGNAME: "alice" });
+    expect(forwarded.USER).toBe("alice");
+    expect(forwarded.LOGNAME).toBe("alice");
+    // Synthesized from the process user when the (launchd-minimal) source lacks it,
+    // and it is the identity, never a credential.
+    const synthesized = claudeSupervisorEnvironment({ PATH: "/bin", HOME: "/home/x", ANTHROPIC_API_KEY: "sk-secret" });
+    expect(synthesized.USER).toBeTruthy();
+    expect(synthesized.__CF_USER_TEXT_ENCODING).toMatch(/^0x[0-9A-F]+:0x0:0x0$/u);
+    expect(synthesized.ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
   it("grants the workspace write only in build mode", () => {
     const ro = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", binaryPath: "/b/claude", mode: "read-only", home: "/home/x" });
     const build = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", binaryPath: "/b/claude", mode: "build", home: "/home/x" });

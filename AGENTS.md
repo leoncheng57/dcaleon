@@ -1125,10 +1125,14 @@ several decisions below.
       fresh process per prompt with `--session-id` (first turn) / `--resume` (after), and
       cancel is SIGTERM of the in-flight child (`server/claude/supervisor.ts`). No pool.
     - **The credential lives in the macOS Keychain, and the BFF never touches it.** The
-      minimal env allowlist forwards no credential var; `claude` authenticates itself. This
-      is decision 3's boundary as *code discipline*: reading `~/.claude`/Keychain to broker
-      a token is the one thing this lane must never do, because that is exactly what
-      Anthropic's policy prohibits for third-party tools.
+      env allowlist forwards no credential var; `claude` authenticates itself. This is
+      decision 3's boundary as *code discipline*: reading `~/.claude`/Keychain to broker a
+      token is the one thing this lane must never do, because that is exactly what
+      Anthropic's policy prohibits for third-party tools. **But the env must carry the user
+      IDENTITY** — `USER`/`LOGNAME`/`__CF_USER_TEXT_ENCODING`, synthesized when a
+      launchd-minimal env lacks them. Measured the hard way: without `$USER`, even an
+      un-sandboxed `claude` reports "Not logged in", because macOS resolves the login
+      Keychain by user. Identity is not a credential; forwarding it is not brokering auth.
     - **Seatbelt is the write authority, but not a credential boundary.** Unlike the DSH
       profile it keeps HOME real and must grant read of `~/Library/Keychains` plus the
       securityd family, or subscription auth breaks — so the sandbox confines workspace
