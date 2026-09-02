@@ -173,15 +173,36 @@ test.describe("Claude Code runtime", () => {
   test("offers a Plan/Build mode toggle on a Build session and runs a Plan turn", async ({ page }) => {
     await createWorktreeBuildSession(page);
     await expect(page.getByTestId("claude-mode-toggle")).toBeVisible();
-    // Read-only sessions do not show the toggle; Build sessions default to Build.
+    // A Build session can switch to Plan and back; both controls are enabled.
+    await expect(page.getByTestId("claude-mode-plan")).toBeEnabled();
+    await expect(page.getByTestId("claude-mode-build")).toBeEnabled();
     await page.getByTestId("claude-mode-plan").click();
     await page.getByTestId("claude-prompt").fill("Outline a plan for this fixture");
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toBeVisible();
   });
 
-  test("read-only sessions do not offer the Plan/Build toggle", async ({ page }) => {
+  test("read-only sessions show the Plan/Build toggle locked to Plan", async ({ page }) => {
     await createSession(page);
-    await expect(page.getByTestId("claude-mode-toggle")).toHaveCount(0);
+    // The control is visible (not hidden), but Build is disabled — a read-only
+    // preset can only plan.
+    await expect(page.getByTestId("claude-mode-toggle")).toBeVisible();
+    await expect(page.getByTestId("claude-mode-build")).toBeDisabled();
+    await expect(page.getByTestId("claude-mode-plan")).toBeDisabled();
+    await expect(page.getByTestId("claude-mode-toggle")).toContainText("Read-only preset");
+  });
+
+  test("opens a transcript file reference in the Files drawer", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").fill("Inspect this fixture");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Hello from mock claude");
+    // The `README.md:2` reference renders as a clickable button; clicking it
+    // opens the Files drawer on that file.
+    const reference = page.getByTestId("opencode-file-reference").filter({ hasText: "README.md" }).first();
+    await expect(reference).toBeVisible();
+    await reference.click();
+    await expect(page.getByTestId("claude-files")).toBeVisible();
+    await expect(page.getByTestId("claude-file-pane")).toContainText("Claude e2e project");
   });
 });

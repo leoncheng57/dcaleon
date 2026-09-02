@@ -63,7 +63,12 @@ if (prompt.includes("stay running")) {
     { type: "tool_result", tool_use_id: "tu_mock_1", is_error: false, content: "workspace file contents" },
   ] } });
   emit({ type: "assistant", message: { content: [
-    { type: "text", text: "Hello from mock claude" },
+    // The inline `README.md#L1` reference is what the file-reference wiring turns
+    // into a clickable button (the e2e project fixture has a README.md at root).
+    // The git `#L` line form is used rather than `README.md:1`: the shared
+    // reference parser treats a root-level `name.ext:` as a URI scheme and
+    // rejects it — nested `dir/file.ext:line` and the `#L` form both linkify.
+    { type: "text", text: "Hello from mock claude. See `README.md#L1` for the overview." },
   ] } });
   emit({
     type: "result",

@@ -50,6 +50,37 @@ export async function listClaudeTree(directory: string, requestedPath: string): 
   return { path: relative, dirs, files, nextPageId: null };
 }
 
+/** Ceiling on candidate paths validated in one references request. */
+export const CLAUDE_REFERENCE_MAX = 200;
+
+export type ClaudeReferenceStatus = "file" | "forbidden" | "missing";
+
+/**
+ * Validate transcript-mentioned candidate paths against the session directory,
+ * returning the same shape the workspace-references UI consumes so a Claude
+ * transcript's inline `path:line` spans become openable. Only `status: "file"`
+ * grants a click; everything else stays inert text. Never reads file content —
+ * a stat is enough to confirm an openable, non-sensitive, non-ignored file.
+ */
+export async function resolveClaudeReferences(
+  directory: string,
+  paths: string[],
+): Promise<{ path: string; status: ClaudeReferenceStatus; resolvedPath?: string }[]> {
+  const results: { path: string; status: ClaudeReferenceStatus; resolvedPath?: string }[] = [];
+  for (const candidate of paths.slice(0, CLAUDE_REFERENCE_MAX)) {
+    try {
+      const relative = await requireReadableWorkspacePath(directory, candidate);
+      if (!relative) { results.push({ path: candidate, status: "missing" }); continue; }
+      const metadata = await stat(path.join(directory, relative)).catch(() => null);
+      if (metadata?.isFile()) results.push({ path: candidate, status: "file", resolvedPath: relative });
+      else results.push({ path: candidate, status: "missing" });
+    } catch (cause) {
+      results.push({ path: candidate, status: cause instanceof PathError && cause.status === 403 ? "forbidden" : "missing" });
+    }
+  }
+  return results;
+}
+
 /** One file's content — identical shape to opencode's `/file/content`. */
 export async function readClaudeFile(directory: string, requestedPath: string): Promise<WorkspaceFile> {
   const relative = await requireReadableWorkspacePath(directory, requestedPath);

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, File as FileIcon, FolderOpen, X } from "luci
 import { Alert } from "../ds/alert.js";
 import { Button } from "../ds/button.js";
 import { api, type WorkspaceFile, type WorkspaceNode } from "../lib/api.js";
+import { describeLineRange, type WorkspaceTarget } from "../lib/fileReferences.js";
 
 const CodeViewer = lazy(() => import("./code-viewer.js"));
 
@@ -50,8 +51,8 @@ function TreeLevel({ sessionId, dir, depth, onOpen, openPath }: {
   );
 }
 
-export function ClaudeFilesDrawer({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
-  const [openPath, setOpenPath] = useState<string | null>(null);
+export function ClaudeFilesDrawer({ sessionId, target, onClose }: { sessionId: string; target?: WorkspaceTarget | null; onClose: () => void }) {
+  const [openPath, setOpenPath] = useState<string | null>(target?.path ?? null);
   const [file, setFile] = useState<WorkspaceFile | null>(null);
   const [error, setError] = useState("");
   const [wrap, setWrap] = useState(false);
@@ -66,13 +67,23 @@ export function ClaudeFilesDrawer({ sessionId, onClose }: { sessionId: string; o
       .catch((cause: Error) => { if (cause.name !== "AbortError") setError(cause.message); });
   }, [sessionId]);
 
+  // A file-reference click sets the target: open its file so CodeViewer can
+  // scroll to the referenced line range. Re-runs when the target changes so a
+  // second reference re-targets the same drawer.
+  useEffect(() => {
+    if (target?.path) open(target.path);
+  }, [target?.path, target?.startLine, target?.endLine, open]);
+
   const body = useMemo(() => {
     if (error) return <Alert variant="danger">{error}</Alert>;
     if (!openPath) return <p className="p-4 text-sm text-[var(--color-text-muted)]">Select a file to view it.</p>;
-    if (!file) return <p className="p-4 text-sm text-[var(--color-text-muted)]">Loading {openPath}…</p>;
+    if (!file) return <p className="p-4 text-sm text-[var(--color-text-muted)]">Loading {openPath}{target?.path === openPath ? describeLineRange(target) : ""}…</p>;
     if (file.type === "binary") return <p className="p-4 text-sm text-[var(--color-text-muted)]" data-testid="claude-file-binary">{openPath} is a binary file and cannot be shown.</p>;
-    return <Suspense fallback={<p className="p-4 text-sm text-[var(--color-text-muted)]">Loading viewer…</p>}><CodeViewer path={file.path} content={file.content} wrap={wrap} /></Suspense>;
-  }, [error, openPath, file, wrap]);
+    // Only apply the line target while its own file is showing; a tree click to
+    // another file clears it so an unrelated file does not inherit the range.
+    const viewerTarget = target?.path && target.path === openPath ? target : undefined;
+    return <Suspense fallback={<p className="p-4 text-sm text-[var(--color-text-muted)]">Loading viewer…</p>}><CodeViewer path={file.path} content={file.content} wrap={wrap} target={viewerTarget} /></Suspense>;
+  }, [error, openPath, file, wrap, target]);
 
   return (
     <section className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col border-l border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:left-auto sm:w-[52rem]" role="dialog" aria-modal="true" aria-label="Session files" data-testid="claude-files">

@@ -10,8 +10,10 @@ import { RunningIndicator, Transcript } from "../components/transcript.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
 import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
 import { api, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary } from "../lib/api.js";
-import { collapseActionGroups } from "../lib/derive.js";
+import { collapseActionGroups, runningActivity } from "../lib/derive.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
+import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
+import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
 
@@ -197,6 +199,10 @@ export function ClaudeConversationPage() {
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>("");
   const [planMode, setPlanMode] = useState(false);
+  const [fileTarget, setFileTarget] = useState<WorkspaceTarget | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [resolved, setResolved] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const askedRefs = useRef<Set<string>>(new Set());
   const bottom = useRef<HTMLDivElement | null>(null);
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
@@ -232,6 +238,10 @@ export function ClaudeConversationPage() {
     refreshQueued.current = null;
     setSession(null);
     setEvents([]);
+    setFileTarget(null);
+    setCollapsedGroups({});
+    setResolved(new Map());
+    askedRefs.current = new Set();
     void refresh();
     if (PUBLIC_SIMULATOR) return;
     // Durable truth is the poll; the stream is only a "something changed" nudge.
@@ -260,6 +270,48 @@ export function ClaudeConversationPage() {
   useEffect(() => { void api.claudeConfig().then((config) => setModels(config.models)).catch(() => undefined); }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [events, session?.running]);
   const items = useMemo(() => collapseActionGroups(events), [events]);
+  const activity = useMemo(() => runningActivity(events), [events]);
+
+  // File references: collect paths the transcript mentions and validate them
+  // server-side so an inline `path:line` span becomes a button. The resolved
+  // map is built locally (the opencode /workspace/references route is
+  // directory-scoped and rejects the Claude worktree root), one bounded batch
+  // per new candidate — a failing path is remembered, not retried each poll.
+  // Stabilise by content: events is a fresh array on every poll, so a plain
+  // memo over `events` would hand the effect a new candidate array each tick,
+  // re-run it, and abort the in-flight validation before it settles. Keying on
+  // the joined content keeps identity stable until the candidates truly change.
+  const candidateKey = useMemo(() => referenceCandidatesFromEvents(events, "").join("\n"), [events]);
+  const candidates = useMemo(() => (candidateKey ? candidateKey.split("\n") : []), [candidateKey]);
+  useEffect(() => {
+    let cancelled = false;
+    const pending = candidates.filter((path) => !askedRefs.current.has(path));
+    if (pending.length === 0) return;
+    for (const path of pending) askedRefs.current.add(path);
+    // Not aborted on re-run: a completed validation is worth keeping even if a
+    // later batch supersedes it. `cancelled` only blocks a stale setState.
+    void api.claudeReferences(id, pending).then((result) => {
+      if (cancelled) return;
+      setResolved((previous) => {
+        const next = new Map(previous);
+        for (const reference of result.references) {
+          if (reference.status === "file") next.set(reference.path, reference.resolvedPath ?? reference.path);
+        }
+        return next;
+      });
+    }).catch(() => {
+      // A failed batch un-marks its paths so a later render can retry them.
+      for (const path of pending) askedRefs.current.delete(path);
+    });
+    return () => { cancelled = true; };
+  }, [candidates, id]);
+  const openTarget = useCallback((target: WorkspaceTarget) => {
+    setFileTarget(target);
+    setFilesOpen(true);
+  }, []);
+  const toggleGroup = useCallback((groupId: string) => {
+    setCollapsedGroups((previous) => ({ ...previous, [groupId]: !previous[groupId] }));
+  }, []);
   // A merged/discarded worktree session is finished: its cwd is gone.
   const worktreeClosed = session?.isolation === "worktree" && events.some((event) => event.kind === "status" && (event.label === "Merged into project" || event.label === "Worktree discarded"));
 
@@ -316,22 +368,34 @@ export function ClaudeConversationPage() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8" data-testid="claude-transcript">
         <div className="mx-auto max-w-4xl">
           {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{session?.mode === "build" ? "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes." : "Ask Claude to inspect this allowlisted workspace. A read-only preset cannot modify files."}</p></div>}
-          <Transcript items={items} wrap collapsedGroups={{}} onToggleGroup={() => undefined} />
-          {session?.running && <div className="mt-5"><RunningIndicator activity={{ kind: "thinking", since: session.updatedAt }} /></div>}
+          <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>
+            <Transcript items={items} wrap collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
+          </WorkspaceReferenceProvider>
+          {session?.running && <div className="mt-5"><RunningIndicator activity={activity} /></div>}
           <div ref={bottom} />
         </div>
       </div>
       <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="claude-composer">
-        {session?.mode === "build" && (
-          <div className="mx-auto mb-2 flex max-w-4xl items-center gap-1 text-xs" data-testid="claude-mode-toggle">
-            <span className="text-[var(--color-text-muted)]">Mode:</span>
-            <div className="inline-flex overflow-hidden rounded-md border border-[var(--color-border-default)]">
-              <button type="button" className={`px-2.5 py-1 ${planMode ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-muted)]"}`} onClick={() => setPlanMode(true)} disabled={session?.running} data-testid="claude-mode-plan">Plan</button>
-              <button type="button" className={`border-l border-[var(--color-border-default)] px-2.5 py-1 ${!planMode ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-muted)]"}`} onClick={() => setPlanMode(false)} disabled={session?.running} data-testid="claude-mode-build">Build</button>
+        {session && (() => {
+          // A read-only session shows the same control locked to Plan (Build
+          // disabled) rather than hiding it — the mode is still meaningful, and
+          // hiding it read as "missing plan/build mode". The backend honours a
+          // plan turn only for a Build session; a read-only preset never writes.
+          const readOnly = session.mode !== "build";
+          const planActive = readOnly || planMode;
+          const active = "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]";
+          const muted = "text-[var(--color-text-muted)]";
+          return (
+            <div className="mx-auto mb-2 flex max-w-4xl items-center gap-1 text-xs" data-testid="claude-mode-toggle">
+              <span className="text-[var(--color-text-muted)]">Mode:</span>
+              <div className="inline-flex overflow-hidden rounded-md border border-[var(--color-border-default)]">
+                <button type="button" className={`px-2.5 py-1 ${planActive ? active : muted} disabled:opacity-70`} onClick={() => setPlanMode(true)} disabled={session.running || readOnly} data-testid="claude-mode-plan">Plan</button>
+                <button type="button" className={`border-l border-[var(--color-border-default)] px-2.5 py-1 ${!planActive ? active : muted} disabled:opacity-70`} onClick={() => setPlanMode(false)} disabled={session.running || readOnly} data-testid="claude-mode-build">Build</button>
+              </div>
+              <span className="text-[var(--color-text-muted)]">{readOnly ? "Read-only preset — plans only; nothing is written." : planMode ? "Plans read-only; nothing is written." : "Executes and may edit files."}</span>
             </div>
-            <span className="text-[var(--color-text-muted)]">{planMode ? "Plans read-only; nothing is written." : "Executes and may edit files."}</span>
-          </div>
-        )}
+          );
+        })()}
         <div className="mx-auto flex max-w-4xl items-end gap-2">
           {models.length > 1 && (
             <select className="h-11 shrink-0 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-base)] px-2 text-xs" value={model} onChange={(event) => setModel(event.target.value)} disabled={session?.running} title="Model for the next turn" data-testid="claude-model-select">
@@ -344,7 +408,7 @@ export function ClaudeConversationPage() {
         </div>
       </form>
       {changesOpen && session && <ChangesDrawer session={session} onClose={() => setChangesOpen(false)} onMutated={() => void refresh()} />}
-      {filesOpen && <ClaudeFilesDrawer sessionId={id} onClose={() => setFilesOpen(false)} />}
+      {filesOpen && <ClaudeFilesDrawer sessionId={id} target={fileTarget} onClose={() => { setFilesOpen(false); setFileTarget(null); }} />}
       {runlogOpen && <ClaudeRunLogDrawer events={events} title={session?.title ?? "claude-session"} onClose={() => setRunlogOpen(false)} />}
       {exportOpen && (
         <section className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col border-l border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:left-auto sm:w-[28rem]" role="dialog" aria-modal="true" aria-label="Export transcript" data-testid="claude-export">

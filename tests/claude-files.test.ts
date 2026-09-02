@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { listClaudeTree, readClaudeFile } from "../server/claude/files.js";
+import { listClaudeTree, readClaudeFile, resolveClaudeReferences } from "../server/claude/files.js";
 import { PathError } from "../server/paths.js";
 
 const temporary: string[] = [];
@@ -66,5 +66,42 @@ describe("Claude files browser", () => {
     const big = await readClaudeFile(root, "big.bin");
     expect(big.type).toBe("binary");
     expect(big.content).toBe(""); // over the cap: named, not delivered
+  });
+});
+
+describe("Claude reference resolution", () => {
+  it("marks readable files openable and everything else inert", async () => {
+    const root = await workspace();
+    const references = await resolveClaudeReferences(root, [
+      "src/index.ts", // a real file → openable
+      "README.md", // a real file → openable
+      "src", // a directory, not a file → missing
+      "does/not/exist.ts", // absent → missing
+      ".env", // sensitive → forbidden
+    ]);
+    const byPath = Object.fromEntries(references.map((r) => [r.path, r]));
+    expect(byPath["src/index.ts"]).toEqual({ path: "src/index.ts", status: "file", resolvedPath: "src/index.ts" });
+    expect(byPath["README.md"].status).toBe("file");
+    expect(byPath["src"].status).toBe("missing");
+    expect(byPath["does/not/exist.ts"].status).toBe("missing");
+    expect(byPath[".env"].status).toBe("forbidden");
+  });
+
+  it("returns the canonical relative path through a symlinked directory alias", async () => {
+    const root = await workspace();
+    await mkdir(path.join(root, "real"));
+    await writeFile(path.join(root, "real", "note.txt"), "hi\n");
+    await symlink(path.join(root, "real"), path.join(root, "alias"));
+    const [reference] = await resolveClaudeReferences(root, ["alias/note.txt"]);
+    // Resolves inside the project; the canonical target replaces the alias.
+    expect(reference.status).toBe("file");
+    expect(reference.resolvedPath).toBe("real/note.txt");
+  });
+
+  it("bounds the number of candidates it will validate", async () => {
+    const root = await workspace();
+    const many = Array.from({ length: 300 }, (_, index) => `missing-${index}.ts`);
+    const references = await resolveClaudeReferences(root, many);
+    expect(references.length).toBe(200); // CLAUDE_REFERENCE_MAX
   });
 });

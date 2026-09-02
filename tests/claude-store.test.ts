@@ -46,6 +46,26 @@ describe("Claude session store", () => {
     expect(session.started).toBe(true);
   });
 
+  it("auto-titles a default session from its first prompt, then leaves it alone", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    expect(session.title).toBe("New Claude conversation");
+    instance.startRun(session, "  Refactor the auth guard\nand add tests  ");
+    // First non-empty line, whitespace-collapsed, capped.
+    expect(session.title).toBe("Refactor the auth guard");
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0 });
+    // A second turn does not overwrite the derived title.
+    instance.startRun(session, "now do something else entirely");
+    expect(session.title).toBe("Refactor the auth guard");
+  });
+
+  it("keeps an explicit title instead of deriving one from the prompt", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws", title: "My named session" });
+    instance.startRun(session, "first prompt text");
+    expect(session.title).toBe("My named session");
+  });
+
   it("marks a tool call errored when its result is an error", async () => {
     const { instance } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });

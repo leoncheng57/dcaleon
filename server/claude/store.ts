@@ -7,6 +7,9 @@ import type { ClaudePresetMode } from "./config.js";
 import type { ClaudeFrame } from "./supervisor.js";
 import type { ClaudeWorktree } from "./worktree.js";
 
+/** Placeholder title until the first prompt (or an explicit title) replaces it. */
+const DEFAULT_CLAUDE_TITLE = "New Claude conversation";
+
 // Structurally assignable to the client's frozen TranscriptEvent contract.
 // Richer than the DSH store: thought, tool (with what it touched), and patch arms.
 export type ClaudeTranscriptEvent =
@@ -132,7 +135,7 @@ export class ClaudeSessionStore extends EventEmitter {
     const session: ClaudeSession = {
       id: `claude-${randomUUID()}`,
       sessionUuid: input.sessionUuid ?? randomUUID(),
-      title: input.title?.trim().slice(0, 120) || "New Claude conversation",
+      title: input.title?.trim().slice(0, 120) || DEFAULT_CLAUDE_TITLE,
       presetId: input.presetId,
       workspaceId: input.workspaceId,
       workspaceLabel: input.workspaceLabel,
@@ -179,6 +182,13 @@ export class ClaudeSessionStore extends EventEmitter {
   startRun(session: ClaudeSession, text: string): ClaudeRunRecord {
     const now = Date.now();
     const messageId = `user-${randomUUID()}`;
+    // Auto-title from the first prompt while the session still carries the
+    // default title. The headless stream-json output exposes no model-generated
+    // title, so the opening ask is the reliable, non-empty source.
+    if (session.title === DEFAULT_CLAUDE_TITLE && !session.events.some((event) => event.kind === "user")) {
+      const derived = text.split("\n").map((line) => line.trim()).find(Boolean)?.replace(/\s+/g, " ").slice(0, 80);
+      if (derived) session.title = derived;
+    }
     session.running = true;
     session.sawResult = false;
     session.runStartedAt = now;

@@ -828,6 +828,13 @@ export const api = {
     json<{ path: string; dirs: WorkspaceNode[]; files: WorkspaceNode[] }>(r)),
   claudeFile: (id: string, path: string, signal?: AbortSignal) =>
     fetch(`/api/claude/sessions/${encodeURIComponent(id)}/file?${new URLSearchParams({ path })}`, { signal }).then((r) => json<WorkspaceFile>(r)),
+  claudeReferences: (id: string, paths: string[], signal?: AbortSignal) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}/references`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths }),
+      signal,
+    }).then((r) => json<{ references: WorkspaceReference[] }>(r)),
   openClaudePr: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/pr`, { method: "POST" }).then((r) =>
     json<{ url: string; number: number }>(r)),
   claudePrStatus: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/pr`).then((r) =>

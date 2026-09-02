@@ -9,7 +9,7 @@ import { listClaudeWorkspaces, resolveClaudeWorkspace, type ResolvedWorkspace } 
 import { createWorktree, currentBranch, isDirty, mergeWorktree, originRemote, pushWorktreeBranch, removeWorktree, workspaceChanges, worktreeExists } from "../claude/worktree.js";
 import { createPullRequest, getReviewStatus, parseReviewUrl } from "../forge.js";
 import { getReviewDetails } from "../forge-details.js";
-import { listClaudeTree, readClaudeFile } from "../claude/files.js";
+import { listClaudeTree, readClaudeFile, resolveClaudeReferences } from "../claude/files.js";
 import { PathError } from "../paths.js";
 
 const MAX_PROMPT = 40_000;
@@ -235,6 +235,22 @@ export function claudeRoutes(
     } catch (cause) {
       if (cause instanceof PathError) return error(res, cause.status, cause.message);
       error(res, 409, "workspace file unavailable");
+    }
+  });
+
+  // Validate transcript-mentioned paths so inline `path:line` spans become
+  // openable in the Files drawer. Bounded, path-confined, content never read.
+  router.post("/claude/sessions/:id/references", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    const paths = Array.isArray(req.body?.paths) ? req.body.paths.filter((item: unknown): item is string => typeof item === "string") : [];
+    if (session.worktree && !await worktreeExists(session.worktree.directory)) return res.json({ references: [] });
+    try {
+      res.set("Cache-Control", "private, no-store");
+      res.json({ references: await resolveClaudeReferences(session.directory, paths) });
+    } catch {
+      error(res, 409, "workspace references unavailable");
     }
   });
 
