@@ -56,4 +56,63 @@ test.describe("Claude Code runtime", () => {
     await expect(page.getByText("Cancelled by user")).toBeVisible();
     await expect(page.getByTestId("claude-prompt")).toBeEnabled();
   });
+  async function createWorktreeBuildSession(page: import("@playwright/test").Page) {
+    await page.goto("/claude");
+    await page.getByTestId("claude-preset").selectOption("e2e-build");
+    await page.getByTestId("claude-isolation-worktree").check();
+    await page.getByTestId("claude-build-confirm").check();
+    await page.getByTestId("claude-create").click();
+    await expect(page).toHaveURL(/\/claude\/sessions\/claude-/u);
+    // A worktree session shows its branch, so the isolation is visible, not implied.
+    await expect(page.getByTestId("claude-branch")).toContainText("claude/");
+  }
+
+  test("a worktree Build session writes into its worktree, shows the diff, and merges into the project", async ({ page }) => {
+    await createWorktreeBuildSession(page);
+    await page.getByTestId("claude-prompt").fill("Please write a file for me");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
+    // The turn's footprint is in the transcript; the raw file body is not.
+    await expect(page.getByTestId("claude-transcript")).toContainText("claude-e2e.txt");
+    await expect(page.getByTestId("claude-transcript")).not.toContainText("PRIVATE FILE BODY");
+
+    await page.getByTestId("claude-open-changes").click();
+    const drawer = page.getByTestId("claude-changes");
+    await expect(drawer).toBeVisible();
+    await expect(page.getByTestId("claude-changes-files")).toContainText("claude-e2e.txt");
+    await expect(page.getByTestId("claude-changes-diff")).toContainText("written by mock claude");
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByTestId("claude-merge").click();
+    await expect(page.getByText("Merged into project")).toBeVisible();
+    // A merged worktree session is finished: its cwd is gone.
+    await expect(page.getByTestId("claude-prompt")).toBeDisabled();
+  });
+
+  test("discarding a worktree session removes it without touching the project", async ({ page }) => {
+    await createWorktreeBuildSession(page);
+    await page.getByTestId("claude-prompt").fill("Please write a file for me");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
+    await page.getByTestId("claude-open-changes").click();
+    await expect(page.getByTestId("claude-changes-files")).toContainText("claude-e2e.txt");
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByTestId("claude-discard").click();
+    await expect(page.getByText("Worktree discarded")).toBeVisible();
+    await expect(page.getByTestId("claude-prompt")).toBeDisabled();
+  });
+
+  test("a direct Build session offers Changes but no merge or discard", async ({ page }) => {
+    await page.goto("/claude");
+    await page.getByTestId("claude-preset").selectOption("e2e-build");
+    await page.getByTestId("claude-isolation-direct").check();
+    await page.getByTestId("claude-build-confirm").check();
+    await page.getByTestId("claude-create").click();
+    await expect(page).toHaveURL(/\/claude\/sessions\/claude-/u);
+    await expect(page.getByTestId("claude-branch")).toHaveCount(0);
+    await page.getByTestId("claude-open-changes").click();
+    await expect(page.getByTestId("claude-changes")).toBeVisible();
+    await expect(page.getByTestId("claude-merge")).toHaveCount(0);
+    await expect(page.getByTestId("claude-discard")).toHaveCount(0);
+  });
 });

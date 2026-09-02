@@ -1,9 +1,12 @@
 import { Router, type Response } from "express";
 import { realpath, stat } from "node:fs/promises";
+import path from "node:path";
 
-import type { ClaudeConfig, ClaudePreset, ClaudeWorkspace } from "../claude/config.js";
+import type { ClaudeConfig, ClaudePreset } from "../claude/config.js";
 import { ClaudeSupervisor } from "../claude/supervisor.js";
-import { ClaudeSessionStore } from "../claude/store.js";
+import { ClaudeSessionStore, type ClaudeIsolation } from "../claude/store.js";
+import { listClaudeWorkspaces, resolveClaudeWorkspace, type ResolvedWorkspace } from "../claude/workspaces.js";
+import { createWorktree, isDirty, mergeWorktree, removeWorktree, workspaceChanges, worktreeExists } from "../claude/worktree.js";
 
 const MAX_PROMPT = 40_000;
 
@@ -13,15 +16,23 @@ function error(res: Response, status: number, message: string): void {
 
 function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
   return {
-    id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId,
-    mode: session.mode, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running,
+    id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: session.workspaceLabel,
+    mode: session.mode, isolation: session.isolation, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running,
+    // Branch is safe to show; the worktree PATH is a host path and stays server-side.
+    ...(session.worktree ? { branch: session.worktree.branch } : {}),
   };
+}
+
+/** Worktree sessions need to read the project and write its shared `.git`. */
+function sandboxExtras(session: ReturnType<ClaudeSessionStore["create"]>): { reads: string[]; writes: string[] } | undefined {
+  if (!session.worktree) return undefined;
+  return { reads: [session.projectDirectory], writes: [path.join(session.projectDirectory, ".git")] };
 }
 
 export function claudeRoutes(
   config: ClaudeConfig,
   supervisor = new ClaudeSupervisor(config),
-  store = new ClaudeSessionStore(config.ledgerFile),
+  store = new ClaudeSessionStore(config.ledgerFile, config.sessionsFile),
 ): Router {
   const router = Router();
   let loadError: Error | null = null;
@@ -38,7 +49,7 @@ export function claudeRoutes(
 
   router.use(async (_req, res, next) => {
     await ready;
-    if (loadError) return error(res, 503, "Claude runtime ledger is unavailable");
+    if (loadError) return error(res, 503, "Claude runtime state is unavailable");
     next();
   });
 
@@ -54,23 +65,22 @@ export function claudeRoutes(
     return true;
   }
   function preset(id: unknown): ClaudePreset | undefined { return config.presets.find((item) => item.id === id); }
-  function workspace(id: unknown): ClaudeWorkspace | undefined { return config.workspaces.find((item) => item.id === id); }
-  async function verifyWorkspaceIdentity(selectedWorkspace: ClaudeWorkspace): Promise<boolean> {
-    const canonical = await realpath(selectedWorkspace.directory);
+  async function verifyWorkspaceIdentity(selected: ResolvedWorkspace): Promise<boolean> {
+    const canonical = await realpath(selected.directory);
     const metadata = await stat(canonical);
-    return canonical === selectedWorkspace.directory &&
-      metadata.dev === selectedWorkspace.device && metadata.ino === selectedWorkspace.inode;
+    return canonical === selected.directory && metadata.dev === selected.device && metadata.ino === selected.inode;
   }
 
-  router.get("/claude/config", (_req, res) => {
+  router.get("/claude/config", async (_req, res) => {
     if (!requireEnabled(res)) return;
+    const workspaces = await listClaudeWorkspaces(config);
     res.json({
       enabled: true,
       configured: config.configured,
       cliVersion: config.cliVersion,
       sandbox: config.sandbox,
       presets: config.presets.map(({ id, label, model, effort, permissionMode, mode }) => ({ id, label, model, effort, permissionMode, mode })),
-      workspaces: config.workspaces.map(({ id, label }) => ({ id, label })),
+      workspaces: workspaces.map(({ id, label, source }) => ({ id, label, source })),
     });
   });
 
@@ -82,22 +92,37 @@ export function claudeRoutes(
   router.post("/claude/sessions", async (req, res) => {
     if (!requireEnabled(res)) return;
     const selectedPreset = preset(req.body?.presetId);
-    const selectedWorkspace = workspace(req.body?.workspaceId);
+    const selectedWorkspace = await resolveClaudeWorkspace(config, req.body?.workspaceId);
     if (!selectedPreset || !selectedWorkspace) return error(res, 400, "presetId and workspaceId must be allowlisted");
+    const isolation: ClaudeIsolation = req.body?.isolation === "worktree" ? "worktree" : "direct";
+    if (isolation === "worktree" && selectedPreset.mode !== "build") return error(res, 400, "worktree isolation requires a Build preset");
     try {
-      if (!await verifyWorkspaceIdentity(selectedWorkspace)) {
-        return error(res, 409, "allowlisted Claude workspace identity changed");
-      }
-      const session = store.create({
-        presetId: selectedPreset.id,
-        workspaceId: selectedWorkspace.id,
-        mode: selectedPreset.mode,
-        title: req.body?.title,
-      });
-      res.status(201).json({ session: publicSession(session) });
+      if (!await verifyWorkspaceIdentity(selectedWorkspace)) return error(res, 409, "allowlisted Claude workspace identity changed");
     } catch {
-      error(res, 400, "allowlisted Claude workspace is unavailable");
+      return error(res, 400, "allowlisted Claude workspace is unavailable");
     }
+    let worktree;
+    const sessionUuid = crypto.randomUUID();
+    if (isolation === "worktree") {
+      try {
+        worktree = await createWorktree(selectedWorkspace.directory, config.worktreeRoot, sessionUuid);
+      } catch (cause) {
+        return error(res, 409, cause instanceof Error ? cause.message : "could not create a worktree for this session");
+      }
+    }
+    const session = store.create({
+      presetId: selectedPreset.id,
+      workspaceId: selectedWorkspace.id,
+      workspaceLabel: selectedWorkspace.label,
+      mode: selectedPreset.mode,
+      isolation,
+      directory: worktree?.directory ?? selectedWorkspace.directory,
+      projectDirectory: selectedWorkspace.directory,
+      ...(worktree ? { worktree } : {}),
+      title: req.body?.title,
+      sessionUuid,
+    });
+    res.status(201).json({ session: publicSession(session) });
   });
 
   router.get("/claude/sessions/:id", (req, res) => {
@@ -115,24 +140,24 @@ export function claudeRoutes(
     const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
     if (!text || text.length > MAX_PROMPT) return error(res, 400, `text must contain 1-${MAX_PROMPT} characters`);
     const selectedPreset = preset(session.presetId);
-    const selectedWorkspace = workspace(session.workspaceId);
+    const selectedWorkspace = await resolveClaudeWorkspace(config, session.workspaceId);
     if (!selectedPreset || !selectedWorkspace) return error(res, 409, "Claude session configuration is no longer allowlisted");
-    if (selectedPreset.mode !== session.mode) {
-      return error(res, 409, "Claude session preset policy changed after creation");
-    }
+    if (selectedPreset.mode !== session.mode) return error(res, 409, "Claude session preset policy changed after creation");
     try {
-      if (!await verifyWorkspaceIdentity(selectedWorkspace)) {
-        return error(res, 409, "allowlisted Claude workspace identity changed");
-      }
+      if (!await verifyWorkspaceIdentity(selectedWorkspace)) return error(res, 409, "allowlisted Claude workspace identity changed");
     } catch {
       return error(res, 409, "allowlisted Claude workspace is unavailable");
+    }
+    if (session.worktree && !await worktreeExists(session.worktree.directory)) {
+      return error(res, 409, "this session's worktree no longer exists");
     }
     store.startRun(session, text);
     try {
       await supervisor.run({
         session: { id: session.id, sessionUuid: session.sessionUuid, started: session.started },
         preset: selectedPreset,
-        workspace: selectedWorkspace,
+        workspace: { directory: session.directory },
+        sandboxExtras: sandboxExtras(session),
         text,
       });
       res.status(202).json({ accepted: true });
@@ -150,6 +175,55 @@ export function claudeRoutes(
     supervisor.cancel(session.id);
     const cancelled = store.cancel(session);
     res.json({ cancelled });
+  });
+
+  // What the session changed: working-tree diff for direct sessions, diff against
+  // the base commit (so the agent's own commits count) for worktree sessions.
+  router.get("/claude/sessions/:id/changes", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (session.worktree && !await worktreeExists(session.worktree.directory)) return res.json({ files: [], diff: "", truncated: false, gone: true });
+    try {
+      const changes = await workspaceChanges(session.directory, session.worktree?.baseCommit);
+      res.set("Cache-Control", "private, no-store");
+      res.json(changes);
+    } catch (cause) {
+      error(res, 409, cause instanceof Error ? `changes unavailable: ${cause.message}` : "changes unavailable");
+    }
+  });
+
+  router.post("/claude/sessions/:id/merge", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (!session.worktree) return error(res, 400, "only worktree sessions can be merged");
+    if (session.running) return error(res, 409, "wait for the running turn to finish before merging");
+    if (!await worktreeExists(session.worktree.directory)) return error(res, 409, "this session's worktree no longer exists");
+    try {
+      if (await isDirty(session.projectDirectory)) return error(res, 409, "project working tree has uncommitted changes; commit or stash them before merging");
+      const { mergeCommit } = await mergeWorktree(session.worktree, `Merge Claude session ${session.title} (${session.worktree.branch})`);
+      await removeWorktree(session.worktree);
+      store.note(session, "Merged into project", `${session.worktree.branch} → ${mergeCommit.slice(0, 7)}`);
+      res.json({ merged: true, mergeCommit });
+    } catch (cause) {
+      error(res, 409, cause instanceof Error ? cause.message : "merge failed");
+    }
+  });
+
+  router.post("/claude/sessions/:id/discard", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (!session.worktree) return error(res, 400, "only worktree sessions can be discarded");
+    if (session.running) supervisor.cancel(session.id), store.cancel(session);
+    try {
+      await removeWorktree(session.worktree);
+      store.note(session, "Worktree discarded", session.worktree.branch);
+      res.json({ discarded: true });
+    } catch (cause) {
+      error(res, 409, cause instanceof Error ? cause.message : "discard failed");
+    }
   });
 
   router.get("/claude/events", (req, res) => {

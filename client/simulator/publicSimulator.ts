@@ -122,7 +122,7 @@ interface ClaudeFixtureSession extends ClaudeSessionSummary {
 }
 
 function claudeSummary(session: ClaudeFixtureSession): ClaudeSessionSummary {
-  return { id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, mode: session.mode, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running };
+  return { id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: "Preview workspace", mode: session.mode, isolation: session.isolation, ...(session.branch ? { branch: session.branch } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running };
 }
 
 interface DshFixtureSession extends DshSessionSummary {
@@ -602,12 +602,15 @@ export function createPublicSimulator(): typeof fetch {
       const selectedWorkspace = claudeConfig.workspaces.find((item) => item.id === body.workspaceId);
       if (!selectedPreset || !selectedWorkspace) return response({ error: "presetId and workspaceId must be allowlisted" }, 400);
       const now = new Date().toISOString();
+      const isolation = body.isolation === "worktree" && selectedPreset.mode === "build" ? "worktree" : "direct";
       const session: ClaudeFixtureSession = {
         id: `claude-sim-${++claudeCounter}`,
         title: typeof body.title === "string" ? body.title.trim().slice(0, 120) || "New Claude conversation" : "New Claude conversation",
         presetId: selectedPreset.id,
         workspaceId: selectedWorkspace.id,
         mode: selectedPreset.mode,
+        isolation,
+        ...(isolation === "worktree" ? { branch: `claude/sim-${claudeCounter}` } : {}),
         createdAt: now,
         updatedAt: now,
         running: false,
@@ -651,6 +654,24 @@ export function createPublicSimulator(): typeof fetch {
           claudeSession.updatedAt = now;
         }
         return response({ cancelled: wasCancelled });
+      }
+
+      if (claudeRest === "/changes" && method === "GET") {
+        return response({ files: [{ path: "src/example.ts", status: "M" }], diff: "diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1,2 @@\n line\n+// simulated change\n", truncated: false });
+      }
+      if (claudeRest === "/merge" && method === "POST") {
+        if (claudeSession.isolation !== "worktree") return response({ error: "only worktree sessions can be merged" }, 400);
+        const now = new Date().toISOString();
+        claudeSession.events.push({ id: `claude-evt-merge-${++claudeCounter}`, messageId: `claude-merge-${claudeCounter}`, timestamp: now, kind: "status", label: "Merged into project", detail: `${claudeSession.branch} → 0000000` });
+        claudeSession.updatedAt = now;
+        return response({ merged: true, mergeCommit: "0000000000000000000000000000000000000000" });
+      }
+      if (claudeRest === "/discard" && method === "POST") {
+        if (claudeSession.isolation !== "worktree") return response({ error: "only worktree sessions can be discarded" }, 400);
+        const now = new Date().toISOString();
+        claudeSession.events.push({ id: `claude-evt-discard-${++claudeCounter}`, messageId: `claude-discard-${claudeCounter}`, timestamp: now, kind: "status", label: "Worktree discarded", detail: claudeSession.branch });
+        claudeSession.updatedAt = now;
+        return response({ discarded: true });
       }
 
       if (!claudeRest) return response({ session: claudeSummary(claudeSession), events: claudeSession.events });

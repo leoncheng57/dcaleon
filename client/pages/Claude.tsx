@@ -6,7 +6,7 @@ import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ds/card.js";
-import { api, type ClaudeConfigResponse, type ClaudeSessionSummary } from "../lib/api.js";
+import { api, type ClaudeConfigResponse, type ClaudeIsolation, type ClaudeSessionSummary } from "../lib/api.js";
 
 export function ClaudePage() {
   const navigate = useNavigate();
@@ -17,6 +17,7 @@ export function ClaudePage() {
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [confirmedBuild, setConfirmedBuild] = useState(false);
+  const [isolation, setIsolation] = useState<ClaudeIsolation>("worktree");
 
   useEffect(() => {
     void Promise.all([api.claudeConfig(), api.claudeSessions()]).then(([nextConfig, nextSessions]) => {
@@ -35,7 +36,7 @@ export function ClaudePage() {
     setCreating(true);
     setError("");
     try {
-      const { session } = await api.createClaudeSession({ presetId, workspaceId });
+      const { session } = await api.createClaudeSession({ presetId, workspaceId, isolation: requiresBuildConfirmation ? isolation : "direct" });
       navigate(`/claude/sessions/${encodeURIComponent(session.id)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -79,7 +80,7 @@ export function ClaudePage() {
               <label className="grid gap-1.5 text-sm">
                 Workspace
                 <select className="h-11 rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3" value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} data-testid="claude-workspace">
-                  {config.workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.label}</option>)}
+                  {config.workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.label}{workspace.source === "discovered" ? " · project" : ""}</option>)}
                 </select>
               </label>
               <Button disabled={creating || !presetId || !workspaceId || (requiresBuildConfirmation && !confirmedBuild)} onClick={() => void create()} data-testid="claude-create">
@@ -87,10 +88,21 @@ export function ClaudePage() {
               </Button>
             </CardContent>
             {requiresBuildConfirmation && (
-              <CardContent className="pt-0">
+              <CardContent className="grid gap-3 pt-0">
+                <fieldset className="grid gap-2 text-sm" data-testid="claude-isolation">
+                  <legend className="mb-1 font-medium">Where should edits land?</legend>
+                  <label className="flex min-h-11 items-start gap-3 rounded-md border border-[var(--color-border-default)] p-3">
+                    <input type="radio" name="claude-isolation" value="worktree" checked={isolation === "worktree"} onChange={() => setIsolation("worktree")} className="mt-0.5 h-5 w-5 shrink-0" data-testid="claude-isolation-worktree" />
+                    <span><strong>Isolated worktree</strong> — a separate git worktree and branch off the project. Review the diff, then merge into the project or discard. The project itself is untouched until you merge.</span>
+                  </label>
+                  <label className="flex min-h-11 items-start gap-3 rounded-md border border-[var(--color-border-default)] p-3">
+                    <input type="radio" name="claude-isolation" value="direct" checked={isolation === "direct"} onChange={() => setIsolation("direct")} className="mt-0.5 h-5 w-5 shrink-0" data-testid="claude-isolation-direct" />
+                    <span><strong>Directly in the project</strong> — edits land in your working tree immediately. You review and revert with git yourself.</span>
+                  </label>
+                </fieldset>
                 <label className="flex min-h-11 items-start gap-3 rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface-warning-muted)] p-3 text-sm" data-testid="claude-build-confirmation">
                   <input type="checkbox" checked={confirmedBuild} onChange={(event) => setConfirmedBuild(event.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" data-testid="claude-build-confirm" />
-                  <span>This session may edit files inside the selected workspace. Writes outside that workspace and Claude state remain blocked by macOS Seatbelt.</span>
+                  <span>This session runs tools without pausing to ask (headless Claude has no approval prompt). {isolation === "worktree" ? "Writes are confined to the session's worktree and the project's git metadata." : "Writes are confined to the selected project."} Writes outside that workspace and Claude state remain blocked by macOS Seatbelt.</span>
                 </label>
               </CardContent>
             )}
@@ -102,8 +114,8 @@ export function ClaudePage() {
           <div className="grid gap-3">
             {sessions.map((session) => (
               <Link key={session.id} to={`/claude/sessions/${encodeURIComponent(session.id)}`} className="rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-4 hover:bg-[var(--color-background-surface-neutral-muted)]" data-testid="claude-session-row">
-                <div className="flex items-center justify-between gap-3"><strong>{session.title}</strong><div className="flex items-center gap-2"><Badge variant="neutral">{session.mode}</Badge>{session.running && <Badge variant="neutral">Running</Badge>}</div></div>
-                <p className="mt-1 text-xs text-[var(--color-text-muted)]">{session.presetId} · {session.workspaceId} · {new Date(session.updatedAt).toLocaleString()}</p>
+                <div className="flex items-center justify-between gap-3"><strong>{session.title}</strong><div className="flex items-center gap-2"><Badge variant="neutral">{session.mode}</Badge>{session.isolation === "worktree" && <Badge variant="neutral">worktree</Badge>}{session.running && <Badge variant="neutral">Running</Badge>}</div></div>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">{session.presetId} · {session.workspaceLabel ?? session.workspaceId}{session.branch ? ` · ${session.branch}` : ""} · {new Date(session.updatedAt).toLocaleString()}</p>
               </Link>
             ))}
             {config && sessions.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">No Claude conversations in this BFF process yet.</p>}

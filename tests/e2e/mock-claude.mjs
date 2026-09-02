@@ -7,6 +7,8 @@
 // decide slow mode. `PRIVATE ...` sentinels ride in fields the BFF must never
 // surface (tool inputs, init data); the UI spec asserts none of them reach the DOM.
 import process from "node:process";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 
 const argv = process.argv.slice(2);
 const promptIndex = argv.indexOf("-p");
@@ -38,6 +40,20 @@ emit({
 if (prompt.includes("stay running")) {
   // Slow mode: stay alive until the supervisor sends SIGTERM (the cancel test).
   setInterval(() => {}, 1000);
+} else if (prompt.includes("write a file")) {
+  // Build mode: really write into cwd (the session's project or worktree), so the
+  // Changes drawer, merge and discard flows have a real diff to work with. Unique
+  // content so a later session always produces a change even if the file exists.
+  const target = path.join(process.cwd(), "claude-e2e.txt");
+  writeFileSync(target, `written by mock claude at ${Date.now()}\n`);
+  emit({ type: "assistant", message: { content: [
+    { type: "tool_use", id: "tu_write_1", name: "Write", input: { file_path: target, content: "PRIVATE FILE BODY" } },
+  ] } });
+  emit({ type: "user", message: { content: [
+    { type: "tool_result", tool_use_id: "tu_write_1", is_error: false, content: "File written" },
+  ] } });
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "Wrote claude-e2e.txt" }] } });
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.002, stop_reason: "end_turn" });
 } else {
   emit({ type: "assistant", message: { content: [
     { type: "thinking", thinking: "Looking at the allowlisted workspace." },

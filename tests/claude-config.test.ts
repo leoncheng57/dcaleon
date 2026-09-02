@@ -124,4 +124,16 @@ describe("Claude runtime configuration", () => {
     expect(config.configured).toBe(false);
     expect(config.errors.join(" ")).toContain("must not overlap workspace");
   });
+  it("resolves a projects root for discovery and refuses state living under it", async () => {
+    const item = await fixture();
+    const withRoot = readClaudeConfig({ ...baseEnv(item), CLAUDE_PROJECTS_ROOT: item.root });
+    expect(withRoot.projectsRoot).toBe(realpathSync(item.root));
+    // State under the projects root is fine (e.g. both under /tmp): discovery itself
+    // excludes anything beneath the state dir, so this is not a config error.
+    const overlapping = readClaudeConfig({ ...baseEnv(item), CLAUDE_PROJECTS_ROOT: item.root, CLAUDE_STATE_DIR: path.join(item.root, "state") });
+    expect(overlapping.configured).toBe(true);
+    // Unset => discovery disabled, allowlist only; explicit-but-missing => an error.
+    expect(readClaudeConfig({ ...baseEnv(item), PROJECTS_DIR: undefined }).projectsRoot).toBeNull();
+    expect(readClaudeConfig({ ...baseEnv(item), CLAUDE_PROJECTS_ROOT: path.join(item.root, "nope") }).errors.join(" ")).toContain("CLAUDE_PROJECTS_ROOT does not exist");
+  });
 });

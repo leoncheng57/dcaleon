@@ -60,8 +60,39 @@ pinned, the binary path is absolute, and every preset and workspace is server-al
 in to the intended subscription and that headless `claude -p` runs under it before enabling
 the lane. Usage bills to that seat.
 
+## Real sessions: projects, isolation, changes, durability
+
+Beyond the read-only experiment, the lane runs real writable coding sessions:
+
+- **Real projects.** In addition to the static allowlist, every git repository under
+  `CLAUDE_PROJECTS_ROOT` (default `PROJECTS_DIR`) is offered as a workspace, discovered at
+  request time via the same `discoverProjects` the rest of the app uses. Each still carries a
+  dev/inode identity that is re-verified before every spawn.
+- **Per-session isolation, chosen when a Build session starts.**
+  - *Isolated worktree*: `git worktree add` on a `claude/<uuid>` branch off the project's HEAD,
+    placed under `CLAUDE_STATE_DIR/worktrees` — never inside the project. The session's cwd is
+    the worktree. Seatbelt grants the worktree plus the project's `.git` (worktrees keep their
+    metadata and objects in the shared `.git`; commits from inside the worktree write there).
+    The project's own working tree is untouched until you **Merge**.
+  - *Direct*: edits land in the project's working tree immediately; you review with git.
+- **Changes drawer.** `GET /claude/sessions/:id/changes` reads git each time (never cached):
+  direct sessions diff the working tree against HEAD; worktree sessions diff against the
+  branch's base commit so the agent's own commits count. Untracked files are included.
+  Bounded (512 KiB, 500 files) and says so when truncated.
+- **Merge / Discard** (worktree sessions). Merge refuses if the *project* has uncommitted
+  changes of your own — a merge must never be confused with a human's in-progress edits — and
+  refuses a branch with nothing to merge; uncommitted worktree changes are committed first so
+  nothing the agent wrote is lost. Both remove the worktree and branch; the session is then
+  finished (its cwd is gone).
+- **Transcript footprint.** Tool rows name what they touched (file path, or the Bash
+  command), and each turn ends with a **patch row** listing the files it edited.
+- **Durability.** Sessions persist to `CLAUDE_SESSIONS_FILE` (metadata + bounded transcript,
+  atomic writes) and reload on boot. A session that was mid-turn when the BFF stopped is marked
+  *Interrupted by a server restart* rather than spinning forever. `--resume` still works because
+  `claude` keeps its own JSONL.
+
 ## Not in V1
 
-Interactive tool approval (unavailable, not deferred), a writable-worktree Build lane beyond
-the basic mode flag, a durable JSONL reader, cross-project session listing, and native
-features such as budget caps or worktree management in the UI.
+Interactive tool approval (unavailable, not deferred), reading `claude`'s own JSONL as a
+second durable transcript source, cross-project session listing parity, and native features
+such as budget caps or `--json-schema` in the UI.

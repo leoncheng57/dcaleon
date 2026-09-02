@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 import { e2eStateFiles, prepareE2EStateFiles } from "./tests/e2e/state-files.js";
+import { ensureGitFixture } from "./tests/e2e/git-fixture.js";
 
 // e2e runs entirely against a MOCK OpenCode server (tests/e2e/mock-opencode.ts),
 // so the suite needs no agent, no LLM spend and no network — it works the same
@@ -42,6 +43,20 @@ const stateFiles =
 // module deliberately only knows how to own and delete `.json` files, and
 // weakening that guard for log fixtures would trade a real safety property for
 // convenience. Same path per lane, overwritten, never globbed or deleted.
+// The Claude runtime's e2e workspace is its OWN git repository, so worktree
+// sessions can branch, merge and discard without perturbing the OpenCode
+// fixtures. ensureGitFixture repairs it to a known baseline on every run, which
+// is what lets a merge from the previous run not accumulate.
+const CLAUDE_PROJECT = `/tmp/custom-dca-opencode-claude-e2e-project-${PORT}`;
+if (process.env.TEST_WORKER_INDEX === undefined) {
+  ensureGitFixture({
+    directory: CLAUDE_PROJECT,
+    files: { "README.md": "# Claude e2e project\n" },
+    trackedFiles: ["README.md"],
+    commitSubject: "fixture",
+  });
+}
+
 const LOG_DIR = `/tmp/custom-dca-opencode-e2e-logs-${PORT}`;
 if (process.env.TEST_WORKER_INDEX === undefined) {
   mkdirSync(LOG_DIR, { recursive: true });
@@ -165,7 +180,7 @@ export const appServer = {
     CLAUDE_WORKSPACES_JSON: JSON.stringify([{
       id: "claude-e2e-workspace",
       label: "Claude E2E workspace",
-      directory: process.cwd(),
+      directory: CLAUDE_PROJECT,
     }]),
     CLAUDE_EXPERIMENT_LEDGER: `/tmp/custom-dca-opencode-claude-ledger-${PORT}.json`,
   },

@@ -34,6 +34,15 @@ export interface ClaudeConfig {
   cliVersion: string;
   sessionRoot: string;
   ledgerFile: string;
+  /** Durable session index (metadata + bounded transcript), survives a BFF restart. */
+  sessionsFile: string;
+  /** Per-session git worktrees live here, never inside a project. */
+  worktreeRoot: string;
+  /**
+   * Root under which git repositories are discoverable as workspaces at request
+   * time (real projects), in addition to the static allowlist. Null disables discovery.
+   */
+  projectsRoot: string | null;
   sandbox: "seatbelt" | "test-unsafe";
   presets: ClaudePreset[];
   workspaces: ClaudeWorkspace[];
@@ -165,6 +174,20 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
     }
   }
 
+  // Real projects: discover git repositories under this root at request time.
+  // Defaults to the app's PROJECTS_DIR so the Claude picker offers the same
+  // projects the rest of the app does. Disabled (null) when unset/unreadable.
+  // The state dir MAY live under this root (e.g. both under /tmp); discovery
+  // itself excludes anything beneath the state dir (server/claude/workspaces.ts),
+  // which is the real hazard, so it is not a configuration error.
+  const projectsRootInput = env.CLAUDE_PROJECTS_ROOT || env.PROJECTS_DIR || "";
+  let projectsRoot: string | null = null;
+  if (projectsRootInput) {
+    const resolved = path.resolve(projectsRootInput.replace(/^~(?=$|\/)/, process.env.HOME || "~"));
+    if (existsSync(resolved)) projectsRoot = realpathSync(resolved);
+    else if (env.CLAUDE_PROJECTS_ROOT) errors.push("CLAUDE_PROJECTS_ROOT does not exist");
+  }
+
   return {
     enabled,
     configured: enabled && errors.length === 0,
@@ -172,6 +195,9 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
     cliVersion,
     sessionRoot: path.join(root, "sessions"),
     ledgerFile: path.resolve(env.CLAUDE_EXPERIMENT_LEDGER || path.join(root, "experiment-ledger.json")),
+    sessionsFile: path.resolve(env.CLAUDE_SESSIONS_FILE || path.join(root, "sessions.json")),
+    worktreeRoot: path.join(root, "worktrees"),
+    projectsRoot,
     sandbox,
     presets,
     workspaces,

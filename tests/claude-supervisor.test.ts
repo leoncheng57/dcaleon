@@ -109,4 +109,40 @@ describe("Claude supervisor", () => {
     expect(supervisor.cancel("s3")).toBe(true);
     await vi.waitFor(() => expect(exited).toBe(true));
   });
+  it("grants the project's .git for a worktree Build session but never in read-only", () => {
+    const extras = { extraReads: ["/proj"], extraWrites: ["/proj/.git"] };
+    const build = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", binaryPath: "/b/claude", mode: "build", home: "/home/x", ...extras });
+    const writeLine = (profile: string) => profile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
+    expect(writeLine(build)).toContain('(subpath "/wt")');
+    expect(writeLine(build)).toContain('(subpath "/proj/.git")');
+    expect(build).toContain('(subpath "/proj")');
+    // Read-only ignores the write grant entirely: a worktree read-only session cannot commit.
+    const ro = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", binaryPath: "/b/claude", mode: "read-only", home: "/home/x", ...extras });
+    expect(writeLine(ro)).not.toContain("/proj/.git");
+    expect(writeLine(ro)).not.toContain('(subpath "/wt")');
+  });
+  it("delivers the final result frame even when the child exits immediately after writing it", async () => {
+    // Regression: listening on `exit` (not `close`) let the process end before its
+    // last stdout chunk was read, so the turn was marked failed and the `result`
+    // frame dropped. A real `claude --resume` lost this race intermittently.
+    const { supervisor, workspace } = await harness(`
+      const out = [
+        JSON.stringify({ type: "system", subtype: "init", claude_code_version: "2.1.257" }),
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "answer" }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, total_cost_usd: 0.01 }),
+      ].join(String.fromCharCode(10)) + String.fromCharCode(10);
+      // Write everything then let the process end on its own (a process.exit()
+      // here would truncate the child's own stdout — a different bug). The parent
+      // may still see the process end before it has read the pipe.
+      process.stdout.write(out);
+    `);
+    const order: string[] = [];
+    supervisor.on("frame", ({ frame }: { frame: Record<string, unknown> }) => order.push(String(frame.type)));
+    supervisor.on("exit", () => order.push("EXIT"));
+    await supervisor.run({ session: { id: "s4", sessionUuid: "u4", started: true }, preset, workspace, text: "hello" });
+    await vi.waitFor(() => expect(order).toContain("EXIT"));
+    // The result frame must precede the exit signal, every time.
+    expect(order.indexOf("result")).toBeGreaterThan(-1);
+    expect(order.indexOf("result")).toBeLessThan(order.indexOf("EXIT"));
+  });
 });

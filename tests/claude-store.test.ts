@@ -26,7 +26,7 @@ async function store() {
 describe("Claude session store", () => {
   it("renders assistant text, thinking, and a correlated tool call from stream-json", async () => {
     const { instance } = await store();
-    const session = instance.create({ presetId: "ro", workspaceId: "ws", mode: "read-only" });
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
     instance.startRun(session, "do the thing");
     instance.applyFrame(session.id, { type: "assistant", message: { content: [
       { type: "thinking", thinking: "let me look" },
@@ -48,7 +48,7 @@ describe("Claude session store", () => {
 
   it("marks a tool call errored when its result is an error", async () => {
     const { instance } = await store();
-    const session = instance.create({ presetId: "ro", workspaceId: "ws", mode: "read-only" });
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
     instance.startRun(session, "x");
     instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "tool_use", id: "tu_9", name: "Bash" }] } });
     instance.applyFrame(session.id, { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_9", is_error: true, content: "boom" }] } });
@@ -58,7 +58,7 @@ describe("Claude session store", () => {
 
   it("surfaces a permission denial as a status row instead of dropping it", async () => {
     const { instance } = await store();
-    const session = instance.create({ presetId: "ro", workspaceId: "ws", mode: "read-only" });
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
     instance.startRun(session, "x");
     instance.applyFrame(session.id, { type: "system", subtype: "permission_denied", tool_name: "Bash", message: "rm blocked" });
     const status = session.events.find((event) => event.kind === "status");
@@ -67,7 +67,7 @@ describe("Claude session store", () => {
 
   it("fails a running turn closed when the process exits with no result", async () => {
     const { instance } = await store();
-    const session = instance.create({ presetId: "ro", workspaceId: "ws", mode: "read-only" });
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
     instance.startRun(session, "x");
     instance.handleExit(session.id);
     expect(session.running).toBe(false);
@@ -76,7 +76,7 @@ describe("Claude session store", () => {
 
   it("persists only bounded run metadata, never prompt or output", async () => {
     const { instance, ledger } = await store();
-    const session = instance.create({ presetId: "ro", workspaceId: "ws", mode: "read-only" });
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
     instance.startRun(session, "SECRET PROMPT CONTENT");
     instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "text", text: "SECRET MODEL OUTPUT" }] } });
     instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.05 });
@@ -91,10 +91,67 @@ describe("Claude session store", () => {
 
   it("records a cancellation as human intervention", async () => {
     const { instance } = await store();
-    const session = instance.create({ presetId: "ro", workspaceId: "ws", mode: "read-only" });
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
     instance.startRun(session, "stay running");
     expect(instance.cancel(session)).toBe(true);
     expect(session.running).toBe(false);
     expect(session.events.at(-1)).toMatchObject({ kind: "status", label: "Cancelled by user" });
+  });
+  it("records what a tool touched and emits one patch row per turn for edited files", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "b", workspaceId: "ws", workspaceLabel: "WS", mode: "build", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "edit things");
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "t1", name: "Read", input: { file_path: "/tmp/ws/src/a.ts" } },
+      { type: "tool_use", id: "t2", name: "Edit", input: { file_path: "/tmp/ws/src/a.ts" } },
+      { type: "tool_use", id: "t3", name: "Write", input: { file_path: "/tmp/ws/src/b.ts" } },
+      { type: "tool_use", id: "t4", name: "Bash", input: { command: "npm test" } },
+    ] } });
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.01 });
+    const tools = session.events.filter((event) => event.kind === "tool");
+    expect(tools.map((event) => event.kind === "tool" && event.detail)).toEqual(["src/a.ts", "src/a.ts", "src/b.ts", undefined]);
+    expect(tools[3]).toMatchObject({ name: "Bash", commandText: "npm test" });
+    const patch = session.events.find((event) => event.kind === "patch");
+    // Read does not count as an edit; Edit + Write on two files do.
+    expect(patch).toMatchObject({ kind: "patch", files: ["src/a.ts", "src/b.ts"], fileCount: 2, filesTruncated: false });
+  });
+
+  it("emits no patch row for a turn that edited nothing", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "look");
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "/tmp/ws/x" } }] } });
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false });
+    expect(session.events.some((event) => event.kind === "patch")).toBe(false);
+  });
+
+  it("survives a restart: sessions reload from disk and a mid-turn session is marked interrupted", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "claude-durable-"));
+    temporary.push(root);
+    const ledger = path.join(root, "ledger.json");
+    const sessionsFile = path.join(root, "sessions.json");
+    const first = new ClaudeSessionStore(ledger, sessionsFile);
+    opened.push(first);
+    await first.load();
+    const finished = first.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws", title: "done one" });
+    first.startRun(finished, "hello");
+    first.applyFrame(finished.id, { type: "assistant", message: { content: [{ type: "text", text: "hi" }] } });
+    first.applyFrame(finished.id, { type: "result", subtype: "success", is_error: false });
+    const midTurn = first.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws", title: "mid turn" });
+    first.startRun(midTurn, "still going");
+    await first.flush();
+
+    // A new process boots against the same files.
+    const second = new ClaudeSessionStore(ledger, sessionsFile);
+    opened.push(second);
+    await second.load();
+    const reloaded = second.get(finished.id);
+    expect(reloaded?.title).toBe("done one");
+    expect(reloaded?.started).toBe(true);
+    expect(reloaded?.events.map((event) => event.kind)).toEqual(["user", "agent"]);
+    const interrupted = second.get(midTurn.id);
+    // No process survives a restart, so a running session must not spin forever.
+    expect(interrupted?.running).toBe(false);
+    expect(interrupted?.events.at(-1)).toMatchObject({ kind: "status", label: "Interrupted by a server restart" });
   });
 });

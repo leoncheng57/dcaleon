@@ -164,7 +164,11 @@ export interface ClaudePresetSummary {
 export interface ClaudeWorkspaceSummary {
   id: string;
   label: string;
+  source?: "allowlist" | "discovered";
 }
+export type ClaudeIsolation = "direct" | "worktree";
+export interface ClaudeChangedFile { path: string; status: string }
+export interface ClaudeChanges { files: ClaudeChangedFile[]; diff: string; truncated: boolean; gone?: boolean }
 export interface ClaudeConfigResponse {
   enabled: true;
   configured: boolean;
@@ -178,7 +182,10 @@ export interface ClaudeSessionSummary {
   title: string;
   presetId: string;
   workspaceId: string;
+  workspaceLabel?: string;
   mode: ClaudePresetMode;
+  isolation?: ClaudeIsolation;
+  branch?: string;
   createdAt: string;
   updatedAt: string;
   running: boolean;
@@ -792,7 +799,7 @@ export const api = {
 
   claudeConfig: () => fetch("/api/claude/config").then((r) => json<ClaudeConfigResponse>(r)),
   claudeSessions: () => fetch("/api/claude/sessions").then((r) => json<{ sessions: ClaudeSessionSummary[] }>(r)),
-  createClaudeSession: (input: { presetId: string; workspaceId: string; title?: string }) =>
+  createClaudeSession: (input: { presetId: string; workspaceId: string; isolation?: ClaudeIsolation; title?: string }) =>
     fetch("/api/claude/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -808,6 +815,11 @@ export const api = {
   cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
   claudeEventsUrl: (id: string) => `/api/claude/events?${new URLSearchParams({ sessionId: id })}`,
+  claudeChanges: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/changes`).then((r) => json<ClaudeChanges>(r)),
+  mergeClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/merge`, { method: "POST" }).then((r) =>
+    json<{ merged: boolean; mergeCommit: string }>(r)),
+  discardClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/discard`, { method: "POST" }).then((r) =>
+    json<{ discarded: boolean }>(r)),
   dshTrajectory: (id: string, options: { limit?: number; before?: number } = {}) => {
     const query = new URLSearchParams({ limit: String(options.limit ?? 200) });
     if (options.before !== undefined) query.set("before", String(options.before));

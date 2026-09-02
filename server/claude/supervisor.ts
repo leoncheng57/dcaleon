@@ -66,6 +66,14 @@ export function claudeSeatbeltProfile(input: {
   binaryPath: string;
   mode: ClaudePreset["mode"];
   home?: string;
+  /**
+   * Worktree isolation: the worktree is `workspace`, but git keeps the shared
+   * object store and worktree metadata in the PROJECT's `.git`, so a Build
+   * session must be able to read the project and write its `.git`. Inherent to
+   * git worktrees; it is the one grant that reaches outside the session dir.
+   */
+  extraReads?: string[];
+  extraWrites?: string[];
 }): string {
   const home = input.home ?? homedir();
   const runtimeRoot = path.dirname(input.binaryPath);
@@ -74,10 +82,11 @@ export function claudeSeatbeltProfile(input: {
     path.join(home, ".claude"), path.join(home, ".claude.json"), path.join(home, ".config"), path.join(home, ".local"),
     path.join(home, "Library/Keychains"), path.join(home, "Library/Preferences"), path.join(home, "Library/Caches"),
     input.binaryPath, runtimeRoot, input.workspace, input.stateRoot, "/private/tmp", "/tmp",
+    ...(input.extraReads ?? []),
   ].map((item) => `(subpath "${seatbeltLiteral(item)}")`).join(" ");
   const writes = [
     input.stateRoot, path.join(home, ".claude"), path.join(home, "Library/Keychains"), "/private/tmp", "/tmp",
-    ...(input.mode === "build" ? [input.workspace] : []),
+    ...(input.mode === "build" ? [input.workspace, ...(input.extraWrites ?? [])] : []),
   ].map((item) => `(subpath "${seatbeltLiteral(item)}")`).join(" ");
   return [
     "(version 1)",
@@ -120,7 +129,10 @@ export function claudeSettings(preset: ClaudePreset): Record<string, unknown> {
 interface RunInput {
   session: { id: string; sessionUuid: string; started: boolean };
   preset: ClaudePreset;
-  workspace: ClaudeWorkspace;
+  /** The session's working directory: the project, or its isolated worktree. */
+  workspace: Pick<ClaudeWorkspace, "directory">;
+  /** Worktree isolation grants (project read, project `.git` write). */
+  sandboxExtras?: { reads: string[]; writes: string[] };
   text: string;
 }
 
@@ -156,6 +168,8 @@ export class ClaudeSupervisor extends EventEmitter {
         stateRoot: this.config.sessionRoot,
         binaryPath: this.config.binaryPath,
         mode: preset.mode,
+        extraReads: input.sandboxExtras?.reads,
+        extraWrites: input.sandboxExtras?.writes,
       });
       return { command: "/usr/bin/sandbox-exec", args: ["-p", profile, this.config.binaryPath, ...cli] };
     }
@@ -195,7 +209,14 @@ export class ClaudeSupervisor extends EventEmitter {
       });
       child.stdout.on("data", (chunk: Buffer) => this.receiveChunk(sessionId, chunk));
       child.stderr.on("data", (chunk: Buffer) => this.emit("diagnostic", chunk.toString("utf8").slice(0, 2_000)));
-      child.once("exit", (code) => {
+      // `close`, not `exit`: `exit` can fire before the last stdout chunk is
+      // delivered, which would let the turn be marked finished (and its final
+      // `result` frame dropped) while frames are still in flight. `close` fires
+      // only after every stdio stream has drained. Any partial trailing line is
+      // flushed first so a frame without a final newline is not lost either.
+      child.once("close", (code) => {
+        const remainder = this.buffers.get(sessionId);
+        if (remainder && remainder.length) this.receiveLine(sessionId, remainder.toString("utf8"));
         this.children.delete(sessionId);
         this.buffers.delete(sessionId);
         this.emit("exit", { sessionId, code });

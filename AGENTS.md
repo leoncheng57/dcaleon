@@ -1143,6 +1143,27 @@ several decisions below.
       `errors[]` and re-asserted against the `system/init` frame's `claude_code_version`;
       a mismatch fails the turn. The binary auto-updates, so this is not optional — the
       wire format is undocumented and a silent upgrade must fail closed, not mis-parse.
+34a. **Real Claude sessions isolate by git worktree, and Seatbelt's one outward grant is
+    the project's `.git`.** A Build session chooses *direct* (edits land in the project) or
+    *worktree* (`git worktree add` on `claude/<uuid>` under `CLAUDE_STATE_DIR/worktrees`,
+    never inside the project — `server/claude/worktree.ts`). Worktrees keep metadata and
+    objects in the shared `.git`, so the worktree profile grants `<project>/.git` write; it
+    is inherent to git worktrees and is the only Seatbelt write that reaches outside the
+    session's own directory. Rules that cost a real test each:
+    - **Merge refuses a dirty project.** A merge must never be confused with the human's
+      own in-progress edits; `mergeWorktree` checks `isDirty(project)` first and also
+      refuses a branch with nothing to merge. Uncommitted worktree work is committed before
+      merging so nothing the agent wrote is silently dropped.
+    - **Changes are read from git every time, never cached** (`workspaceChanges`): direct
+      sessions diff against HEAD, worktree sessions against the base commit so the agent's
+      own commits count; untracked files are included; output is bounded and says so.
+    - **Sessions are durable** (`CLAUDE_SESSIONS_FILE`, atomic write, reload on boot) and a
+      session that was mid-turn at shutdown is marked *Interrupted by a server restart* —
+      the same "detect, never auto-resume" stance as decision 5.
+    - **Discovered projects are workspaces too** (`CLAUDE_PROJECTS_ROOT`, default
+      `PROJECTS_DIR`, via the app's own `discoverProjects`), each with a dev/inode identity
+      re-verified before spawn. The static allowlist still applies; the state dir may not
+      live under the projects root.
 
 ## Client conventions (inherited from the OpenHands runner, still enforced)
 
