@@ -44,6 +44,8 @@ export interface ClaudeConfig {
    */
   projectsRoot: string | null;
   sandbox: "seatbelt" | "test-unsafe";
+  /** Models offered in the mid-session switcher (preset models are always included). */
+  models: string[];
   presets: ClaudePreset[];
   workspaces: ClaudeWorkspace[];
   errors: string[];
@@ -188,6 +190,22 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
     else if (env.CLAUDE_PROJECTS_ROOT) errors.push("CLAUDE_PROJECTS_ROOT does not exist");
   }
 
+  // The models offered by the mid-session switcher. Defaults to the current
+  // Claude model family; CLAUDE_MODELS (JSON array or comma list) overrides it.
+  // Preset models are always included so a session's own model is selectable.
+  const DEFAULT_MODELS = ["claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-fable-5"];
+  let configuredModels = DEFAULT_MODELS;
+  if (env.CLAUDE_MODELS) {
+    try {
+      const parsed = JSON.parse(env.CLAUDE_MODELS) as unknown;
+      configuredModels = Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+    } catch {
+      configuredModels = env.CLAUDE_MODELS.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+    if (enabled && configuredModels.length === 0) errors.push("CLAUDE_MODELS must list at least one model");
+  }
+  const models = [...new Set([...presets.map((item) => item.model), ...configuredModels])];
+
   return {
     enabled,
     configured: enabled && errors.length === 0,
@@ -199,6 +217,7 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
     worktreeRoot: path.join(root, "worktrees"),
     projectsRoot,
     sandbox,
+    models,
     presets,
     workspaces,
     errors,

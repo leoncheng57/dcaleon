@@ -196,6 +196,7 @@ export function ClaudeConversationPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>("");
+  const [planMode, setPlanMode] = useState(false);
   const bottom = useRef<HTMLDivElement | null>(null);
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
@@ -269,7 +270,7 @@ export function ClaudeConversationPage() {
     setDraft("");
     setError("");
     try {
-      await api.promptClaude(id, text, model || undefined);
+      await api.promptClaude(id, text, { modelOverride: model || undefined, plan: planMode });
       await refresh();
     } catch (cause) {
       setDraft(text);
@@ -321,6 +322,16 @@ export function ClaudeConversationPage() {
         </div>
       </div>
       <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="claude-composer">
+        {session?.mode === "build" && (
+          <div className="mx-auto mb-2 flex max-w-4xl items-center gap-1 text-xs" data-testid="claude-mode-toggle">
+            <span className="text-[var(--color-text-muted)]">Mode:</span>
+            <div className="inline-flex overflow-hidden rounded-md border border-[var(--color-border-default)]">
+              <button type="button" className={`px-2.5 py-1 ${planMode ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-muted)]"}`} onClick={() => setPlanMode(true)} disabled={session?.running} data-testid="claude-mode-plan">Plan</button>
+              <button type="button" className={`border-l border-[var(--color-border-default)] px-2.5 py-1 ${!planMode ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-muted)]"}`} onClick={() => setPlanMode(false)} disabled={session?.running} data-testid="claude-mode-build">Build</button>
+            </div>
+            <span className="text-[var(--color-text-muted)]">{planMode ? "Plans read-only; nothing is written." : "Executes and may edit files."}</span>
+          </div>
+        )}
         <div className="mx-auto flex max-w-4xl items-end gap-2">
           {models.length > 1 && (
             <select className="h-11 shrink-0 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-base)] px-2 text-xs" value={model} onChange={(event) => setModel(event.target.value)} disabled={session?.running} title="Model for the next turn" data-testid="claude-model-select">

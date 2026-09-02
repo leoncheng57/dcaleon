@@ -811,10 +811,10 @@ export const api = {
     }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
   claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
     json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
-  promptClaude: (id: string, text: string, modelOverride?: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
+  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, ...(modelOverride ? { modelOverride } : {}) }),
+    body: JSON.stringify({ text, ...(options.modelOverride ? { modelOverride: options.modelOverride } : {}), ...(options.plan ? { plan: true } : {}) }),
   }).then((r) => json<{ accepted: boolean }>(r)),
   cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),

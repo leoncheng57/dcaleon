@@ -145,4 +145,12 @@ describe("Claude supervisor", () => {
     expect(order.indexOf("result")).toBeGreaterThan(-1);
     expect(order.indexOf("result")).toBeLessThan(order.indexOf("EXIT"));
   });
+  it("a plan turn is read-only: plan permission mode, read-only settings, read-only Seatbelt", async () => {
+    // Inspect the generated settings + a real profile rather than the child.
+    const planSettings = claudeSettings({ ...buildPreset, mode: "read-only", permissionMode: "plan" }) as { permissions: { deny: string[] } };
+    expect(planSettings.permissions.deny).toEqual(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+    const roProfile = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", binaryPath: "/b/claude", mode: "read-only", home: "/home/x" });
+    const writeLine = roProfile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
+    expect(writeLine).not.toContain('(subpath "/w")');
+  });
 });

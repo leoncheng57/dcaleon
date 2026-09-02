@@ -86,7 +86,7 @@ export function claudeRoutes(
       sandbox: config.sandbox,
       presets: config.presets.map(({ id, label, model, effort, permissionMode, mode }) => ({ id, label, model, effort, permissionMode, mode })),
       workspaces: workspaces.map(({ id, label, source }) => ({ id, label, source })),
-      models: [...new Set(config.presets.map((item) => item.model))],
+      models: config.models,
     });
   });
 
@@ -159,9 +159,12 @@ export function claudeRoutes(
     }
     // A per-turn model override, restricted to models the operator configured
     // (never an arbitrary browser-supplied model). Mode/permission stay fixed.
-    const allowedModels = new Set(config.presets.map((item) => item.model));
+    const allowedModels = new Set(config.models);
     const requestedModel = typeof req.body?.modelOverride === "string" ? req.body.modelOverride : undefined;
     if (requestedModel && !allowedModels.has(requestedModel)) return error(res, 400, "model is not one of the configured presets");
+    // A plan turn is read-only planning; only meaningful for a Build session
+    // (a read-only session is already non-writing).
+    const plan = req.body?.plan === true && session.mode === "build";
     store.startRun(session, text);
     try {
       await supervisor.run({
@@ -170,6 +173,7 @@ export function claudeRoutes(
         workspace: { directory: session.directory },
         sandboxExtras: sandboxExtras(session),
         ...(requestedModel ? { model: requestedModel } : {}),
+        ...(plan ? { plan: true } : {}),
         text,
       });
       res.status(202).json({ accepted: true });

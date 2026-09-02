@@ -170,4 +170,18 @@ test.describe("Claude Code runtime", () => {
     // The e2e project has no github.com origin, so the action degrades with a clear message.
     await expect(page.getByTestId("claude-changes")).toContainText(/github\.com origin|GITHUB_TOKEN/u);
   });
+  test("offers a Plan/Build mode toggle on a Build session and runs a Plan turn", async ({ page }) => {
+    await createWorktreeBuildSession(page);
+    await expect(page.getByTestId("claude-mode-toggle")).toBeVisible();
+    // Read-only sessions do not show the toggle; Build sessions default to Build.
+    await page.getByTestId("claude-mode-plan").click();
+    await page.getByTestId("claude-prompt").fill("Outline a plan for this fixture");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toBeVisible();
+  });
+
+  test("read-only sessions do not offer the Plan/Build toggle", async ({ page }) => {
+    await createSession(page);
+    await expect(page.getByTestId("claude-mode-toggle")).toHaveCount(0);
+  });
 });

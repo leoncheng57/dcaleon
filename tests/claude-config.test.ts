@@ -136,4 +136,16 @@ describe("Claude runtime configuration", () => {
     expect(readClaudeConfig({ ...baseEnv(item), PROJECTS_DIR: undefined }).projectsRoot).toBeNull();
     expect(readClaudeConfig({ ...baseEnv(item), CLAUDE_PROJECTS_ROOT: path.join(item.root, "nope") }).errors.join(" ")).toContain("CLAUDE_PROJECTS_ROOT does not exist");
   });
+  it("offers a default model list, honours CLAUDE_MODELS, and always includes preset models", async () => {
+    const item = await fixture();
+    const defaults = readClaudeConfig(baseEnv(item));
+    expect(defaults.models).toContain("claude-opus-5");
+    expect(defaults.models.length).toBeGreaterThanOrEqual(8);
+    // The preset's own model is always selectable even if not in the list.
+    const custom = readClaudeConfig({ ...baseEnv(item), CLAUDE_MODELS: JSON.stringify(["claude-sonnet-5", "claude-haiku-4-5"]) });
+    expect(custom.models[0]).toBe("claude-opus-5"); // preset model, prepended
+    expect(custom.models).toEqual(expect.arrayContaining(["claude-sonnet-5", "claude-haiku-4-5"]));
+    // Comma form is accepted too.
+    expect(readClaudeConfig({ ...baseEnv(item), CLAUDE_MODELS: "a, b ,c" }).models).toEqual(expect.arrayContaining(["a", "b", "c"]));
+  });
 });
