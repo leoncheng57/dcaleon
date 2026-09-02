@@ -115,6 +115,34 @@ export async function getReviewStatus(ref: ReviewRef): Promise<ReviewStatus> {
   };
 }
 
+export interface NewPullRequest {
+  owner: string;
+  repo: string;
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+}
+
+/**
+ * Open a GitHub pull request, reusing the same authenticated fetch and token as
+ * the review-status readers. GitHub only for now; a GitLab MR-create is a
+ * follow-up (callers degrade when origin is not GitHub).
+ */
+export async function createPullRequest(input: NewPullRequest): Promise<{ url: string; number: number }> {
+  if (!process.env.GITHUB_TOKEN) throw new Error("GITHUB_TOKEN is required to open a pull request");
+  const created = await forgeFetch<Record<string, any>>(
+    new URL(`/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/pulls`, githubApi()),
+    process.env.GITHUB_TOKEN,
+    "POST",
+    { title: input.title, body: input.body, head: input.head, base: input.base },
+  );
+  const url = typeof created.html_url === "string" ? created.html_url : "";
+  const number = typeof created.number === "number" ? created.number : 0;
+  if (!url) throw new Error("pull request was created but no URL was returned");
+  return { url, number };
+}
+
 export async function mergeReview(ref: ReviewRef, expectedSha: string): Promise<void> {
   if (!/^[a-f0-9]{6,64}$/i.test(expectedSha)) throw new Error("a reviewed head SHA is required");
   if (ref.forge === "github") {

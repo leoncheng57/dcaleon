@@ -115,6 +115,7 @@ const claudeConfig: ClaudeConfigResponse = {
   sandbox: "seatbelt",
   presets: [{ id: CLAUDE_PRESET_ID, label: "Preview preset", model: "sim-preview-v1", effort: "high", permissionMode: "default", mode: "read-only" }],
   workspaces: [{ id: CLAUDE_WORKSPACE_ID, label: "Preview workspace" }],
+  models: ["sim-preview-v1"],
 };
 
 interface ClaudeFixtureSession extends ClaudeSessionSummary {
@@ -122,7 +123,7 @@ interface ClaudeFixtureSession extends ClaudeSessionSummary {
 }
 
 function claudeSummary(session: ClaudeFixtureSession): ClaudeSessionSummary {
-  return { id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: "Preview workspace", mode: session.mode, isolation: session.isolation, ...(session.branch ? { branch: session.branch } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running };
+  return { id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: "Preview workspace", mode: session.mode, isolation: session.isolation, ...(session.branch ? { branch: session.branch } : {}), ...((session as { prUrl?: string }).prUrl ? { prUrl: (session as { prUrl?: string }).prUrl } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running };
 }
 
 interface DshFixtureSession extends DshSessionSummary {
@@ -665,6 +666,18 @@ export function createPublicSimulator(): typeof fetch {
         claudeSession.events.push({ id: `claude-evt-merge-${++claudeCounter}`, messageId: `claude-merge-${claudeCounter}`, timestamp: now, kind: "status", label: "Merged into project", detail: `${claudeSession.branch} → 0000000` });
         claudeSession.updatedAt = now;
         return response({ merged: true, mergeCommit: "0000000000000000000000000000000000000000" });
+      }
+      if (claudeRest === "/pr" && method === "POST") {
+        if (claudeSession.isolation !== "worktree") return response({ error: "only worktree sessions can open a PR" }, 400);
+        (claudeSession as { prUrl?: string }).prUrl = "https://github.com/example/repo/pull/7";
+        const now = new Date().toISOString();
+        claudeSession.events.push({ id: `claude-evt-pr-${++claudeCounter}`, messageId: `claude-pr-${claudeCounter}`, timestamp: now, kind: "status", label: "Pull request opened", detail: "https://github.com/example/repo/pull/7" });
+        claudeSession.updatedAt = now;
+        return response({ url: "https://github.com/example/repo/pull/7", number: 7 }, 201);
+      }
+      if (claudeRest === "/pr" && method === "GET") {
+        if (!(claudeSession as { prUrl?: string }).prUrl) return response({ pr: null });
+        return response({ pr: { url: "https://github.com/example/repo/pull/7", title: "Simulated PR", state: "open", author: "sim", pipeline: "passed", mergeable: true, number: 7, project: "example/repo", checks: [{ id: "c1", name: "build", status: "success", webUrl: "https://github.com/example/repo/runs/1" }] } });
       }
       if (claudeRest === "/discard" && method === "POST") {
         if (claudeSession.isolation !== "worktree") return response({ error: "only worktree sessions can be discarded" }, 400);

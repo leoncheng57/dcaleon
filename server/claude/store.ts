@@ -34,6 +34,7 @@ export interface ClaudeSession {
   /** The project the session belongs to (same as `directory` for direct sessions). */
   projectDirectory: string;
   worktree?: ClaudeWorktree;
+  prUrl?: string;
   createdAt: string;
   updatedAt: string;
   running: boolean;
@@ -292,6 +293,13 @@ export class ClaudeSessionStore extends EventEmitter {
     this.persistSessions();
     this.emit("update", session.id);
     return true;
+  }
+
+  setPrUrl(session: ClaudeSession, url: string): void {
+    session.prUrl = url;
+    session.updatedAt = new Date().toISOString();
+    this.persistSessions();
+    this.emit("update", session.id);
   }
 
   /** Append a status row (e.g. merge/discard outcomes) outside a running turn. */

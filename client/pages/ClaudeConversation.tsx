@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { GitBranch, GitMerge, ListChecks, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Download, Eye, FolderOpen, GitBranch, GitMerge, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -7,10 +7,22 @@ import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { cn } from "../ds/utils.js";
 import { RunningIndicator, Transcript } from "../components/transcript.js";
-import { api, type ClaudeChanges, type ClaudeSessionSummary } from "../lib/api.js";
+import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
+import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
+import { api, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary } from "../lib/api.js";
 import { collapseActionGroups } from "../lib/derive.js";
+import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
+
+function downloadText(name: string, body: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([body], { type: mime }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 const POLL_MS = 3_000;
 const INITIAL_DIFF_LINES = 400;
@@ -36,9 +48,30 @@ function DiffLine({ line }: { line: string }) {
 function ChangesDrawer({ session, onClose, onMutated }: { session: ClaudeSessionSummary; onClose: () => void; onMutated: () => void }) {
   const [changes, setChanges] = useState<ClaudeChanges | null>(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState<"merge" | "discard" | null>(null);
+  const [busy, setBusy] = useState<"merge" | "discard" | "pr" | null>(null);
   const [visible, setVisible] = useState(INITIAL_DIFF_LINES);
+  const [pr, setPr] = useState<ClaudePrStatus | null>(null);
   const isWorktree = session.isolation === "worktree";
+
+  const loadPr = useCallback(async () => {
+    if (!session.prUrl) return;
+    try { setPr((await api.claudePrStatus(session.id)).pr); } catch { /* status is best-effort */ }
+  }, [session.id, session.prUrl]);
+  useEffect(() => { void loadPr(); }, [loadPr]);
+
+  const openPr = async () => {
+    setBusy("pr");
+    setError("");
+    try {
+      await api.openClaudePr(session.id);
+      onMutated();
+      await loadPr();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -123,6 +156,29 @@ function ChangesDrawer({ session, onClose, onMutated }: { session: ClaudeSession
           <span className="text-xs text-[var(--color-text-muted)]">Merge refuses if the project has uncommitted changes of your own.</span>
         </footer>
       )}
+      {isWorktree && !changes?.gone && (
+        <footer className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border-default)] p-3" data-testid="claude-reviews">
+          {session.prUrl || pr ? (
+            <>
+              <a className="text-sm font-medium text-[var(--color-text-info)] underline" href={pr?.url ?? session.prUrl} target="_blank" rel="noreferrer" data-testid="claude-pr-link">PR #{pr?.number ?? ""} {pr?.title ?? "open"}</a>
+              {pr && <Badge variant="neutral" data-testid="claude-pr-pipeline">{pr.state}{pr.pipeline ? ` · ${pr.pipeline}` : ""}</Badge>}
+              <Button size="sm" variant="ghost" onClick={() => void loadPr()} data-testid="claude-pr-refresh"><RefreshCw aria-hidden="true" size={14} className="mr-1" /> Refresh</Button>
+              {pr?.checks?.length ? (
+                <ul className="mt-1 w-full space-y-0.5 text-xs" data-testid="claude-pr-checks">
+                  {pr.checks.slice(0, 20).map((check) => (
+                    <li key={check.id} className="flex items-center gap-2"><span className="w-16 shrink-0 text-[var(--color-text-muted)]">{check.status}</span><a className="truncate underline" href={check.webUrl} target="_blank" rel="noreferrer">{check.name}</a></li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Button size="sm" variant="secondary" disabled={busy !== null || session.running || !changes || changes.files.length === 0} onClick={() => void openPr()} data-testid="claude-open-pr"><GitBranch aria-hidden="true" size={14} className="mr-1" /> {busy === "pr" ? "Opening PR..." : "Push & open PR"}</Button>
+              <span className="text-xs text-[var(--color-text-muted)]">Pushes {session.branch} to origin and opens a GitHub PR. Needs a github.com origin and GITHUB_TOKEN.</span>
+            </>
+          )}
+        </footer>
+      )}
     </section>
   );
 }
@@ -135,6 +191,11 @@ export function ClaudeConversationPage() {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [runlogOpen, setRunlogOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState<string>("");
   const bottom = useRef<HTMLDivElement | null>(null);
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
@@ -193,6 +254,9 @@ export function ClaudeConversationPage() {
     };
   }, [id]);
 
+  // The configured models, so a turn can be sent on a different one without
+  // changing the session's mode/permission (fixed at creation).
+  useEffect(() => { void api.claudeConfig().then((config) => setModels(config.models)).catch(() => undefined); }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [events, session?.running]);
   const items = useMemo(() => collapseActionGroups(events), [events]);
   // A merged/discarded worktree session is finished: its cwd is gone.
@@ -205,7 +269,7 @@ export function ClaudeConversationPage() {
     setDraft("");
     setError("");
     try {
-      await api.promptClaude(id, text);
+      await api.promptClaude(id, text, model || undefined);
       await refresh();
     } catch (cause) {
       setDraft(text);
@@ -237,10 +301,14 @@ export function ClaudeConversationPage() {
         <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
         {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
         {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
-        <div className="ml-auto flex gap-1">
+        <div className="ml-auto flex flex-wrap gap-1">
+          <Button size="sm" variant="secondary" onClick={() => setFilesOpen(true)} data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="mr-1" size={14} /> Files</Button>
+          <Button size="sm" variant="secondary" onClick={() => setRunlogOpen(true)} data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="mr-1" size={14} /> Run log</Button>
           {session?.mode === "build" && (
             <Button size="sm" variant="secondary" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="mr-1" size={14} /> Changes</Button>
           )}
+          <Button size="sm" variant="secondary" onClick={() => setExportOpen(true)} disabled={events.length === 0} data-testid="claude-open-export"><Download aria-hidden="true" className="mr-1" size={14} /> Export</Button>
+          <Button size="sm" variant="ghost" disabled title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="mr-1" size={14} /> Preview <span className="ml-1 rounded bg-[var(--color-background-surface-neutral-muted)] px-1 text-[10px] uppercase">Beta</span></Button>
         </div>
       </header>
       {error && <div className="shrink-0 p-3"><Alert variant="danger">{error}</Alert></div>}
@@ -254,11 +322,32 @@ export function ClaudeConversationPage() {
       </div>
       <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="claude-composer">
         <div className="mx-auto flex max-w-4xl items-end gap-2">
+          {models.length > 1 && (
+            <select className="h-11 shrink-0 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-base)] px-2 text-xs" value={model} onChange={(event) => setModel(event.target.value)} disabled={session?.running} title="Model for the next turn" data-testid="claude-model-select">
+              <option value="">Preset default</option>
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          )}
           <textarea className="min-h-11 max-h-40 flex-1 resize-y rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-base)] px-3 py-2 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={keyDown} placeholder={worktreeClosed ? "This worktree session is finished." : "Ask Claude..."} disabled={!session || session.running || worktreeClosed} data-testid="claude-prompt" />
           {session?.running ? <Button type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button> : <Button type="submit" disabled={!draft.trim() || sending || !session || worktreeClosed} data-testid="claude-send"><Send aria-hidden="true" size={15} className="mr-1" /> Send</Button>}
         </div>
       </form>
       {changesOpen && session && <ChangesDrawer session={session} onClose={() => setChangesOpen(false)} onMutated={() => void refresh()} />}
+      {filesOpen && <ClaudeFilesDrawer sessionId={id} onClose={() => setFilesOpen(false)} />}
+      {runlogOpen && <ClaudeRunLogDrawer events={events} title={session?.title ?? "claude-session"} onClose={() => setRunlogOpen(false)} />}
+      {exportOpen && (
+        <section className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col border-l border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:left-auto sm:w-[28rem]" role="dialog" aria-modal="true" aria-label="Export transcript" data-testid="claude-export">
+          <header className="flex items-center gap-2 border-b border-[var(--color-border-default)] p-2">
+            <Download aria-hidden="true" size={16} /><strong className="text-sm">Export transcript</strong>
+            <Button className="ml-auto" size="sm" variant="ghost" onClick={() => setExportOpen(false)} data-testid="claude-export-close"><X aria-hidden="true" size={15} /> Close</Button>
+          </header>
+          <div className="grid gap-2 p-4 text-sm">
+            <p className="text-[var(--color-text-muted)]">Download this conversation. Runs entirely in your browser — nothing is published.</p>
+            <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "md"), serializeShareMarkdown(session?.title ?? "Claude session", events, { kind: "session" }), "text/markdown")} data-testid="claude-export-md">Download Markdown</Button>
+            <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "json"), serializeSessionJson(session?.title ?? "Claude session", events), "application/json")} data-testid="claude-export-json">Download JSON</Button>
+          </div>
+        </section>
+      )}
     </main>
   );
 }

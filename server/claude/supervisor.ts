@@ -133,6 +133,8 @@ interface RunInput {
   workspace: Pick<ClaudeWorkspace, "directory">;
   /** Worktree isolation grants (project read, project `.git` write). */
   sandboxExtras?: { reads: string[]; writes: string[] };
+  /** Per-turn model override (validated against configured presets by the route). */
+  model?: string;
   text: string;
 }
 
@@ -155,7 +157,7 @@ export class ClaudeSupervisor extends EventEmitter {
       "--output-format", "stream-json",
       "--verbose",
       session.started ? "--resume" : "--session-id", session.sessionUuid,
-      "--model", preset.model,
+      "--model", input.model ?? preset.model,
       "--add-dir", workspace.directory,
       "--permission-mode", preset.permissionMode,
       "--settings", settingsPath,

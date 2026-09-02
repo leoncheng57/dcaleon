@@ -6,7 +6,11 @@ import type { ClaudeConfig, ClaudePreset } from "../claude/config.js";
 import { ClaudeSupervisor } from "../claude/supervisor.js";
 import { ClaudeSessionStore, type ClaudeIsolation } from "../claude/store.js";
 import { listClaudeWorkspaces, resolveClaudeWorkspace, type ResolvedWorkspace } from "../claude/workspaces.js";
-import { createWorktree, isDirty, mergeWorktree, removeWorktree, workspaceChanges, worktreeExists } from "../claude/worktree.js";
+import { createWorktree, currentBranch, isDirty, mergeWorktree, originRemote, pushWorktreeBranch, removeWorktree, workspaceChanges, worktreeExists } from "../claude/worktree.js";
+import { createPullRequest, getReviewStatus, parseReviewUrl } from "../forge.js";
+import { getReviewDetails } from "../forge-details.js";
+import { listClaudeTree, readClaudeFile } from "../claude/files.js";
+import { PathError } from "../paths.js";
 
 const MAX_PROMPT = 40_000;
 
@@ -20,6 +24,7 @@ function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
     mode: session.mode, isolation: session.isolation, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running,
     // Branch is safe to show; the worktree PATH is a host path and stays server-side.
     ...(session.worktree ? { branch: session.worktree.branch } : {}),
+    ...(session.prUrl ? { prUrl: session.prUrl } : {}),
   };
 }
 
@@ -81,6 +86,7 @@ export function claudeRoutes(
       sandbox: config.sandbox,
       presets: config.presets.map(({ id, label, model, effort, permissionMode, mode }) => ({ id, label, model, effort, permissionMode, mode })),
       workspaces: workspaces.map(({ id, label, source }) => ({ id, label, source })),
+      models: [...new Set(config.presets.map((item) => item.model))],
     });
   });
 
@@ -151,6 +157,11 @@ export function claudeRoutes(
     if (session.worktree && !await worktreeExists(session.worktree.directory)) {
       return error(res, 409, "this session's worktree no longer exists");
     }
+    // A per-turn model override, restricted to models the operator configured
+    // (never an arbitrary browser-supplied model). Mode/permission stay fixed.
+    const allowedModels = new Set(config.presets.map((item) => item.model));
+    const requestedModel = typeof req.body?.modelOverride === "string" ? req.body.modelOverride : undefined;
+    if (requestedModel && !allowedModels.has(requestedModel)) return error(res, 400, "model is not one of the configured presets");
     store.startRun(session, text);
     try {
       await supervisor.run({
@@ -158,6 +169,7 @@ export function claudeRoutes(
         preset: selectedPreset,
         workspace: { directory: session.directory },
         sandboxExtras: sandboxExtras(session),
+        ...(requestedModel ? { model: requestedModel } : {}),
         text,
       });
       res.status(202).json({ accepted: true });
@@ -193,6 +205,35 @@ export function claudeRoutes(
     }
   });
 
+  // Read-only file browser over the session's directory (worktree or project),
+  // served from the local filesystem in the shapes the workspace UI expects.
+  router.get("/claude/sessions/:id/tree", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (session.worktree && !await worktreeExists(session.worktree.directory)) return res.json({ path: "", dirs: [], files: [], nextPageId: null });
+    try {
+      res.set("Cache-Control", "private, no-store");
+      res.json(await listClaudeTree(session.directory, typeof req.query.path === "string" ? req.query.path : ""));
+    } catch (cause) {
+      if (cause instanceof PathError) return error(res, cause.status, cause.message);
+      error(res, 409, "workspace tree unavailable");
+    }
+  });
+
+  router.get("/claude/sessions/:id/file", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    try {
+      res.set("Cache-Control", "private, no-store");
+      res.json(await readClaudeFile(session.directory, typeof req.query.path === "string" ? req.query.path : ""));
+    } catch (cause) {
+      if (cause instanceof PathError) return error(res, cause.status, cause.message);
+      error(res, 409, "workspace file unavailable");
+    }
+  });
+
   router.post("/claude/sessions/:id/merge", async (req, res) => {
     if (!requireEnabled(res)) return;
     const session = store.get(req.params.id);
@@ -223,6 +264,53 @@ export function claudeRoutes(
       res.json({ discarded: true });
     } catch (cause) {
       error(res, 409, cause instanceof Error ? cause.message : "discard failed");
+    }
+  });
+
+  // Push the worktree branch to origin and open a PR. Runs in the BFF on host
+  // git credentials (never in the sandbox). GitHub origin + GITHUB_TOKEN only;
+  // degrades with a clear message otherwise.
+  router.post("/claude/sessions/:id/pr", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (!session.worktree) return error(res, 400, "only worktree sessions can open a PR");
+    if (session.running) return error(res, 409, "wait for the running turn to finish before opening a PR");
+    if (!await worktreeExists(session.worktree.directory)) return error(res, 409, "this session's worktree no longer exists");
+    if (!process.env.GITHUB_TOKEN) return error(res, 400, "GITHUB_TOKEN is not configured; cannot open a PR");
+    const remote = await originRemote(session.projectDirectory);
+    if (!remote || remote.host !== "github.com") return error(res, 400, "opening a PR needs a github.com origin remote");
+    try {
+      const base = await currentBranch(session.projectDirectory);
+      await pushWorktreeBranch(session.worktree, `Claude session ${session.title}`);
+      const pr = await createPullRequest({
+        owner: remote.owner, repo: remote.repo, head: session.worktree.branch, base,
+        title: session.title || `Claude session ${session.worktree.branch}`,
+        body: `Opened from a Claude Code runtime session.\n\nBranch: \`${session.worktree.branch}\``,
+      });
+      store.setPrUrl(session, pr.url);
+      store.note(session, "Pull request opened", pr.url);
+      res.status(201).json({ url: pr.url, number: pr.number });
+    } catch (cause) {
+      error(res, 502, cause instanceof Error ? cause.message : "could not open a pull request");
+    }
+  });
+
+  router.get("/claude/sessions/:id/pr", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (!session.prUrl) return res.json({ pr: null });
+    try {
+      const ref = parseReviewUrl(session.prUrl);
+      const [status, details] = await Promise.all([
+        getReviewStatus(ref),
+        getReviewDetails(ref).catch(() => null),
+      ]);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ pr: { ...status, checks: details?.checks?.value ?? [] } });
+    } catch (cause) {
+      error(res, 502, cause instanceof Error ? cause.message : "could not read PR status");
     }
   });
 

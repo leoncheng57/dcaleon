@@ -144,3 +144,48 @@ export async function worktreeExists(directory: string): Promise<boolean> {
     return false;
   }
 }
+
+export interface GitRemote {
+  host: string;
+  owner: string;
+  repo: string;
+}
+
+/** Parse `origin` into host/owner/repo; null when there is no usable remote. */
+export async function originRemote(project: string): Promise<GitRemote | null> {
+  let url: string;
+  try {
+    url = (await git(project, ["remote", "get-url", "origin"])).trim();
+  } catch {
+    return null;
+  }
+  // git@host:owner/repo(.git)  or  https://host/owner/repo(.git)
+  const ssh = /^[^@]+@([^:]+):(.+?)(?:\.git)?$/.exec(url);
+  const https = /^https?:\/\/(?:[^@/]+@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
+  const match = ssh ?? https;
+  if (!match) return null;
+  const [owner, ...rest] = match[2].split("/");
+  const repo = rest.join("/");
+  if (!owner || !repo) return null;
+  return { host: match[1], owner, repo };
+}
+
+/** The branch the project's HEAD is on — the natural PR base. */
+export async function currentBranch(project: string): Promise<string> {
+  return (await git(project, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+}
+
+/**
+ * Push a session's worktree branch to `origin`, committing any pending worktree
+ * changes first (so nothing the agent wrote is left behind). Runs in the BFF on
+ * host git credentials — never inside the Seatbelt sandbox.
+ */
+export async function pushWorktreeBranch(worktree: ClaudeWorktree, message: string): Promise<void> {
+  if (await isDirty(worktree.directory)) {
+    await git(worktree.directory, ["add", "-A"]);
+    await git(worktree.directory, ["-c", "user.name=custom-dca", "-c", "user.email=custom-dca@localhost", "commit", "-q", "-m", message]);
+  }
+  const ahead = (await git(worktree.project, ["rev-list", "--count", `HEAD..${worktree.branch}`])).trim();
+  if (ahead === "0") throw new Error("session branch has no commits to push");
+  await git(worktree.directory, ["push", "-u", "origin", worktree.branch]);
+}

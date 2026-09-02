@@ -169,6 +169,8 @@ export interface ClaudeWorkspaceSummary {
 export type ClaudeIsolation = "direct" | "worktree";
 export interface ClaudeChangedFile { path: string; status: string }
 export interface ClaudeChanges { files: ClaudeChangedFile[]; diff: string; truncated: boolean; gone?: boolean }
+export interface ClaudePrCheck { id: string; name: string; status: string; webUrl: string }
+export interface ClaudePrStatus { url: string; title: string; state: string; author: string; pipeline: string | null; mergeable: boolean | null; number: number; project: string; checks: ClaudePrCheck[] }
 export interface ClaudeConfigResponse {
   enabled: true;
   configured: boolean;
@@ -176,6 +178,7 @@ export interface ClaudeConfigResponse {
   sandbox: "seatbelt" | "test-unsafe";
   presets: ClaudePresetSummary[];
   workspaces: ClaudeWorkspaceSummary[];
+  models: string[];
 }
 export interface ClaudeSessionSummary {
   id: string;
@@ -186,6 +189,7 @@ export interface ClaudeSessionSummary {
   mode: ClaudePresetMode;
   isolation?: ClaudeIsolation;
   branch?: string;
+  prUrl?: string;
   createdAt: string;
   updatedAt: string;
   running: boolean;
@@ -807,10 +811,10 @@ export const api = {
     }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
   claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
     json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
-  promptClaude: (id: string, text: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
+  promptClaude: (id: string, text: string, modelOverride?: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, ...(modelOverride ? { modelOverride } : {}) }),
   }).then((r) => json<{ accepted: boolean }>(r)),
   cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
@@ -820,6 +824,14 @@ export const api = {
     json<{ merged: boolean; mergeCommit: string }>(r)),
   discardClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/discard`, { method: "POST" }).then((r) =>
     json<{ discarded: boolean }>(r)),
+  claudeTree: (id: string, path = "") => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/tree?${new URLSearchParams({ path })}`).then((r) =>
+    json<{ path: string; dirs: WorkspaceNode[]; files: WorkspaceNode[] }>(r)),
+  claudeFile: (id: string, path: string, signal?: AbortSignal) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}/file?${new URLSearchParams({ path })}`, { signal }).then((r) => json<WorkspaceFile>(r)),
+  openClaudePr: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/pr`, { method: "POST" }).then((r) =>
+    json<{ url: string; number: number }>(r)),
+  claudePrStatus: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/pr`).then((r) =>
+    json<{ pr: import("./api.js").ClaudePrStatus | null }>(r)),
   dshTrajectory: (id: string, options: { limit?: number; before?: number } = {}) => {
     const query = new URLSearchParams({ limit: String(options.limit ?? 200) });
     if (options.before !== undefined) query.set("before", String(options.before));

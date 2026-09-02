@@ -175,7 +175,7 @@ export const appServer = {
     CLAUDE_STATE_DIR: `/tmp/custom-dca-opencode-claude-state-${PORT}`,
     CLAUDE_PRESETS_JSON: JSON.stringify([
       { id: "e2e-readonly", label: "E2E read-only", model: "mock-claude", effort: "high", permissionMode: "default", mode: "read-only" },
-      { id: "e2e-build", label: "E2E Build", model: "mock-claude", permissionMode: "acceptEdits", mode: "build" },
+      { id: "e2e-build", label: "E2E Build", model: "mock-claude-opus", permissionMode: "bypassPermissions", mode: "build" },
     ]),
     CLAUDE_WORKSPACES_JSON: JSON.stringify([{
       id: "claude-e2e-workspace",

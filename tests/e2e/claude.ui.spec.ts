@@ -115,4 +115,59 @@ test.describe("Claude Code runtime", () => {
     await expect(page.getByTestId("claude-merge")).toHaveCount(0);
     await expect(page.getByTestId("claude-discard")).toHaveCount(0);
   });
+  test("browses workspace files and views file content", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-open-files").click();
+    await expect(page.getByTestId("claude-files")).toBeVisible();
+    // The e2e project fixture has a README.md at the root.
+    await page.getByTestId("claude-tree-file").filter({ hasText: "README.md" }).first().click();
+    await expect(page.getByTestId("claude-file-pane")).toContainText("Claude e2e project");
+  });
+
+  test("shows a run log derived from the transcript", async ({ page }) => {
+    await createWorktreeBuildSession(page);
+    await page.getByTestId("claude-prompt").fill("Please write a file for me");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
+    await page.getByTestId("claude-open-runlog").click();
+    await expect(page.getByTestId("claude-runlog")).toBeVisible();
+    await expect(page.getByTestId("claude-runlog-timeline")).toContainText("Write");
+    // Filtering to edits keeps the Write; reads filter it out.
+    await page.getByTestId("claude-runlog-filter-edit").click();
+    await expect(page.getByTestId("claude-runlog-timeline")).toContainText("Write");
+    await page.getByTestId("claude-runlog-filter-read").click();
+    await expect(page.getByTestId("claude-runlog-empty")).toBeVisible();
+  });
+
+  test("offers Markdown and JSON export of the transcript", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").fill("Inspect this fixture");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Hello from mock claude");
+    await page.getByTestId("claude-open-export").click();
+    await expect(page.getByTestId("claude-export-md")).toBeVisible();
+    await expect(page.getByTestId("claude-export-json")).toBeVisible();
+  });
+
+  test("lets a turn run on a different configured model", async ({ page }) => {
+    await createSession(page);
+    // Two presets with distinct models => the composer model select is offered.
+    await expect(page.getByTestId("claude-model-select")).toBeVisible();
+    await page.getByTestId("claude-model-select").selectOption("mock-claude-opus");
+    await page.getByTestId("claude-prompt").fill("Inspect this fixture");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Hello from mock claude");
+  });
+
+  test("offers Push & open PR on a worktree session and reports a missing github origin clearly", async ({ page }) => {
+    await createWorktreeBuildSession(page);
+    await page.getByTestId("claude-prompt").fill("Please write a file for me");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
+    await page.getByTestId("claude-open-changes").click();
+    await expect(page.getByTestId("claude-open-pr")).toBeVisible();
+    await page.getByTestId("claude-open-pr").click();
+    // The e2e project has no github.com origin, so the action degrades with a clear message.
+    await expect(page.getByTestId("claude-changes")).toContainText(/github\.com origin|GITHUB_TOKEN/u);
+  });
 });
