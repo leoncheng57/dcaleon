@@ -35,7 +35,8 @@
     "test:preview": "playwright test --config playwright.preview.config.ts",
     "preview:package": "tsx scripts/pr-preview.ts package",
     "screenshots": "tsx scripts/run-pr-screenshots.ts",
-    "screenshots:local": "npm run screenshots -- --request-file tests/fixtures/pr-screenshots.json --output-dir screenshot-output --pr-number 0 --sha local"
+    "screenshots:local": "npm run screenshots -- --request-file tests/fixtures/pr-screenshots.json --output-dir screenshot-output --pr-number 0 --sha local",
+    "design-shot": "tsx scripts/design-shot.ts"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

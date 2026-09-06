@@ -3,21 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <title>Processes tab mockup (static — not wired to the app)</title>
+<link rel="stylesheet" href="../../client/theme/tokens.css" />
 <style>
-  :root {
-    --color-background-surface: #16181d;
-    --color-background-surface-neutral-muted: #22252c;
-    --color-background-surface-info-muted: #172554;
-    --color-background-surface-success-muted: #052e1d;
-    --color-background-surface-danger-muted: #3f1414;
-    --color-background-surface-danger: #ef4444;
-    --color-text-default: #e8eaed;
-    --color-text-muted: #9aa0a6;
-    --color-text-info: #93c5fd;
-    --color-text-success: #34d399;
-    --color-border-default: #2c3038;
-    --hh-row-hover: #1c1f25;
-  }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
@@ -29,11 +16,9 @@
   }
   section.panel {
     width: 800px;
-    height: 560px;
     display: flex;
     flex-direction: column;
     background: var(--color-background-surface);
-    overflow: hidden;
   }
   header {
     display: flex;
@@ -117,7 +102,7 @@
   .up { color: var(--color-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .kill {
     font-size: 0.72rem;
-    color: var(--color-text-danger, #f87171);
+    color: var(--color-text-danger);
     background: var(--color-background-surface-danger-muted);
     border: 1px solid transparent;
     padding: 0.25rem 0.6rem;
@@ -131,7 +116,7 @@
 </style>
 </head>
 <body>
-<section class="panel">
+<section class="panel" id="mockup-root">
   <header>
     <button type="button">Files</button>
     <button type="button">Changes</button>
