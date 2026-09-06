@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Processes tab mockup (static — not wired to the app)</title>
+<style>
+  :root {
+    --color-background-surface: #16181d;
+    --color-background-surface-neutral-muted: #22252c;
+    --color-background-surface-info-muted: #172554;
+    --color-background-surface-success-muted: #052e1d;
+    --color-background-surface-danger-muted: #3f1414;
+    --color-background-surface-danger: #ef4444;
+    --color-text-default: #e8eaed;
+    --color-text-muted: #9aa0a6;
+    --color-text-info: #93c5fd;
+    --color-text-success: #34d399;
+    --color-border-default: #2c3038;
+    --hh-row-hover: #1c1f25;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--color-background-surface);
+    color: var(--color-text-default);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+  }
+  section.panel {
+    width: 800px;
+    height: 560px;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-background-surface);
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--color-border-default);
+    padding: 0.5rem;
+  }
+  header button {
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    text-transform: capitalize;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    cursor: default;
+    font-family: inherit;
+  }
+  header button.active {
+    background: var(--color-background-surface-neutral-muted);
+    color: var(--color-text-default);
+    font-weight: 600;
+  }
+  header button.new {
+    color: var(--color-text-info);
+    font-weight: 600;
+  }
+  header .close {
+    margin-left: auto;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+  }
+  .body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem; }
+  .hint {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    padding: 0.4rem 0.6rem;
+    margin-bottom: 0.6rem;
+    background: var(--color-background-surface-info-muted);
+    border-radius: 0.5rem;
+  }
+  .dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--color-text-success); flex-shrink: 0; box-shadow: 0 0 0 3px rgba(52,211,153,0.2); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  thead th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--color-border-default);
+  }
+  tbody tr { border-bottom: 1px solid var(--color-border-default); }
+  tbody tr:hover { background: var(--hh-row-hover); }
+  tbody td { padding: 0.55rem 0.6rem; vertical-align: middle; }
+  .pid { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+  .cmd code {
+    background: var(--color-background-surface-neutral-muted);
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.78rem;
+  }
+  .cmd .label { color: var(--color-text-muted); font-size: 0.72rem; }
+  .indent { color: var(--color-text-muted); }
+  td.pid { white-space: nowrap; }
+  .port-badge {
+    display: inline-block;
+    margin-left: 0.4rem;
+    font-size: 0.68rem;
+    color: var(--color-text-info);
+    background: var(--color-background-surface-info-muted);
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+  }
+  .up { color: var(--color-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kill {
+    font-size: 0.72rem;
+    color: var(--color-text-danger, #f87171);
+    background: var(--color-background-surface-danger-muted);
+    border: 1px solid transparent;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.375rem;
+  }
+  footer.note {
+    margin-top: 0.6rem;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+  }
+</style>
+</head>
+<body>
+<section class="panel">
+  <header>
+    <button type="button">Files</button>
+    <button type="button">Changes</button>
+    <button type="button">Preview</button>
+    <button type="button" class="active new">Processes</button>
+    <span class="close">Close</span>
+  </header>
+  <div class="body">
+    <div class="hint"><span class="dot"></span> 5 processes running in this worktree — started 4m41s ago</div>
+    <table>
+      <thead>
+        <tr><th>PID</th><th>Process</th><th>Up</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="pid">43834</td>
+          <td class="cmd"><span class="label">shell wrapper for the</span> <code>yarn dev:staging</code> <span class="label">call</span></td>
+          <td class="up">4m41s</td>
+          <td><button class="kill" type="button">Kill</button></td>
+        </tr>
+        <tr>
+          <td class="pid"><span class="indent">&nbsp;&nbsp;↳ </span>43835</td>
+          <td class="cmd"><code>yarn dev:staging</code></td>
+          <td class="up">4m41s</td>
+          <td><button class="kill" type="button">Kill</button></td>
+        </tr>
+        <tr>
+          <td class="pid"><span class="indent">&nbsp;&nbsp;&nbsp;&nbsp;↳ </span>43837</td>
+          <td class="cmd"><code>tee .context/dev.log</code></td>
+          <td class="up">4m41s</td>
+          <td><button class="kill" type="button">Kill</button></td>
+        </tr>
+        <tr>
+          <td class="pid"><span class="indent">&nbsp;&nbsp;&nbsp;&nbsp;↳ </span>43838</td>
+          <td class="cmd"><code>vercel dev</code> <span class="label">— listening</span><span class="port-badge">:3000</span></td>
+          <td class="up">4m41s</td>
+          <td><button class="kill" type="button">Kill</button></td>
+        </tr>
+        <tr>
+          <td class="pid"><span class="indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ </span>43870</td>
+          <td class="cmd"><code>next dev</code> <span class="label">(child of vercel dev)</span></td>
+          <td class="up">4m39s</td>
+          <td><button class="kill" type="button">Kill</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <footer class="note">Mockup only — no such tab exists yet. See issue for proposal.</footer>
+  </div>
+</section>
+</body>
+</html>
