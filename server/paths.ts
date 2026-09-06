@@ -66,7 +66,7 @@ export async function requireProjectDirectory(
     throw new PathError(403, "'directory' must identify a project below the configured root");
   }
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new PathError(403, "'directory' is outside PROJECTS_DIR");
+    throw new PathError(403, `'directory' is outside PROJECTS_DIR (${canonicalRoot})`);
   }
   return canonicalDirectory;
 }
@@ -78,7 +78,7 @@ export async function requireWorkspaceDirectory(value: unknown): Promise<string>
     if (!(error instanceof PathError) || error.status !== 403) throw error;
   }
   return requireProjectDirectory(value, worktreesRoot()).catch(() => {
-    throw new PathError(403, "'directory' is outside PROJECTS_DIR and the OpenCode worktree root");
+    throw new PathError(403, `'directory' is outside PROJECTS_DIR (${projectsRoot()}) and the OpenCode worktree root — update PROJECTS_DIR in .env to a parent that contains this path`);
   });
 }
 
