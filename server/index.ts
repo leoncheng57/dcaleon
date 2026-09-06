@@ -43,7 +43,10 @@ import { parsePublicAppUrl } from "./publicAppUrl.js";
 import { readDshConfig } from "./dsh/config.js";
 import { dshRoutes } from "./routes/dsh.js";
 import { readClaudeConfig } from "./claude/config.js";
+import { ClaudeSessionStore } from "./claude/store.js";
 import { claudeRoutes } from "./routes/claude.js";
+import { getSessionMetadata, latestAssistantExcerpt } from "./opencode/sessions.js";
+import { isClaudeSessionId } from "./publicAppUrl.js";
 import { parseLiveBrowserConfig } from "./browser/policy.js";
 import { liveBrowserRoutes } from "./browser/routes.js";
 
@@ -76,6 +79,10 @@ const notificationStore = new PreferenceStore();
 const notificationHistory = new HistoryStore();
 const pushSubscriptions = new PushSubscriptionStore();
 webPushConfig(); // Fail at startup rather than exposing a half-configured channel.
+// Created here rather than inside claudeRoutes so the notification service can
+// answer questions about a Claude session from this store instead of asking the
+// OpenCode server about an id it has never issued.
+const claudeStore = new ClaudeSessionStore(claude.ledgerFile, claude.sessionsFile);
 const notificationService = new NotificationService(
   opencode,
   bus,
@@ -83,8 +90,18 @@ const notificationService = new NotificationService(
   notificationHistory,
   publicAppUrl,
   (directory) => autoPermissions.isEnabledCanonical(directory),
-  undefined,
+  async (directory, sessionID, signal) => {
+    if (!isClaudeSessionId(sessionID)) return getSessionMetadata(opencode, directory, sessionID, signal);
+    const session = claudeStore.get(sessionID);
+    return session ? { id: session.id, title: session.title } : null;
+  },
   pushSubscriptions,
+  async (directory, sessionID, signal) => {
+    if (!isClaudeSessionId(sessionID)) return latestAssistantExcerpt(opencode, directory, sessionID, signal);
+    const session = claudeStore.get(sessionID);
+    const last = session?.events.filter((event) => event.kind === "agent").at(-1);
+    return last && last.kind === "agent" ? last.text : undefined;
+  },
 );
 notificationService.start();
 bus.start();
@@ -105,7 +122,7 @@ app.use("/api", observabilityRoutes(opencode, PORT));
 app.use("/api", modelPinRoutes());
 app.use("/api", recentRoutes(opencode));
 app.use("/api", dshRoutes(dsh));
-app.use("/api", claudeRoutes(claude));
+app.use("/api", claudeRoutes(claude, undefined, claudeStore, bus));
 const opencodePort = Number(new URL(opencode.baseUrl).port || 80);
 app.use("/api", previewRoutes(parseAllowedPorts(process.env.PREVIEW_ALLOWED_PORTS, [PORT, opencodePort])));
 

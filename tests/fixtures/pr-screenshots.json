@@ -1,6 +1,6 @@
 [
   {
-    "requestedRoute": "/?directory=/tmp/mock-project",
+    "requestedRoute": "/opencode?directory=/tmp/mock-project",
     "fullPage": false
   },
   {
@@ -12,7 +12,7 @@
     "fullPage": true
   },
   {
-    "requestedRoute": "/?directory=/tmp/mock-subagent-project",
+    "requestedRoute": "/opencode?directory=/tmp/mock-subagent-project",
     "fullPage": true
   },
   {

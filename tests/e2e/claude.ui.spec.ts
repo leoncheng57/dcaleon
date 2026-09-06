@@ -151,9 +151,11 @@ test.describe("Claude Code runtime", () => {
 
   test("lets a turn run on a different configured model", async ({ page }) => {
     await createSession(page);
-    // Two presets with distinct models => the composer model select is offered.
-    await expect(page.getByTestId("claude-model-select")).toBeVisible();
-    await page.getByTestId("claude-model-select").selectOption("mock-claude-opus");
+    // The model picker is offered when multiple models are configured.
+    await expect(page.getByTestId("claude-composer-model")).toBeVisible();
+    // Open the model picker dialog and select a different model.
+    await page.getByTestId("claude-composer-model").click();
+    await page.locator('[data-testid="claude-composer-model-option"][data-model-key="anthropic/mock-claude-opus"]').click();
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Hello from mock claude");
@@ -172,24 +174,69 @@ test.describe("Claude Code runtime", () => {
   });
   test("offers a Plan/Build mode toggle on a Build session and runs a Plan turn", async ({ page }) => {
     await createWorktreeBuildSession(page);
-    await expect(page.getByTestId("claude-mode-toggle")).toBeVisible();
+    await expect(page.getByTestId("claude-composer-mode")).toBeVisible();
     // A Build session can switch to Plan and back; both controls are enabled.
-    await expect(page.getByTestId("claude-mode-plan")).toBeEnabled();
-    await expect(page.getByTestId("claude-mode-build")).toBeEnabled();
-    await page.getByTestId("claude-mode-plan").click();
+    await expect(page.getByTestId("claude-composer-mode-plan")).toBeEnabled();
+    await expect(page.getByTestId("claude-composer-mode-build")).toBeEnabled();
+    await page.getByTestId("claude-composer-mode-plan").click();
     await page.getByTestId("claude-prompt").fill("Outline a plan for this fixture");
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toBeVisible();
   });
 
-  test("read-only sessions show the Plan/Build toggle locked to Plan", async ({ page }) => {
+  test("read-only sessions default to Plan but allow switching to Build", async ({ page }) => {
     await createSession(page);
-    // The control is visible (not hidden), but Build is disabled — a read-only
-    // preset can only plan.
-    await expect(page.getByTestId("claude-mode-toggle")).toBeVisible();
-    await expect(page.getByTestId("claude-mode-build")).toBeDisabled();
-    await expect(page.getByTestId("claude-mode-plan")).toBeDisabled();
-    await expect(page.getByTestId("claude-mode-toggle")).toContainText("Read-only preset");
+    await expect(page.getByTestId("claude-composer-mode")).toBeVisible();
+    await expect(page.getByTestId("claude-composer-mode-build")).toBeEnabled();
+    await expect(page.getByTestId("claude-composer-mode-plan")).toBeEnabled();
+  });
+
+  test("attaches a reminder from the composer and the binary receives it as a trusted block", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("composer-reminder-select").click();
+    await page.locator('[data-testid="composer-reminder-option"][data-reminder-id="cite-file-lines"]').click();
+    await page.getByTestId("claude-prompt").fill("Inspect this fixture with citations");
+    await page.getByTestId("claude-send").click();
+    // The mock names every sentinel block it was handed: injection happened
+    // server-side, by id, not by the browser authoring text.
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Injected: reminder=cite-file-lines");
+    // The user row keeps the human's words plus a chip; the raw sentinel never renders.
+    const transcript = page.getByTestId("claude-transcript");
+    await expect(transcript).toContainText("Inspect this fixture with citations");
+    await expect(transcript).not.toContainText('<reminder name=');
+    await expect(page.getByTestId("opencode-user-message").first()).toContainText("cite-file-lines");
+    // Per-message: the selection does not ride on the next turn.
+    await expect(page.getByTestId("composer-reminder-select")).not.toContainText("cite-file-lines");
+  });
+
+  test("offers only generic workflows, applies one to the composer, and injects it on send", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("composer-workflow-select").click();
+    // Workflows whose submit path is an OpenCode route are not offered here.
+    await expect(page.locator('[data-testid="composer-workflow-option"][data-workflow-id="goal"]')).toBeVisible();
+    await expect(page.locator('[data-testid="composer-workflow-option"][data-workflow-id="managed-child"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="composer-workflow-option"][data-workflow-id="start-dca-session"]')).toHaveCount(0);
+    await page.locator('[data-testid="composer-workflow-option"][data-workflow-id="goal"]').click();
+    await expect(page.getByTestId("claude-workflow-dialog")).toBeVisible();
+    await expect(page.getByTestId("claude-workflow-apply")).toBeDisabled();
+    await page.getByTestId("claude-workflow-argument").fill("Add a shout() helper");
+    await page.getByTestId("claude-workflow-apply").click();
+    await expect(page.getByTestId("claude-workflow-dialog")).toHaveCount(0);
+    await expect(page.getByTestId("claude-prompt")).toHaveValue("Add a shout() helper");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Injected: workflow=goal");
+    await expect(page.getByTestId("claude-transcript")).not.toContainText('<workflow name=');
+  });
+
+  test("a finished Claude turn raises a notification like an OpenCode idle does", async ({ page }) => {
+    await createSession(page);
+    const bell = page.getByTestId("opencode-nav-notifications");
+    await page.getByTestId("claude-prompt").fill("Inspect this fixture");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Hello from mock claude");
+    // Presence, not a count: sibling specs share the notification lane and may
+    // be raising their own at the same time.
+    await expect(bell).toHaveAttribute("aria-label", /unresolved/u);
   });
 
   test("opens a transcript file reference in the Files drawer", async ({ page }) => {

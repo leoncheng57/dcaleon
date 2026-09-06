@@ -119,7 +119,7 @@ describe("PR screenshot requests", () => {
       expect(pattern.source.startsWith("^"), `${pattern} must be anchored at the start`).toBe(true);
       expect(pattern.source.endsWith("$"), `${pattern} must be anchored at the end`).toBe(true);
     }
-    const samples = ["/", "/sessions/ses_1", "/settings", "/settings/notifications", "/tools", "/docs", "/docs/architecture", "/planning", "/observability", "/playbooks", "/playbooks/workflows", "/playbooks/workflows/start-dca-session", "/playbooks/reminders", "/playbooks/reminders/session-handoff", "/dsh", "/dsh/sessions/dsh-mock-1"];
+    const samples = ["/", "/opencode", "/sessions/ses_1", "/settings", "/settings/notifications", "/tools", "/docs", "/docs/architecture", "/planning", "/observability", "/playbooks", "/playbooks/workflows", "/playbooks/workflows/start-dca-session", "/playbooks/reminders", "/playbooks/reminders/session-handoff", "/dsh", "/dsh/sessions/dsh-mock-1"];
     for (const sample of samples) {
       const matches = SCREENSHOT_ROUTES.filter((route) => route.pattern.test(sample));
       expect(matches, `${sample} should match exactly one pattern`).toHaveLength(1);

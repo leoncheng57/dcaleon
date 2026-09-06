@@ -1,4 +1,5 @@
 import { Router, type Response } from "express";
+import type { EventEmitter } from "node:events";
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -10,7 +11,12 @@ import { createWorktree, currentBranch, isDirty, mergeWorktree, originRemote, pu
 import { createPullRequest, getReviewStatus, parseReviewUrl } from "../forge.js";
 import { getReviewDetails } from "../forge-details.js";
 import { listClaudeTree, readClaudeFile, resolveClaudeReferences } from "../claude/files.js";
+import { composeClaudePrompt } from "../claude/prompt.js";
+import { publishClaudeRunEvents } from "../claude/notifications.js";
 import { PathError } from "../paths.js";
+import { visibleReminder, visibleReminders } from "../reminders/loader.js";
+import { isValidReminderId } from "../reminders/reminders.js";
+import { isValidWorkflowId, workflowCatalogue } from "../workflows/workflows.js";
 
 const MAX_PROMPT = 40_000;
 
@@ -38,6 +44,8 @@ export function claudeRoutes(
   config: ClaudeConfig,
   supervisor = new ClaudeSupervisor(config),
   store = new ClaudeSessionStore(config.ledgerFile, config.sessionsFile),
+  /** The app's OpenCode event bus; a finished turn is announced on it so the notification lane hears Claude too. */
+  bus?: Pick<EventEmitter, "emit">,
 ): Router {
   const router = Router();
   let loadError: Error | null = null;
@@ -51,6 +59,7 @@ export function claudeRoutes(
   supervisor.on("exit", ({ sessionId }) => store.handleExit(sessionId));
   supervisor.on("diagnostic", (detail) => console.warn("[claude]", detail));
   store.on("error", (detail) => console.warn("[claude-ledger]", detail));
+  if (bus) store.on("finished", ({ session, outcome }) => publishClaudeRunEvents(bus, session, outcome));
 
   router.use(async (_req, res, next) => {
     await ready;
@@ -138,6 +147,22 @@ export function claudeRoutes(
     res.json({ session: publicSession(session), events: session.events });
   });
 
+  // The reminders this session may attach, scoped by the session's own cwd.
+  // A dedicated route rather than /api/reminders?directory= because a worktree
+  // session's cwd lives under the state dir, which the workspace-directory
+  // guard rightly rejects — and because the browser must never name a path.
+  router.get("/claude/sessions/:id/reminders", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    const reminders = await visibleReminders(session.directory);
+    res.json({
+      reminders: reminders.map(({ id, title, description, triggers, tags, body, scopeRepository }) => ({
+        id, title, description, triggers, tags, body, ...(scopeRepository ? { scopeRepository } : {}),
+      })),
+    });
+  });
+
   router.post("/claude/sessions/:id/prompt", async (req, res) => {
     if (!requireEnabled(res)) return;
     const session = store.get(req.params.id);
@@ -162,10 +187,22 @@ export function claudeRoutes(
     const allowedModels = new Set(config.models);
     const requestedModel = typeof req.body?.modelOverride === "string" ? req.body.modelOverride : undefined;
     if (requestedModel && !allowedModels.has(requestedModel)) return error(res, 400, "model is not one of the configured presets");
-    // A plan turn is read-only planning; only meaningful for a Build session
-    // (a read-only session is already non-writing).
-    const plan = req.body?.plan === true && session.mode === "build";
-    store.startRun(session, text);
+    const plan = req.body?.plan === true;
+    // Per-message playbooks, named by id only. The trusted bodies are resolved
+    // here (reminder scope honoured against the session's cwd), exactly as the
+    // OpenCode prompt route does, so a tampered client cannot author them.
+    const reminderId = req.body?.reminder;
+    const workflowId = req.body?.workflow;
+    if (reminderId !== undefined && !isValidReminderId(reminderId)) return error(res, 400, "reminder must be a valid preset id");
+    if (workflowId !== undefined && !isValidWorkflowId(workflowId)) return error(res, 400, "workflow must be a valid workflow id");
+    const reminder = reminderId === undefined ? undefined : await visibleReminder(session.directory, reminderId);
+    if (reminderId !== undefined && !reminder) return error(res, 400, `unknown reminder "${reminderId}"`);
+    const workflow = workflowId === undefined ? undefined : workflowCatalogue().find((item) => item.id === workflowId);
+    if (workflowId !== undefined && !workflow) return error(res, 400, `unknown workflow "${workflowId}"`);
+    const composed = composeClaudePrompt({ text, reminder, workflow });
+    // The transcript keeps the human's own words plus chips; only the binary
+    // sees the sentinel blocks.
+    store.startRun(session, text, { reminders: composed.reminders, workflows: composed.workflows, plan });
     try {
       await supervisor.run({
         session: { id: session.id, sessionUuid: session.sessionUuid, started: session.started },
@@ -173,8 +210,8 @@ export function claudeRoutes(
         workspace: { directory: session.directory },
         sandboxExtras: sandboxExtras(session),
         ...(requestedModel ? { model: requestedModel } : {}),
-        ...(plan ? { plan: true } : {}),
-        text,
+        turnMode: plan ? "plan" : "build",
+        text: composed.text,
       });
       res.status(202).json({ accepted: true });
     } catch (cause) {

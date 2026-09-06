@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const DIR = process.platform === "darwin" ? "/private/tmp/mock-project" : "/tmp/mock-project";
-const hub = `/?directory=${encodeURIComponent(DIR)}`;
+const hub = `/opencode?directory=${encodeURIComponent(DIR)}`;
 const shortcut = process.platform === "darwin" ? "Meta+K" : "Control+K";
 
 const VIEWPORTS = [

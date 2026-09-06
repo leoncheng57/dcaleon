@@ -811,11 +811,20 @@ export const api = {
     }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
   claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
     json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
-  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
+  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean; reminder?: string; workflow?: string } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, ...(options.modelOverride ? { modelOverride: options.modelOverride } : {}), ...(options.plan ? { plan: true } : {}) }),
+    // Playbooks travel as ids only; the server resolves the trusted bodies.
+    body: JSON.stringify({
+      text,
+      ...(options.modelOverride ? { modelOverride: options.modelOverride } : {}),
+      plan: !!options.plan,
+      ...(options.reminder ? { reminder: options.reminder } : {}),
+      ...(options.workflow ? { workflow: options.workflow } : {}),
+    }),
   }).then((r) => json<{ accepted: boolean }>(r)),
+  /** Reminders visible to this session, scoped server-side by the session's own cwd. */
+  claudeReminders: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/reminders`).then((r) => json<{ reminders: ReminderSummary[] }>(r)),
   cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
   claudeEventsUrl: (id: string) => `/api/claude/events?${new URLSearchParams({ sessionId: id })}`,

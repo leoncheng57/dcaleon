@@ -46,6 +46,34 @@ describe("Claude session store", () => {
     expect(session.started).toBe(true);
   });
 
+  it("keeps attached playbooks as chips on the user row and announces every way a turn ends", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    const finished: Array<{ id: string; outcome: string }> = [];
+    instance.on("finished", ({ session: ended, outcome }) => finished.push({ id: ended.id, outcome }));
+
+    instance.startRun(session, "cite the lines", {
+      reminders: [{ name: "cite-file-lines", body: "Cite path:line." }],
+      workflows: [{ name: "goal", body: "Restate the goal." }],
+    });
+    const user = session.events.find((event) => event.kind === "user");
+    // The human's own words, never the sentinel blocks; the chips carry the rest.
+    expect(user).toMatchObject({ text: "cite the lines", reminders: [{ name: "cite-file-lines", body: "Cite path:line." }], workflows: [{ name: "goal", body: "Restate the goal." }] });
+    expect(session.title).toBe("cite the lines");
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.01 });
+
+    instance.startRun(session, "again");
+    expect(instance.cancel(session)).toBe(true);
+    instance.startRun(session, "and again");
+    instance.applyFrame(session.id, { type: "error", subtype: "spawn_failed" });
+
+    expect(finished).toEqual([
+      { id: session.id, outcome: "completed" },
+      { id: session.id, outcome: "cancelled" },
+      { id: session.id, outcome: "failed" },
+    ]);
+  });
+
   it("auto-titles a default session from its first prompt, then leaves it alone", async () => {
     const { instance } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });

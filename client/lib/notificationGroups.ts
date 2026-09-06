@@ -87,6 +87,10 @@ export function blockingFor(records: readonly NotificationRecord[]): boolean {
  */
 export function sessionRoute(record: Pick<NotificationRecord, "sessionID" | "directory">): string | undefined {
   if (!record.sessionID) return undefined;
+  // Claude runtime sessions (`claude-<uuid>`, minted in server/claude/store.ts)
+  // have their own surface and no directory scope; server/publicAppUrl.ts
+  // applies the same discriminator for the outbound click URL.
+  if (record.sessionID.startsWith("claude-")) return `/claude/sessions/${encodeURIComponent(record.sessionID)}`;
   const query = record.directory ? `?${new URLSearchParams({ directory: record.directory })}` : "";
   return `/sessions/${encodeURIComponent(record.sessionID)}${query}`;
 }

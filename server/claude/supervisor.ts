@@ -135,8 +135,8 @@ interface RunInput {
   sandboxExtras?: { reads: string[]; writes: string[] };
   /** Per-turn model override (validated against configured presets by the route). */
   model?: string;
-  /** Plan turn: read-only planning regardless of the preset (permission-mode plan + read-only Seatbelt). */
-  plan?: boolean;
+  /** Explicit per-turn mode: "plan" for read-only planning, "build" for writing. */
+  turnMode: "plan" | "build";
   text: string;
 }
 
@@ -154,10 +154,8 @@ export class ClaudeSupervisor extends EventEmitter {
 
   private buildArgs(input: RunInput, settingsPath: string): { command: string; args: string[] } {
     const { preset, workspace, session, text } = input;
-    // A plan turn is read-only regardless of the preset: plan permission mode,
-    // read-only settings, and the read-only Seatbelt profile.
-    const permissionMode = input.plan ? "plan" : preset.permissionMode;
-    const effectiveMode: ClaudePreset["mode"] = input.plan ? "read-only" : preset.mode;
+    const permissionMode = input.turnMode === "plan" ? "plan" : "bypassPermissions";
+    const effectiveMode: ClaudePreset["mode"] = input.turnMode === "plan" ? "read-only" : "build";
     const cli = [
       "-p", text,
       "--output-format", "stream-json",
@@ -192,7 +190,9 @@ export class ClaudeSupervisor extends EventEmitter {
   run(input: RunInput): Promise<void> {
     const settingsPath = this.settingsPath(input.session.sessionUuid);
     mkdirSync(this.config.sessionRoot, { recursive: true, mode: 0o700 });
-    const effectivePreset = input.plan ? { ...input.preset, mode: "read-only" as const, permissionMode: "plan" } : input.preset;
+    const effectivePreset = input.turnMode === "plan"
+      ? { ...input.preset, mode: "read-only" as const, permissionMode: "plan" }
+      : { ...input.preset, mode: "build" as const, permissionMode: "bypassPermissions" };
     writeFileSync(settingsPath, `${JSON.stringify(claudeSettings(effectivePreset), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     const { command, args } = this.buildArgs(input, settingsPath);
     return new Promise<void>((resolve, reject) => {

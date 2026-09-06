@@ -7,15 +7,45 @@ import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { cn } from "../ds/utils.js";
 import { RunningIndicator, Transcript } from "../components/transcript.js";
+import { AgentModeToggle } from "../components/agent-mode-toggle.js";
+import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
 import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
-import { api, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary } from "../lib/api.js";
+import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
+import { ReminderPicker } from "../components/reminder-picker.js";
+import { WorkflowPicker } from "../components/workflow-picker.js";
+import { api, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary, type ReminderSummary, type WorkflowSummary } from "../lib/api.js";
+import type { ModelCatalogue, ModelSelection } from "../lib/models.js";
+import {
+  MANAGED_CHILD_WORKFLOW_ID,
+  PLAYWRIGHT_REVIEW_WORKFLOW_ID,
+  PR_SNIPPET_REVIEW_WORKFLOW_ID,
+  SESSION_UPDATE_WORKFLOW_ID,
+  START_DCA_SESSION_WORKFLOW_ID,
+} from "../lib/workflows.js";
 import { collapseActionGroups, runningActivity } from "../lib/derive.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
+import type { AgentMode } from "../lib/agentMode.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
+
+function claudeModelCatalogue(modelIds: string[]): ModelCatalogue {
+  return {
+    models: modelIds.map((id) => ({
+      providerID: "anthropic",
+      providerName: "Anthropic",
+      modelID: id,
+      name: id,
+      status: "active",
+      limits: {},
+      capabilities: { image: false, reasoning: true },
+      variants: [],
+    })),
+    defaultModel: modelIds[0] ? { providerID: "anthropic", modelID: modelIds[0] } : undefined,
+  };
+}
 
 function downloadText(name: string, body: string, mime: string): void {
   const url = URL.createObjectURL(new Blob([body], { type: mime }));
@@ -28,6 +58,19 @@ function downloadText(name: string, body: string, mime: string): void {
 
 const POLL_MS = 3_000;
 const INITIAL_DIFF_LINES = 400;
+/**
+ * Workflows whose submit path is an OpenCode route (another session, a managed
+ * child, a new DCA session, the two review capture flows). They have no Claude
+ * equivalent, so the Claude picker offers only the generic-argument workflows
+ * whose whole contract is "typed text + trusted injector".
+ */
+const OPENCODE_ONLY_WORKFLOWS = new Set<string>([
+  PLAYWRIGHT_REVIEW_WORKFLOW_ID,
+  PR_SNIPPET_REVIEW_WORKFLOW_ID,
+  SESSION_UPDATE_WORKFLOW_ID,
+  MANAGED_CHILD_WORKFLOW_ID,
+  START_DCA_SESSION_WORKFLOW_ID,
+]);
 const DIFF_LINE_STEP = 400;
 
 function DiffLine({ line }: { line: string }) {
@@ -196,13 +239,20 @@ export function ClaudeConversationPage() {
   const [filesOpen, setFilesOpen] = useState(false);
   const [runlogOpen, setRunlogOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [models, setModels] = useState<string[]>([]);
-  const [model, setModel] = useState<string>("");
-  const [planMode, setPlanMode] = useState(false);
+  const [modelCatalogue, setModelCatalogue] = useState<ModelCatalogue | null>(null);
+  const [selectedModel, setSelectedModel] = useState<ModelSelection | undefined>();
+  const [planMode, setPlanMode] = useState(true);
   const [fileTarget, setFileTarget] = useState<WorkspaceTarget | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [resolved, setResolved] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const [reminderCatalogue, setReminderCatalogue] = useState<ReminderSummary[]>([]);
+  const [selectedReminder, setSelectedReminder] = useState("");
+  const [workflowCatalogue, setWorkflowCatalogue] = useState<WorkflowSummary[]>([]);
+  const [selectedWorkflow, setSelectedWorkflow] = useState("");
+  const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
+  const [queued, setQueued] = useState<string | null>(null);
   const askedRefs = useRef<Set<string>>(new Set());
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
@@ -242,6 +292,9 @@ export function ClaudeConversationPage() {
     setCollapsedGroups({});
     setResolved(new Map());
     askedRefs.current = new Set();
+    setSelectedReminder("");
+    setSelectedWorkflow("");
+    setActiveWorkflow(null);
     void refresh();
     if (PUBLIC_SIMULATOR) return;
     // Durable truth is the poll; the stream is only a "something changed" nudge.
@@ -267,7 +320,35 @@ export function ClaudeConversationPage() {
 
   // The configured models, so a turn can be sent on a different one without
   // changing the session's mode/permission (fixed at creation).
-  useEffect(() => { void api.claudeConfig().then((config) => setModels(config.models)).catch(() => undefined); }, []);
+  useEffect(() => {
+    void api.claudeConfig().then((config) => {
+      const catalogue = claudeModelCatalogue(config.models);
+      setModelCatalogue(catalogue);
+      setSelectedModel(catalogue.defaultModel);
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (session?.mode === "build") setPlanMode(false);
+  }, [session?.mode]);
+
+  // Playbooks. Reminders are scoped by the session's cwd server-side (a
+  // repository-scoped reminder only appears when this session's origin
+  // matches), so they reload per session; a failed fetch drops the catalogue
+  // rather than leaving another session's scoped entries on screen. Workflows
+  // are global, minus the ones that only make sense against an OpenCode session.
+  useEffect(() => {
+    let cancelled = false;
+    void api.claudeReminders(id).then((result) => { if (!cancelled) setReminderCatalogue(result.reminders); })
+      .catch(() => { if (!cancelled) setReminderCatalogue([]); });
+    return () => { cancelled = true; };
+  }, [id]);
+  useEffect(() => {
+    let cancelled = false;
+    void api.workflows().then((result) => {
+      if (!cancelled) setWorkflowCatalogue(result.workflows.filter((workflow) => !OPENCODE_ONLY_WORKFLOWS.has(workflow.id)));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [events, session?.running]);
   const items = useMemo(() => collapseActionGroups(events), [events]);
   const activity = useMemo(() => runningActivity(events), [events]);
@@ -315,20 +396,35 @@ export function ClaudeConversationPage() {
   // A merged/discarded worktree session is finished: its cwd is gone.
   const worktreeClosed = session?.isolation === "worktree" && events.some((event) => event.kind === "status" && (event.label === "Merged into project" || event.label === "Worktree discarded"));
 
-  const send = async () => {
-    const text = draft.trim();
-    if (!text || sending || session?.running || worktreeClosed) return;
+  const sendText = async (text: string) => {
+    if (!text || sending || worktreeClosed) return;
     setSending(true);
-    setDraft("");
     setError("");
     try {
-      await api.promptClaude(id, text, { modelOverride: model || undefined, plan: planMode });
+      await api.promptClaude(id, text, {
+        modelOverride: selectedModel?.modelID || undefined,
+        plan: planMode,
+        reminder: selectedReminder || undefined,
+        workflow: selectedWorkflow || undefined,
+      });
+      setSelectedReminder("");
+      setSelectedWorkflow("");
       await refresh();
     } catch (cause) {
       setDraft(text);
       setSending(false);
       setError(cause instanceof Error ? cause.message : String(cause));
     }
+  };
+  const send = () => {
+    const text = draft.trim();
+    if (!text || worktreeClosed) return;
+    setDraft("");
+    if (sending || session?.running) {
+      setQueued(text);
+      return;
+    }
+    void sendText(text);
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -337,6 +433,7 @@ export function ClaudeConversationPage() {
     }
   };
   const cancel = async () => {
+    setQueued(null);
     try {
       await api.cancelClaude(id);
       await refresh();
@@ -344,6 +441,14 @@ export function ClaudeConversationPage() {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
+
+  useEffect(() => {
+    if (!session?.running && !sending && queued) {
+      const text = queued;
+      setQueued(null);
+      void sendText(text);
+    }
+  }, [session?.running, sending, queued]);
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-[var(--color-background-base)]" data-testid="claude-conversation">
@@ -357,17 +462,14 @@ export function ClaudeConversationPage() {
         <div className="ml-auto flex flex-wrap gap-1">
           <Button size="sm" variant="secondary" onClick={() => setFilesOpen(true)} data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="mr-1" size={14} /> Files</Button>
           <Button size="sm" variant="secondary" onClick={() => setRunlogOpen(true)} data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="mr-1" size={14} /> Run log</Button>
-          {session?.mode === "build" && (
-            <Button size="sm" variant="secondary" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="mr-1" size={14} /> Changes</Button>
-          )}
+          <Button size="sm" variant="secondary" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="mr-1" size={14} /> Changes</Button>
           <Button size="sm" variant="secondary" onClick={() => setExportOpen(true)} disabled={events.length === 0} data-testid="claude-open-export"><Download aria-hidden="true" className="mr-1" size={14} /> Export</Button>
           <Button size="sm" variant="ghost" disabled title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="mr-1" size={14} /> Preview <span className="ml-1 rounded bg-[var(--color-background-surface-neutral-muted)] px-1 text-[10px] uppercase">Beta</span></Button>
         </div>
       </header>
-      {error && <div className="shrink-0 p-3"><Alert variant="danger">{error}</Alert></div>}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8" data-testid="claude-transcript">
         <div className="mx-auto max-w-4xl">
-          {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{session?.mode === "build" ? "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes." : "Ask Claude to inspect this allowlisted workspace. A read-only preset cannot modify files."}</p></div>}
+          {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p></div>}
           <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>
             <Transcript items={items} wrap collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
           </WorkspaceReferenceProvider>
@@ -376,37 +478,65 @@ export function ClaudeConversationPage() {
         </div>
       </div>
       <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="claude-composer">
-        {session && (() => {
-          // A read-only session shows the same control locked to Plan (Build
-          // disabled) rather than hiding it — the mode is still meaningful, and
-          // hiding it read as "missing plan/build mode". The backend honours a
-          // plan turn only for a Build session; a read-only preset never writes.
-          const readOnly = session.mode !== "build";
-          const planActive = readOnly || planMode;
-          const active = "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]";
-          const muted = "text-[var(--color-text-muted)]";
-          return (
-            <div className="mx-auto mb-2 flex max-w-4xl items-center gap-1 text-xs" data-testid="claude-mode-toggle">
-              <span className="text-[var(--color-text-muted)]">Mode:</span>
-              <div className="inline-flex overflow-hidden rounded-md border border-[var(--color-border-default)]">
-                <button type="button" className={`px-2.5 py-1 ${planActive ? active : muted} disabled:opacity-70`} onClick={() => setPlanMode(true)} disabled={session.running || readOnly} data-testid="claude-mode-plan">Plan</button>
-                <button type="button" className={`border-l border-[var(--color-border-default)] px-2.5 py-1 ${!planActive ? active : muted} disabled:opacity-70`} onClick={() => setPlanMode(false)} disabled={session.running || readOnly} data-testid="claude-mode-build">Build</button>
+        <div className="mx-auto max-w-3xl">
+          {session && (
+              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2" data-testid="claude-mode-toggle">
+                <AgentModeToggle
+                  mode={planMode ? "plan" : "build"}
+                  onChange={(mode) => setPlanMode(mode === "plan")}
+                  disabled={session.running}
+                  testId="claude-composer-mode"
+                />
+                <ModelPicker
+                  catalogue={modelCatalogue}
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  testId="claude-composer-model"
+                  label="Model"
+                  disabled={session.running}
+                />
               </div>
-              <span className="text-[var(--color-text-muted)]">{readOnly ? "Read-only preset — plans only; nothing is written." : planMode ? "Plans read-only; nothing is written." : "Executes and may edit files."}</span>
-            </div>
-          );
-        })()}
-        <div className="mx-auto flex max-w-4xl items-end gap-2">
-          {models.length > 1 && (
-            <select className="h-11 shrink-0 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-base)] px-2 text-xs" value={model} onChange={(event) => setModel(event.target.value)} disabled={session?.running} title="Model for the next turn" data-testid="claude-model-select">
-              <option value="">Preset default</option>
-              {models.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
           )}
-          <textarea className="min-h-11 max-h-40 flex-1 resize-y rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-base)] px-3 py-2 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={keyDown} placeholder={worktreeClosed ? "This worktree session is finished." : "Ask Claude..."} disabled={!session || session.running || worktreeClosed} data-testid="claude-prompt" />
-          {session?.running ? <Button type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button> : <Button type="submit" disabled={!draft.trim() || sending || !session || worktreeClosed} data-testid="claude-send"><Send aria-hidden="true" size={15} className="mr-1" /> Send</Button>}
+          {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
+          <div className="min-w-0 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] transition-colors focus-within:border-[var(--color-border-focus)]" data-testid="claude-composer-card">
+            <textarea
+              ref={composerRef}
+              className="thin-scrollbar block max-h-64 min-h-24 w-full resize-none border-0 bg-transparent p-3 text-base text-[var(--color-text-default)] outline-none placeholder:text-[var(--color-text-muted)] sm:min-h-16 sm:p-2.5 sm:text-sm"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={keyDown}
+              placeholder={worktreeClosed ? "This worktree session is finished." : "Send a follow-up…"}
+              disabled={!session || worktreeClosed}
+              rows={1}
+              data-testid="claude-prompt"
+            />
+            <div className="flex min-w-0 items-center gap-2 border-t border-[var(--color-border-default)] px-2 py-2 sm:py-1">
+              {reminderCatalogue.length > 0 && (
+                <ReminderPicker catalogue={reminderCatalogue} value={selectedReminder} onChange={setSelectedReminder} />
+              )}
+              {workflowCatalogue.length > 0 && (
+                <WorkflowPicker catalogue={workflowCatalogue} attached={selectedWorkflow} onDetach={() => setSelectedWorkflow("")} onPick={setActiveWorkflow} />
+              )}
+              {queued && <span className="text-[11px] text-[var(--color-text-muted)]" data-testid="claude-queued">Queued</span>}
+              <span className="flex-1" aria-hidden="true" />
+              {session?.running && <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button>}
+              <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="submit" disabled={!draft.trim() || sending || !session || worktreeClosed || !!queued} data-testid="claude-send">{session?.running ? "Queue" : "Send"}</Button>
+            </div>
+          </div>
         </div>
       </form>
+      {activeWorkflow && (
+        <ClaudeWorkflowDialog
+          workflow={activeWorkflow}
+          onClose={() => setActiveWorkflow(null)}
+          onApplyToComposer={(draftText, workflowID) => {
+            setDraft(draftText);
+            setSelectedWorkflow(workflowID);
+            setActiveWorkflow(null);
+            requestAnimationFrame(() => composerRef.current?.focus());
+          }}
+        />
+      )}
       {changesOpen && session && <ChangesDrawer session={session} onClose={() => setChangesOpen(false)} onMutated={() => void refresh()} />}
       {filesOpen && <ClaudeFilesDrawer sessionId={id} target={fileTarget} onClose={() => { setFilesOpen(false); setFileTarget(null); }} />}
       {runlogOpen && <ClaudeRunLogDrawer events={events} title={session?.title ?? "claude-session"} onClose={() => setRunlogOpen(false)} />}

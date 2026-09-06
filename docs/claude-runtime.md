@@ -91,6 +91,34 @@ Beyond the read-only experiment, the lane runs real writable coding sessions:
   *Interrupted by a server restart* rather than spinning forever. `--resume` still works because
   `claude` keeps its own JSONL.
 
+## Playbooks and notifications
+
+The composer offers the same **Reminders** and **Workflows** pickers as an OpenCode session,
+and a finished turn rings the same bell.
+
+- **Reminders** are listed per session from `GET /claude/sessions/:id/reminders`, scoped
+  server-side by the session's own cwd (`visibleReminders`), so a repository-scoped reminder
+  appears only when this session's origin matches. A dedicated route rather than
+  `/api/reminders?directory=` because a worktree session's cwd lives under the state dir —
+  outside the roots the workspace-directory guard accepts — and because the browser must never
+  name a path.
+- **Sends carry ids only.** `POST /claude/sessions/:id/prompt` accepts `reminder` and
+  `workflow`; the trusted bodies are resolved on the server and composed exactly as the
+  OpenCode lane does (`server/claude/prompt.ts`: workflow injector first, reminder after). The
+  binary sees the sentinel blocks; the transcript keeps the human's words plus the same
+  *reminder attached* / *workflow attached* chips the OpenCode transcript renders.
+- **Workflows** offered are the generic-argument ones. The five whose submit path is an
+  OpenCode route (session update, managed child, start a DCA session, and the two review
+  capture flows) are not shown. The Claude form (`claude-workflow-dialog.tsx`) previews the
+  injector and only ever fills the composer; Send is the single mutation.
+- **Notifications.** The store announces every way a turn ends (`finished`), and
+  `server/claude/notifications.ts` translates that onto the OpenCode event bus the
+  `NotificationService` already listens to: a `session.updated` that seeds the session as a
+  titled root (so the service never asks the OpenCode server about a Claude id), then
+  `session.idle` / `session.error` / the abort shape for a cancel. Titles and the excerpt come
+  from the Claude store via the service's injectable lookups (`server/index.ts`); the click
+  URL and the in-app row route to `/claude/sessions/<id>`.
+
 ## Not in V1
 
 Interactive tool approval (unavailable, not deferred), reading `claude`'s own JSONL as a

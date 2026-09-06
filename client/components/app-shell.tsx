@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FlaskConical, ListTodo, Moon, RefreshCw, Sparkles, Sun } from "lucide-react";
+import { FlaskConical, ListTodo, Moon, RefreshCw, Sparkles, Sun, Terminal } from "lucide-react";
 import { useTheme } from "next-themes";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -28,7 +28,8 @@ const APP_NAME = "DCA";
 const BUILD_LABEL = formatBuildLabel(__APP_VERSION__, __APP_COMMIT__);
 
 function documentTitle(pathname: string): string {
-  if (pathname === "/") return `Sessions | ${APP_NAME}`;
+  if (pathname === "/") return APP_NAME;
+  if (pathname === "/opencode") return `Sessions | ${APP_NAME}`;
   if (pathname.startsWith("/sessions/")) return `Session | ${APP_NAME}`;
   if (pathname === "/settings") return `Settings | ${APP_NAME}`;
   if (pathname === "/settings/notifications") return `Notifications | ${APP_NAME}`;
@@ -138,7 +139,8 @@ export function AppShell() {
 
   const commands = buildPaletteCommands({
     navigation: [
-      { id: "home", title: "Home", to: scopedPath("/"), keywords: ["sessions"] },
+      { id: "home", title: "Home", to: "/", keywords: ["landing", "repository"] },
+      { id: "opencode", title: "OpenCode", to: scopedPath("/opencode"), keywords: ["sessions", "hub", "projects"] },
       { id: "tools", title: "MCPs", to: scopedPath("/tools"), keywords: ["mcp", "lsp", "permissions", "tools"] },
       { id: "docs", title: "Docs", to: scopedPath("/docs"), keywords: ["architecture", "contributing", "internals"] },
       {
@@ -194,7 +196,7 @@ export function AppShell() {
     <div className="h-full min-h-0">
       <div className="flex h-full min-h-0 flex-col" inert={paletteOpen ? true : undefined}>
         <nav className="flex h-11 shrink-0 items-center gap-1 border-b border-[var(--color-border-default)] px-3" aria-label="Main">
-          <NavLink to={scopedPath("/")} className="text-sm font-bold tracking-tight" data-testid="opencode-nav-home">
+          <NavLink to="/" className="text-sm font-bold tracking-tight" data-testid="opencode-nav-home">
             DCA
           </NavLink>
           <span
@@ -229,6 +231,18 @@ export function AppShell() {
           >
             {resolvedTheme === "dark" ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}
           </Button>
+          {/* Hidden at phone width, where one more icon overflows the 390px bar (the
+              same rule the build label follows); the More menu carries it there. */}
+          <NavLink
+            aria-label="OpenCode"
+            className={({ isActive }) => `hidden size-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold pointer-coarse:size-11 min-[480px]:inline-flex sm:w-auto sm:px-2 ${isActive ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-action-ghost)] hover:bg-[var(--color-background-action-ghost-hover)]"}`}
+            title="OpenCode"
+            to={scopedPath("/opencode")}
+            data-testid="opencode-nav-opencode"
+          >
+            <Terminal aria-hidden="true" size={16} />
+            <span className="hidden sm:inline">OpenCode</span>
+          </NavLink>
           {dshEnabled && (
             <NavLink
               aria-label="DSH lab"

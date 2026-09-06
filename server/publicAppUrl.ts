@@ -17,8 +17,18 @@ export function parsePublicAppUrl(value: string | undefined): string | null {
   return url.origin;
 }
 
+/**
+ * Claude runtime sessions are minted as `claude-<uuid>` (server/claude/store.ts)
+ * and live under their own route with no `?directory=` scope. The prefix is
+ * the discriminator the client's `sessionRoute` uses too; keep the two in step.
+ */
+export function isClaudeSessionId(sessionID: unknown): sessionID is string {
+  return typeof sessionID === "string" && sessionID.startsWith("claude-");
+}
+
 export function conversationUrl(publicAppUrl: string | null, sessionID?: unknown, directory?: unknown): string | undefined {
   if (!publicAppUrl) return undefined;
+  if (isClaudeSessionId(sessionID)) return new URL(`/claude/sessions/${encodeURIComponent(sessionID)}`, publicAppUrl).toString();
   if (typeof sessionID !== "string" || !sessionID || typeof directory !== "string" || !directory) return publicAppUrl;
   const url = new URL(`/sessions/${encodeURIComponent(sessionID)}`, publicAppUrl);
   url.searchParams.set("directory", directory);
