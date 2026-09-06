@@ -27,14 +27,14 @@ afterEach(() => {
 describe("PR preview bundles", () => {
   it("packages and validates an exact PR/SHA-scoped inventory", () => {
     const { build, bundle } = fixture();
-    const manifest = packagePreview(build, bundle, 112, SHA, "/custom-dca-opencode/pr-previews/pr-112/");
+    const manifest = packagePreview(build, bundle, 112, SHA, "/dcaleon/pr-previews/pr-112/");
     expect(manifest.files.map((file) => file.path)).toEqual(["assets/app.js", "index.html"]);
     expect(validatePreviewBundle(bundle, 112, SHA)).toEqual(manifest);
   });
 
   it("rejects tampered bytes and workflow identity mismatches", () => {
     const { build, bundle } = fixture();
-    packagePreview(build, bundle, 112, SHA, "/custom-dca-opencode/pr-previews/pr-112/");
+    packagePreview(build, bundle, 112, SHA, "/dcaleon/pr-previews/pr-112/");
     writeFileSync(path.join(bundle, "site", "assets", "app.js"), "tampered");
     expect(() => validatePreviewBundle(bundle, 112, SHA)).toThrow("signed manifest inventory");
     expect(() => validatePreviewBundle(bundle, 113, SHA)).toThrow("identity");
@@ -43,10 +43,10 @@ describe("PR preview bundles", () => {
   it("rejects symlinks and a base path belonging to another PR", () => {
     const { root, build, bundle } = fixture();
     symlinkSync(path.join(build, "index.html"), path.join(build, "linked.html"));
-    expect(() => packagePreview(build, bundle, 112, SHA, "/custom-dca-opencode/pr-previews/pr-112/"))
+    expect(() => packagePreview(build, bundle, 112, SHA, "/dcaleon/pr-previews/pr-112/"))
       .toThrow("symbolic link");
     rmSync(path.join(build, "linked.html"));
-    expect(() => packagePreview(build, bundle, 112, SHA, "/custom-dca-opencode/pr-previews/pr-999/"))
+    expect(() => packagePreview(build, bundle, 112, SHA, "/dcaleon/pr-previews/pr-999/"))
       .toThrow("base path");
     expect(readFileSync(path.join(root, "build", "index.html"), "utf8")).toContain("preview");
   });

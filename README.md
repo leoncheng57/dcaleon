@@ -222,7 +222,7 @@ outside the tested checkout. Linux containers also cannot prove macOS `/tmp` →
 ### Interactive PR previews
 
 Every same-repository pull request receives a public, interactive simulator at
-`https://leoncheng.dev/custom-dca-opencode/pr-previews/pr-<number>/`. The **PR preview**
+`https://leoncheng.dev/dcaleon/pr-previews/pr-<number>/`. The **PR preview**
 workflow runs on `opened`, `reopened`, and every `synchronize` event, so each pushed commit
 rebuilds the preview. It tests the production bundle in Chromium, publishes only that PR's
 directory on `gh-pages`, creates a transient GitHub Deployment, and updates one

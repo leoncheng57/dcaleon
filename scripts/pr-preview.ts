@@ -74,7 +74,7 @@ function validateFileSet(files: PreviewFile[]): void {
 function validateIdentity(prNumber: number, sha: string, basePath: string): void {
   if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error("PR number must be a positive integer");
   if (!/^[0-9a-f]{40}$/u.test(sha)) throw new Error("SHA must be a full lowercase commit SHA");
-  if (basePath !== `/custom-dca-opencode/pr-previews/pr-${prNumber}/`) throw new Error("Preview base path does not match its PR number");
+  if (basePath !== `/dcaleon/pr-previews/pr-${prNumber}/`) throw new Error("Preview base path does not match its PR number");
 }
 
 export function packagePreview(buildDirectory: string, outputDirectory: string, prNumber: number, sha: string, basePath: string): PreviewManifest {
