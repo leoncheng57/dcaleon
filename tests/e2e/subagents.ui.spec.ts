@@ -19,7 +19,7 @@ const CHILD_UNKNOWN = "ses_mock_child_unknown";
 const CHILD_FAILED = "ses_mock_child_failed";
 const CHILD_LAUNCHED = "ses_mock_child_launched";
 
-const hub = `/?directory=${encodeURIComponent(DIR)}`;
+const hub = `/opencode?directory=${encodeURIComponent(DIR)}`;
 const parentUrl = `/sessions/${PARENT}?directory=${encodeURIComponent(DIR)}`;
 const childUrl = `/sessions/${CHILD_RUNNING}?directory=${encodeURIComponent(DIR)}`;
 

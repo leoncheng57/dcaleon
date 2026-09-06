@@ -4,6 +4,7 @@ import { BrowserRouter, HashRouter, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 
 import { HubPage } from "./pages/Hub.js";
+import { HomePage } from "./pages/Home.js";
 import { ConversationPage } from "./pages/Conversation.js";
 import { SettingsPage } from "./pages/Settings.js";
 import { NotificationsPage } from "./pages/Notifications.js";
@@ -47,7 +48,8 @@ async function start(): Promise<void> {
           <NotificationCenterProvider>
             <Routes>
               <Route element={<AppShell />}>
-                <Route path="/" element={<HubPage />} />
+                <Route path="/" element={<HomePage />} />
+                <Route path="/opencode" element={<HubPage />} />
                 <Route path="/sessions/:id" element={<ConversationPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/notifications" element={<NotificationsPage />} />

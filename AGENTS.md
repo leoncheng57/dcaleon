@@ -1165,6 +1165,33 @@ several decisions below.
       re-verified before spawn. The static allowlist still applies; the state dir may not
       live under the projects root.
 
+34b. **The Claude lane shares the OpenCode composer's playbooks and the app's notification
+    lane by translation, not by a second implementation — and the root is no longer any
+    runtime's home.**
+    - **Playbooks travel as ids; bodies are resolved server-side, in the OpenCode order.**
+      `POST /claude/sessions/:id/prompt` accepts `reminder` and `workflow` ids and
+      `server/claude/prompt.ts` composes workflow injector first, reminder after — the same
+      `composePromptText` order as `server/opencode/sessions.ts`, using the same
+      `withWorkflowTag`/`withReminderTag`. The transcript keeps the human's words plus the
+      chips (`reminders`/`workflows` on the user row); only the binary sees the sentinels.
+      Reminders are listed from a session-scoped route (`GET /claude/sessions/:id/reminders`)
+      because a worktree cwd lives under the state dir, outside `requireWorkspaceDirectory`'s
+      roots, and because the browser never names a path. Workflows whose submit path is an
+      OpenCode route (session update, managed child, start-DCA, both review captures) are not
+      offered; the Claude form only fills the composer.
+    - **A finished turn becomes the bus events the NotificationService already understands.**
+      `ClaudeSessionStore.finish()` — the one place every run ends — emits `finished`;
+      `server/claude/notifications.ts` publishes `session.updated` (seeding a titled root so the
+      service never asks OpenCode about a `claude-` id) then `session.idle` / `session.error` /
+      the `MessageAbortedError` shape for a cancel, so a Claude Stop reads like an OpenCode Stop.
+      `server/index.ts` constructs the store itself and hands the service Claude-aware
+      metadata/excerpt lookups. `claude-` is the id discriminator for the click route
+      (`conversationUrl`) and the in-app row (`sessionRoute`): both go to `/claude/sessions/<id>`.
+    - **`/` is a near-empty landing that points at the public repository; the OpenCode hub
+      lives at `/opencode`, a navbar peer of DSH and Claude.** Every runtime is reached from
+      the navbar, so the root belongs to none of them. `/sessions/:id` stays where it was:
+      moving it would break deep links, notification click URLs and phone transfer for no gain.
+
 ## Client conventions (inherited from the OpenHands runner, still enforced)
 
 - `client/ds/` primitives are forwardRef + `cn()` + semantic `var(--color-*)` tokens

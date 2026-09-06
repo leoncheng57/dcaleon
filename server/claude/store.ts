@@ -12,9 +12,12 @@ const DEFAULT_CLAUDE_TITLE = "New Claude conversation";
 
 // Structurally assignable to the client's frozen TranscriptEvent contract.
 // Richer than the DSH store: thought, tool (with what it touched), and patch arms.
+/** A reminder or workflow block attached to one prompt, shown as a chip on the user row. */
+export interface PromptTag { name: string; body: string }
+
 export type ClaudeTranscriptEvent =
-  | { id: string; messageId: string; timestamp: string; kind: "user"; text: string; reminders: []; workflows: []; attachments: [] }
-  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string }
+  | { id: string; messageId: string; timestamp: string; kind: "user"; text: string; reminders: PromptTag[]; workflows: PromptTag[]; attachments: []; mode?: "plan" | "build" }
+  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string; mode?: "plan" | "build" }
   | { id: string; messageId: string; timestamp: string; kind: "thought"; text: string }
   | { id: string; messageId: string; timestamp: string; kind: "tool"; status: "pending" | "running" | "completed" | "error"; name: string; detail?: string; commandText?: string; output?: string; error?: string; attachments: [] }
   | { id: string; messageId: string; timestamp: string; kind: "patch"; files: string[]; fileCount: number; filesTruncated: boolean }
@@ -86,6 +89,7 @@ export class ClaudeSessionStore extends EventEmitter {
   private readonly sessions = new Map<string, ClaudeSession>();
   private readonly toolIndex = new Map<string, Map<string, string>>();
   private readonly editedFiles = new Map<string, Set<string>>();
+  private readonly runModes = new Map<string, "plan" | "build">();
   private ledger: Ledger = { version: 1, records: [] };
   private loaded = false;
   private writeChain = Promise.resolve();
@@ -168,6 +172,7 @@ export class ClaudeSessionStore extends EventEmitter {
     if (removed) {
       this.toolIndex.delete(id);
       this.editedFiles.delete(id);
+      this.runModes.delete(id);
       this.persistSessions();
       this.emit("update", id);
     }
@@ -179,23 +184,22 @@ export class ClaudeSessionStore extends EventEmitter {
     await this.writeChain;
   }
 
-  startRun(session: ClaudeSession, text: string): ClaudeRunRecord {
+  startRun(session: ClaudeSession, text: string, tags: { reminders?: PromptTag[]; workflows?: PromptTag[]; plan?: boolean } = {}): ClaudeRunRecord {
     const now = Date.now();
     const messageId = `user-${randomUUID()}`;
-    // Auto-title from the first prompt while the session still carries the
-    // default title. The headless stream-json output exposes no model-generated
-    // title, so the opening ask is the reliable, non-empty source.
     if (session.title === DEFAULT_CLAUDE_TITLE && !session.events.some((event) => event.kind === "user")) {
       const derived = text.split("\n").map((line) => line.trim()).find(Boolean)?.replace(/\s+/g, " ").slice(0, 80);
       if (derived) session.title = derived;
     }
+    const turnMode: "plan" | "build" = tags.plan ? "plan" : "build";
     session.running = true;
     session.sawResult = false;
     session.runStartedAt = now;
     session.updatedAt = new Date(now).toISOString();
+    this.runModes.set(session.id, turnMode);
     session.events.push({
       id: messageId, messageId, timestamp: session.updatedAt, kind: "user", text,
-      reminders: [], workflows: [], attachments: [],
+      reminders: tags.reminders ?? [], workflows: tags.workflows ?? [], attachments: [], mode: turnMode,
     });
     this.toolIndex.set(session.id, new Map());
     this.editedFiles.set(session.id, new Set());
@@ -219,11 +223,13 @@ export class ClaudeSessionStore extends EventEmitter {
     const tools = this.toolIndex.get(sessionId) ?? new Map<string, string>();
     const edited = this.editedFiles.get(sessionId) ?? new Set<string>();
 
+    const turnMode = this.runModes.get(sessionId);
+
     if (frame.type === "assistant") {
       for (const block of blocksOf(frame)) {
         if (block.type === "text" && typeof block.text === "string" && block.text) {
           const id = `agent-${randomUUID()}`;
-          session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: block.text });
+          session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: block.text, ...(turnMode ? { mode: turnMode } : {}) });
         } else if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
           const id = `thought-${randomUUID()}`;
           session.events.push({ id, messageId: id, timestamp: now, kind: "thought", text: block.thinking });
@@ -330,6 +336,7 @@ export class ClaudeSessionStore extends EventEmitter {
     session.activeRunId = undefined;
     this.toolIndex.delete(session.id);
     this.editedFiles.delete(session.id);
+    this.runModes.delete(session.id);
     const record = [...this.ledger.records].reverse().find((item) => item.id === activeRunId);
     if (record) {
       record.outcome = outcome;
@@ -339,6 +346,9 @@ export class ClaudeSessionStore extends EventEmitter {
     }
     this.persist();
     this.persistSessions();
+    // Every way a turn can end (result, error, exit, cancel) passes through
+    // here, so this is the single hook the notification lane listens on.
+    this.emit("finished", { session, outcome });
   }
 
   private atomicWrite(target: string, payload: string): void {

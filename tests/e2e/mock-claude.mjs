@@ -40,6 +40,12 @@ emit({
 if (prompt.includes("stay running")) {
   // Slow mode: stay alive until the supervisor sends SIGTERM (the cancel test).
   setInterval(() => {}, 1000);
+} else if (prompt.includes('<reminder name="') || prompt.includes('<workflow name="')) {
+  // Playbook echo: name which trusted sentinel blocks reached the binary, so
+  // the e2e can prove injection happened server-side without leaking bodies.
+  const names = [...prompt.matchAll(/<(reminder|workflow) name="([^"]+)">/g)].map(([, kind, name]) => `${kind}=${name}`);
+  emit({ type: "assistant", message: { content: [{ type: "text", text: `Injected: ${names.join(" ")}` }] } });
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
 } else if (prompt.includes("write a file")) {
   // Build mode: really write into cwd (the session's project or worktree), so the
   // Changes drawer, merge and discard flows have a real diff to work with. Unique

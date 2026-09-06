@@ -630,7 +630,7 @@ export function ConversationPage() {
           it at every width so changing viewport does not change the workflow. */}
       <header className="flex shrink-0 flex-col gap-1.5 border-b border-[var(--color-border-default)] px-3 py-2 sm:px-4 sm:py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Link to={`/?directory=${encodeURIComponent(directory)}`} className="hidden shrink-0 text-sm underline sm:inline">
+          <Link to={`/opencode?directory=${encodeURIComponent(directory)}`} className="hidden shrink-0 text-sm underline sm:inline">
             ← Sessions
           </Link>
           <h1 className="min-w-0 flex-1 truncate text-sm font-semibold sm:text-base" data-testid="opencode-session-title">

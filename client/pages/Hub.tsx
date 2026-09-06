@@ -550,6 +550,7 @@ export function HubPage() {
             onChange={setSelectedModel}
             testId="opencode-hub-model"
             label="Session model"
+            disabled={!directory}
           />
           <Button
             onClick={() => void create()}
@@ -714,7 +715,7 @@ export function HubPage() {
           <ul className="max-h-72 divide-y divide-[var(--color-border-default)] overflow-y-auto">
             {worktrees.map((worktree) => (
               <li key={worktree.directory} className="flex min-w-0 items-center gap-2 p-3 text-sm">
-                <Link to={`/?directory=${encodeURIComponent(worktree.directory)}`} className="min-w-0 flex-1 truncate underline" data-testid="opencode-worktree-open">{worktree.name}</Link>
+                <Link to={`/opencode?directory=${encodeURIComponent(worktree.directory)}`} className="min-w-0 flex-1 truncate underline" data-testid="opencode-worktree-open">{worktree.name}</Link>
                 <Button size="sm" variant="secondary" onClick={() => { if (window.confirm(`Hard-reset and clean ${worktree.name}?`)) void api.resetWorktree(directory, worktree.directory); }} data-testid="opencode-worktree-reset">Reset</Button>
                 <Button size="sm" variant="danger" onClick={() => { if (window.confirm(`Force-delete ${worktree.name} and its branch?`)) void api.deleteWorktree(directory, worktree.directory).then(() => setWorktrees((items) => items.filter((item) => item.directory !== worktree.directory))); }} data-testid="opencode-worktree-delete">Delete</Button>
               </li>

@@ -25,7 +25,9 @@ test.describe("requested PR screenshots", () => {
         expect(response?.ok(), `route ${request.requestedRoute} should load`).toBe(true);
 
         const pathname = new URL(request.requestedRoute, "http://screenshot.invalid").pathname;
-        const stableRoot = pathname.startsWith("/sessions/")
+        const stableRoot = pathname === "/"
+          ? "opencode-home"
+          : pathname.startsWith("/sessions/")
           ? "opencode-conversation"
           : pathname === "/settings/notifications"
             ? "opencode-notifications"

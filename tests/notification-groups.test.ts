@@ -184,6 +184,8 @@ describe("notification session route", () => {
 
   it("still links a record whose directory was never recorded", () => {
     expect(sessionRoute({ sessionID: "ses_1" })).toBe("/sessions/ses_1");
+    // Claude runtime records route to the Claude surface, never the OpenCode one.
+    expect(sessionRoute({ sessionID: "claude-0f3c", directory: "/srv/work" })).toBe("/claude/sessions/claude-0f3c");
   });
 
   it("does not depend on the outbound click URL, which needs PUBLIC_APP_URL", () => {

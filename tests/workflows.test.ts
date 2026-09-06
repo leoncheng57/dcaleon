@@ -283,6 +283,9 @@ describe("buildPlaywrightReviewPrompt", () => {
     for (const route of KNOWN_APP_ROUTES) expect(isKnownAppRoute(route)).toBe(true);
     expect(isKnownAppRoute("/sessions/ses_123?directory=%2Ftmp%2Fproject")).toBe(true);
     expect(isKnownAppRoute("/playbooks/workflows/start-dca-session")).toBe(true);
+    // The OpenCode hub moved off the root, and the Claude lane is a peer of DSH.
+    expect(isKnownAppRoute("/opencode?directory=%2Ftmp%2Fproject")).toBe(true);
+    expect(isKnownAppRoute("/claude/sessions/claude-0f3c")).toBe(true);
     expect(isKnownAppRoute("/playbooks/skills/grill-me")).toBe(false);
     expect(isKnownAppRoute("the composer card")).toBe(false);
     expect(isKnownAppRoute("/not-a-route")).toBe(false);
