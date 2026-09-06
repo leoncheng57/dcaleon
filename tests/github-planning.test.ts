@@ -31,7 +31,7 @@ function rawItem(number: number, extra: Record<string, unknown> = {}): Record<st
     state: "open",
     labels: [],
     user: { login: "octocat" },
-    html_url: `https://github.com/leoncheng57/custom-dca-opencode/issues/${number}`,
+    html_url: `https://github.com/leoncheng57/dcaleon/issues/${number}`,
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-21T11:30:00Z",
     comments: 3,
@@ -103,7 +103,7 @@ describe("GitHub planning normalization", () => {
     // snapshot fan-out is the only thing allowed to fill it in.
     expect(normalizePlanningItem(rawItem(2, {
       sub_issues_summary: { total: 3, completed: 1 },
-      parent_issue_url: "https://api.github.com/repos/leoncheng57/custom-dca-opencode/issues/9",
+      parent_issue_url: "https://api.github.com/repos/leoncheng57/dcaleon/issues/9",
     }))?.parentNumber).toBeNull();
 
     for (const summary of [
@@ -142,7 +142,7 @@ describe("GitHub planning fetch", () => {
     const snapshot = await getPlanningSnapshot();
 
     expect(fetchMock).toHaveBeenCalledTimes(PLANNING_LIMITS.pages);
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/repos/leoncheng57/custom-dca-opencode/issues");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/repos/leoncheng57/dcaleon/issues");
     expect(String(fetchMock.mock.calls[0][0])).toContain("state=all");
     expect(snapshot.items).toHaveLength(PLANNING_LIMITS.pages * PLANNING_LIMITS.perPage);
     expect(snapshot.truncated).toBe(true);
@@ -233,7 +233,7 @@ describe("GitHub planning epic fan-out", () => {
     // One list page plus exactly one request per epic.
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(String(fetchMock.mock.calls[1][0]))
-      .toBe(`https://api.github.com/repos/leoncheng57/custom-dca-opencode/issues/30/sub_issues?per_page=${PLANNING_LIMITS.epicChildren}`);
+      .toBe(`https://api.github.com/repos/leoncheng57/dcaleon/issues/30/sub_issues?per_page=${PLANNING_LIMITS.epicChildren}`);
     expect(snapshot.epicsTruncated).toBe(false);
   });
 
@@ -376,7 +376,7 @@ describe("GitHub planning issue creation", () => {
   it("posts only bounded fields to the fixed repository and normalizes the result URL", async () => {
     vi.stubEnv("GITHUB_TOKEN", "server-secret");
     const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
-      expect(String(input)).toBe("https://api.github.com/repos/leoncheng57/custom-dca-opencode/issues");
+      expect(String(input)).toBe("https://api.github.com/repos/leoncheng57/dcaleon/issues");
       expect(init?.method).toBe("POST");
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBe("Bearer server-secret");
@@ -388,7 +388,7 @@ describe("GitHub planning issue creation", () => {
 
     const issue = await createPlanningIssue({ title: "New issue", body: "Details", labels: ["frontend"] });
 
-    expect(issue).toMatchObject({ number: 123, type: "issue", url: "https://github.com/leoncheng57/custom-dca-opencode/issues/123" });
+    expect(issue).toMatchObject({ number: 123, type: "issue", url: "https://github.com/leoncheng57/dcaleon/issues/123" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -474,7 +474,7 @@ describe("GitHub planning item details", () => {
 
     const details = await getPlanningItemDetails("101");
 
-    expect(details.item).toMatchObject({ number: 101, type: "pull_request", url: "https://github.com/leoncheng57/custom-dca-opencode/pull/101" });
+    expect(details.item).toMatchObject({ number: 101, type: "pull_request", url: "https://github.com/leoncheng57/dcaleon/pull/101" });
     expect(details.item.labels).toHaveLength(PLANNING_LIMITS.labels);
     expect(details.itemLabelsTruncated).toBe(true);
     expect(details.body).toHaveLength(PLANNING_LIMITS.detailBodyCharacters);
@@ -517,7 +517,7 @@ describe("GitHub planning label updates", () => {
         ]);
       }
       if (init?.method !== "PATCH") return response(rawItem(102, { labels: [{ name: "priority:high" }] }));
-      expect(String(input)).toBe("https://api.github.com/repos/leoncheng57/custom-dca-opencode/issues/102");
+      expect(String(input)).toBe("https://api.github.com/repos/leoncheng57/dcaleon/issues/102");
       expect(init?.method).toBe("PATCH");
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer server-secret");
       expect(JSON.parse(String(init?.body))).toEqual({ labels: ["priority:medium", "frontend"] });
@@ -535,7 +535,7 @@ describe("GitHub planning label updates", () => {
       number: 102,
       type: "pull_request",
       labels: ["priority:medium", "frontend"],
-      url: "https://github.com/leoncheng57/custom-dca-opencode/pull/102",
+      url: "https://github.com/leoncheng57/dcaleon/pull/102",
     });
   });
 

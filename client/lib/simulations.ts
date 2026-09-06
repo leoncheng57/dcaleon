@@ -50,7 +50,7 @@ export function reminderSimulation(id: string): Simulation | undefined {
   return reminderSimulations.get(id);
 }
 
-const REPO_ROOT = "https://github.com/leoncheng57/custom-dca-opencode";
+const REPO_ROOT = "https://github.com/leoncheng57/dcaleon";
 
 /**
  * The revision source links resolve against.

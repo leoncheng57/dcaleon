@@ -103,7 +103,7 @@ export const DOCS: DocDefinition[] = [
 
 const DOCS_BY_SLUG = new Map(DOCS.map((doc) => [doc.slug, doc]));
 const DOCS_BY_PATH = new Map(DOCS.map((doc) => [doc.sourcePath, doc]));
-const REPOSITORY_BLOB_URL = "https://github.com/leoncheng57/custom-dca-opencode/blob/main";
+const REPOSITORY_BLOB_URL = "https://github.com/leoncheng57/dcaleon/blob/main";
 
 export function getDoc(slug: string | undefined): DocDefinition | undefined {
   return slug ? DOCS_BY_SLUG.get(slug) : undefined;

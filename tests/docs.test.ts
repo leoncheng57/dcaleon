@@ -47,7 +47,7 @@ describe("documentation catalogue", () => {
       "[Contributing](/docs/contributing)",
       "[Audit](/docs/opencode-api-audit#result)",
       "[Previews](/docs/pr-previews#artifact-trust-boundary)",
-      "[Implementation](https://github.com/leoncheng57/custom-dca-opencode/blob/main/docs/internal/detail.md)",
+      "[Implementation](https://github.com/leoncheng57/dcaleon/blob/main/docs/internal/detail.md)",
       "[External](https://example.com/docs)",
     ].join("\n"));
   });

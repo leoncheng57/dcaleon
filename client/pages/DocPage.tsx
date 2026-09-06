@@ -6,7 +6,7 @@ import { Alert } from "../ds/alert.js";
 import { Markdown } from "../ds/markdown.js";
 import { getDoc, rewriteDocLinks } from "../lib/docs.js";
 
-const REPOSITORY_BLOB_URL = "https://github.com/leoncheng57/custom-dca-opencode/blob/main";
+const REPOSITORY_BLOB_URL = "https://github.com/leoncheng57/dcaleon/blob/main";
 
 export function DocPage() {
   const { slug } = useParams();

@@ -12,8 +12,8 @@
 
 export const PLANNING_REPOSITORY = {
   owner: "leoncheng57",
-  repo: "custom-dca-opencode",
-  url: "https://github.com/leoncheng57/custom-dca-opencode",
+  repo: "dcaleon",
+  url: "https://github.com/leoncheng57/dcaleon",
 } as const;
 
 export const PLANNING_LIMITS = {
