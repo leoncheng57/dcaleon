@@ -3,7 +3,7 @@
 Every same-repository pull request receives a public, interactive simulator at:
 
 ```text
-https://leoncheng.dev/custom-dca-opencode/pr-previews/pr-<number>/
+https://leoncheng.dev/dcaleon/pr-previews/pr-<number>/
 ```
 
 The preview refreshes for every new pull request commit. It is the pull request's real
@@ -227,7 +227,7 @@ flowchart TD
 - manifest version;
 - positive PR number;
 - full lowercase source SHA;
-- exact `/custom-dca-opencode/pr-previews/pr-<number>/` base path;
+- exact `/dcaleon/pr-previews/pr-<number>/` base path;
 - each relative path, byte size, and SHA-256 digest.
 
 Both packaging and deployment reject symbolic links, non-files, duplicate or unsafe paths,

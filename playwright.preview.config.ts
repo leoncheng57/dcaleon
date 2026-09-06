@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 const PORT = 3412;
-const BASE_PATH = "/custom-dca-opencode/pr-previews/pr-1/";
+const BASE_PATH = "/dcaleon/pr-previews/pr-1/";
 
 export default defineConfig({
   testDir: "tests/preview-e2e",

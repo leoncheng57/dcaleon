@@ -222,7 +222,7 @@ outside the tested checkout. Linux containers also cannot prove macOS `/tmp` →
 ### Interactive PR previews
 
 Every same-repository pull request receives a public, interactive simulator at
-`https://leoncheng.dev/custom-dca-opencode/pr-previews/pr-<number>/`. The **PR preview**
+`https://leoncheng.dev/dcaleon/pr-previews/pr-<number>/`. The **PR preview**
 workflow runs on `opened`, `reopened`, and every `synchronize` event, so each pushed commit
 rebuilds the preview. It tests the production bundle in Chromium, publishes only that PR's
 directory on `gh-pages`, creates a transient GitHub Deployment, and updates one
@@ -300,6 +300,33 @@ that the `gh-pages` branch is not protected against the bot. Stale images are ca
 with the source SHA. GitLab MRs can reuse the parser, manifest, and validation model, but
 would need GitLab artifact/Pages publication and MR-note API wiring; that second CI system
 is intentionally not included.
+
+### Design mockup screenshots
+
+For a proposal that isn't built yet — no live route to point PR screenshots at — mock it
+up as a small, self-contained static HTML file instead. Link the app's real
+`client/theme/tokens.css` by relative path (e.g. `../../client/theme/tokens.css`) rather
+than hand-copying token hex values, so the mockup never drifts from the real palette, and
+wrap the visual content in `id="mockup-root"` so the screenshot tool can crop to it.
+
+```bash
+npx playwright install chromium
+npm run design-shot -- --input design/<date>-<slug>/mockup.html \
+  --out design/<date>-<slug>/desktop.png --theme dark --viewport desktop
+npm run design-shot -- --input design/<date>-<slug>/mockup.html \
+  --out design/<date>-<slug>/mobile.png --theme dark --viewport mobile
+```
+
+`--theme` toggles the real `.dark` class before capturing; omit it to capture the mockup
+exactly as authored. Without `--selector` or a `#mockup-root` element, the tool falls back
+to a plain viewport screenshot — useful for a whole-page mockup rather than one component.
+
+Commit both the `.html` source and the `.png` outputs under
+`design/<date>-<slug>/` — nothing under `design/` is gitignored, and every existing
+mockup there is committed for the same reason: a design discussion on an issue or PR
+needs a permanent, linkable image, not a 30-day CI artifact. This is a separate, much
+lighter-weight tool than PR screenshots above: no live app, no CI, no manifest — just a
+static file and a screenshot.
 
 ### Share and export
 

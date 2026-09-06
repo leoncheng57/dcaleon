@@ -90,7 +90,7 @@ export function CreateIssueDialog({ onClose, onCreated }: {
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-bold" id="planning-create-title">Create issue</h2>
             <p className="text-sm text-[var(--color-text-muted)]" id="planning-create-description">
-              Open an issue in leoncheng57/custom-dca-opencode.
+              Open an issue in leoncheng57/dcaleon.
             </p>
           </div>
           <Button

@@ -60,3 +60,10 @@ file that disappears.
 The dated document embeds both screenshots and states plainly that this is a
 proposal, not a description of current behaviour — the failure mode for design
 documents is being read later as a record of what exists.
+
+## note
+
+Notion is the default because it's a durable, dated writeup. If the reader is
+already on a tracking GitHub issue or PR instead, skip Notion and comment there
+directly with `gh issue comment` (or `gh pr comment`), embedding the same
+raw.githubusercontent.com URLs.

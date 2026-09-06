@@ -88,6 +88,8 @@ several decisions below.
 | `PATCH /session/{id}` appends `permission` rules | Compare the current suffix before patching so repeated same-mode prompts do not grow the ruleset |
 | Mode policy and `prompt_async` are one critical section | Serialize them process-locally by directory + session so concurrent opposite-mode prompts cannot run under each other's policy |
 | Classic SSE has no replay cursor | Refetch state on reconnect |
+| `import { chromium } from "playwright"` fails — that package isn't installed | Import from `"@playwright/test"` instead; `playwright-core` (the actual dependency) ships no JS-friendly top-level API for this |
+| `gh api ... -f field=@file` sends the literal string `@file`, not the file's contents | Only `-F`/`--field` reads `@file`; `-f`/`--raw-field` never does |
 
 ## Decisions
 
@@ -1211,3 +1213,34 @@ npm run screenshots:local
 ```
 
 Output is written to the ignored `screenshot-output/` directory.
+
+## Design mockup screenshots
+
+For a proposal that is NOT yet built (the in-product "Capture a Durable Design
+Prototype" workflow, `server/workflows/workflows.ts`), not a shipped route: build a
+small, self-contained static HTML mockup, deliberately not merged into the PR-screenshot
+pipeline above. Link `client/theme/tokens.css` by relative path (e.g.
+`../../client/theme/tokens.css`) and wrap the visual content in `id="mockup-root"`
+instead of hand-copying token hex values — the latter drifts from the real palette
+within hours (it did, the first time this was tried). Commit under a dated
+subdirectory: `design/<date>-<slug>/{mockup.html,desktop.png,mobile.png}`.
+
+Render both sizes with:
+
+```bash
+npm run design-shot -- --input design/<date>-<slug>/mockup.html \
+  --out design/<date>-<slug>/desktop.png --theme dark --viewport desktop
+npm run design-shot -- --input design/<date>-<slug>/mockup.html \
+  --out design/<date>-<slug>/mobile.png --theme dark --viewport mobile
+```
+
+`scripts/design-shot.ts` screenshots `--selector` if given, else `#mockup-root` if
+present, else the full viewport — so a component-shaped mockup crops to its own
+rendered box regardless of viewport size, and a whole-page mockup falls back to a
+plain viewport capture. See the two Playwright/`gh api` traps in the table above before
+writing a script that launches a browser or uploads a file through the GitHub API.
+
+Publish alongside Notion (`ntn`) or a tracking GitHub issue/PR comment — both are
+first-class destinations; see the workflow's own instructions for the exact commands.
+No CI wiring, no manifest, no fork-safety concerns: this is a local-only tool for a
+handful of hand-curated images, not a validated pipeline.

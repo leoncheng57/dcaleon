@@ -11,11 +11,11 @@ test("runs the DSH fixture flow under the nested public preview path", async ({ 
   await expect(page.getByTestId("opencode-nav-more-menu").getByText("DSH lab", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await dshNav.click();
-  await expect(page).toHaveURL(/\/custom-dca-opencode\/pr-previews\/pr-1\/#\/dsh$/u);
+  await expect(page).toHaveURL(/\/dcaleon\/pr-previews\/pr-1\/#\/dsh$/u);
   await expect(page.getByTestId("dsh-home")).toBeVisible();
 
   await page.getByTestId("dsh-create").click();
-  await expect(page).toHaveURL(/\/custom-dca-opencode\/pr-previews\/pr-1\/#\/dsh\/sessions\/dsh-/u);
+  await expect(page).toHaveURL(/\/dcaleon\/pr-previews\/pr-1\/#\/dsh\/sessions\/dsh-/u);
   await expect(page.getByTestId("dsh-conversation")).toBeVisible();
 
   await page.getByTestId("dsh-prompt").fill("Inspect the public DSH fixture");
