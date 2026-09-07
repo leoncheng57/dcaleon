@@ -8,11 +8,11 @@ test("runs the DSH fixture flow under the nested public preview path", async ({ 
   const dshCard = page.getByTestId("island-selector-dsh");
   await expect(dshCard).toContainText("DSH");
   await dshCard.click();
-  await expect(page).toHaveURL(/\/custom-dca-opencode\/pr-previews\/pr-1\/#\/dsh$/u);
+  await expect(page).toHaveURL(/\/dcaleon\/pr-previews\/pr-1\/#\/dsh$/u);
   await expect(page.getByTestId("dsh-home")).toBeVisible();
 
   await page.getByTestId("dsh-create").click();
-  await expect(page).toHaveURL(/\/custom-dca-opencode\/pr-previews\/pr-1\/#\/dsh\/sessions\/dsh-/u);
+  await expect(page).toHaveURL(/\/dcaleon\/pr-previews\/pr-1\/#\/dsh\/sessions\/dsh-/u);
   await expect(page.getByTestId("dsh-conversation")).toBeVisible();
 
   await page.getByTestId("dsh-prompt").fill("Inspect the public DSH fixture");

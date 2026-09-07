@@ -7,7 +7,7 @@
   "description": "A custom local coding-agent IDE built on the OpenCode server API.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leoncheng57/custom-dca-opencode.git"
+    "url": "git+https://github.com/leoncheng57/dcaleon.git"
   },
   "engines": {
     "node": ">=22"
