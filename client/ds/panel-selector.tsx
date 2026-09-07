@@ -7,6 +7,7 @@ export interface PanelOption<T extends string> {
   id: T;
   label: string;
   icon?: ReactNode;
+  beta?: boolean;
   wip?: boolean;
   testId?: string;
 }
@@ -41,14 +42,14 @@ export function PanelSelector<T extends string>({ options, value, onChange, test
     }}>
       <Button ref={trigger} variant="ghost" size="sm" type="button" className="min-h-11 gap-2 px-2"
         aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)} data-testid={testId}>
-        {active?.icon}{active?.label}{active?.wip && <Badge>WIP</Badge>}<ChevronDown size={14} aria-hidden="true" />
+        {active?.icon}{active?.label}{active?.beta && <Badge variant="beta">Beta</Badge>}{active?.wip && <Badge>WIP</Badge>}<ChevronDown size={14} aria-hidden="true" />
       </Button>
       {open && <div id={id} role="group" aria-label="Choose tools panel" data-testid={menuTestId ?? `${testId}-menu`}
         className="absolute left-0 top-full z-20 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-1 shadow-xl">
         {options.map((option) => <button key={option.id} type="button" aria-pressed={value === option.id}
           className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-[var(--color-background-surface-neutral-muted)] focus-visible:ring-2 focus-visible:ring-[var(--color-border-focus)]"
           onClick={() => { onChange(option.id); close(); }} data-testid={option.testId ?? `${testId}-${option.id}`}>
-          {option.icon}<span className="flex-1">{option.label}</span>{option.wip && <Badge>Work in progress</Badge>}
+          {option.icon}<span className="flex-1">{option.label}</span>{option.beta && <Badge variant="beta">Beta</Badge>}{option.wip && <Badge>Work in progress</Badge>}
         </button>)}
       </div>}
     </div>

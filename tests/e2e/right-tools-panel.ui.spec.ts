@@ -241,6 +241,7 @@ test.describe("desktop right tools panel", () => {
 
     const panel = page.getByTestId("opencode-right-tools-panel");
     await expect(panel).toBeVisible();
+    await expect(page.getByTestId("opencode-right-tools-selector")).toContainText("Beta");
     await expect(panel).toHaveAttribute("role", "complementary");
     await expect(panel).not.toHaveAttribute("aria-modal", "true");
     await expect(inspector).toBeHidden();
