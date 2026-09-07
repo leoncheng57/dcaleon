@@ -33,7 +33,7 @@ function publicSession(session: ReturnType<DshSessionStore["create"]>) {
 export function dshRoutes(
   config: DshConfig,
   pool = new DshBridgePool(config),
-  store = new DshSessionStore(config.ledgerFile),
+  store = new DshSessionStore(config.ledgerFile, config.sessionsFile),
   trajectory = new DshTrajectoryStore(config.trajectoryRoot, {
     sensitiveEnabled: config.trajectorySensitiveEnabled,
     maintenanceEnabled: config.enabled,

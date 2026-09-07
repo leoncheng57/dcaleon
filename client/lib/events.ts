@@ -624,6 +624,17 @@ export function normalizeTranscript(
       }
     }
 
+    if (message.info?.role === "assistant") {
+      const prose = messageEvents.filter((event): event is Extract<TranscriptEvent, { kind: "agent" }> => event.kind === "agent").at(-1);
+      const completed = message.info.time?.completed;
+      if (prose) {
+        prose.metricsStatus = typeof completed === "number" ? "final" : "pending";
+        prose.durationStatus = typeof completed === "number" ? "final" : "pending";
+        prose.costStatus = typeof completed === "number" ? (messageUsage.length ? "final" : "unavailable") : "pending";
+        prose.cumulativeCostStatus = prose.costStatus;
+      }
+    }
+
     if (message.info?.role === "assistant" && messageUsage.length > 0) {
       const messageCost = messageUsage.reduce((total, snapshot) => total + snapshot.cost, 0);
       cumulativeCost += messageCost;

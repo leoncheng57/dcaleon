@@ -431,7 +431,7 @@ describe("usage", () => {
       },
     ]);
     const prose = transcript.events.filter((event) => event.kind === "agent");
-    expect(prose[0]).toMatchObject({ messageCost: 0.0012, cumulativeCost: 0.0012, messageDurationMs: 2_500 });
+    expect(prose[0]).toMatchObject({ metricsStatus: "final", costStatus: "final", messageCost: 0.0012, cumulativeCost: 0.0012, messageDurationMs: 2_500 });
     expect(prose[1]).not.toHaveProperty("messageCost");
     expect(prose[2]).toMatchObject({
       messageCost: 0.005,
@@ -443,6 +443,17 @@ describe("usage", () => {
       cacheReadTokens: 6,
       cacheWriteTokens: 0,
     });
+  });
+
+  it("marks in-flight and completed messages without usage honestly", () => {
+    const transcript = normalizeTranscript([
+      { info: { id: "pending", role: "assistant", time: { created: 1_000 } }, parts: [{ id: "p", type: "text", text: "Streaming" }] },
+      { info: { id: "done", role: "assistant", time: { created: 2_000, completed: 3_000 } }, parts: [{ id: "d", type: "text", text: "No usage" }] },
+    ]);
+    expect(transcript.events.filter((event) => event.kind === "agent")).toMatchObject([
+      { metricsStatus: "pending", costStatus: "pending" },
+      { metricsStatus: "final", costStatus: "unavailable", durationStatus: "final" },
+    ]);
   });
 });
 
@@ -517,6 +528,7 @@ describe("frozen contract", () => {
     user: ["kind", "id", "messageId", "timestamp", "text", "reminders", "workflows", "attachments", "mode"],
     agent: [
       "kind", "id", "messageId", "timestamp", "text", "mode",
+      "metricsStatus", "costStatus", "cumulativeCostStatus", "durationStatus",
       "messageCost", "cumulativeCost", "messageDurationMs", "inputTokens", "outputTokens",
       "reasoningTokens", "cacheReadTokens", "cacheWriteTokens",
     ],

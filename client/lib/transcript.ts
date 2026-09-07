@@ -33,6 +33,7 @@ export type TranscriptKind = "user" | "agent" | "thought" | "tool" | "patch" | "
  * events.ts for why missing metadata is never inferred away.
  */
 export type MessageMode = "plan" | "build";
+export type MetricStatus = "pending" | "final" | "estimated" | "unavailable";
 
 interface TranscriptBase {
   /** Stable across refetches. Used for React keys, dedupe and scroll anchors. */
@@ -64,6 +65,11 @@ export interface AgentEvent extends TranscriptBase {
   text: string;
   /** Mode this response was produced under, when the backend states it exactly. */
   mode?: MessageMode;
+  /** Runtime-neutral provenance for the compact per-message accounting row. */
+  metricsStatus?: "pending" | "final";
+  costStatus?: MetricStatus;
+  cumulativeCostStatus?: MetricStatus;
+  durationStatus?: MetricStatus;
   /** Finalised accounting, attached only to the turn's last prose row. */
   messageCost?: number;
   cumulativeCost?: number;

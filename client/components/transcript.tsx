@@ -55,24 +55,31 @@ function formatMessageCost(cost: number): string {
 }
 
 function MessageMetrics({ event }: { event: AgentEvent }) {
-  if (event.messageCost === undefined || event.cumulativeCost === undefined) return null;
+  if (!event.metricsStatus && event.messageCost === undefined && event.cumulativeCost === undefined) return null;
+  const pending = event.metricsStatus === "pending";
   const duration = event.messageDurationMs === undefined ? null : formatDurationMs(event.messageDurationMs);
+  const cost = event.messageCost === undefined ? "cost unavailable" : `${formatMessageCost(event.messageCost)} message`;
+  const cumulative = event.cumulativeCost === undefined ? "session total unavailable" : `${formatMessageCost(event.cumulativeCost)} session`;
+  const durationLabel = duration ?? (pending ? "latency pending" : "latency unavailable");
+  const status = pending ? "pending" : "final";
   return (
     <details className="group text-[10px] tabular-nums text-[var(--color-text-muted)] opacity-70" data-testid="opencode-message-metrics">
       <summary className="cursor-pointer list-none whitespace-nowrap [&::-webkit-details-marker]:hidden">
         <span className="sr-only">Message metrics: </span>
-        {duration && <><span title="Total agent turn latency">{duration}</span><span aria-hidden> · </span></>}
-        <span title="Cost of this agent message">{formatMessageCost(event.messageCost)}</span>
+        <span title="Total agent turn duration">{durationLabel}</span><span aria-hidden> · </span>
+        <span title="Cost of this agent message">{pending ? "cost pending" : cost}</span>
         <span aria-hidden> · </span>
-        <span title="Cumulative session cost">{formatMessageCost(event.cumulativeCost)} session</span>
+        <span title="Cumulative session cost">{pending ? "session total pending" : cumulative}</span>
+        <span aria-hidden> · </span><span>{status}</span>
       </summary>
       <pre className="mt-1 max-w-full overflow-x-auto text-right font-mono text-[10px] leading-relaxed" data-testid="opencode-message-metrics-diagram">{`prompt -> agent turn -> response
-   |${duration ? `---- ${duration} ----` : "-- latency unavailable --"}|
-   +-> ${formatMessageCost(event.messageCost)} this message
-       +-> ${formatMessageCost(event.cumulativeCost)} session total
+   |---- ${durationLabel} ----|
+   +-> ${pending ? "cost pending" : cost}
+       +-> ${pending ? "session total pending" : cumulative}
 
-tokens: ${event.inputTokens ?? 0} in + ${event.outputTokens ?? 0} out + ${event.reasoningTokens ?? 0} reasoning
-cache:  ${event.cacheReadTokens ?? 0} read + ${event.cacheWriteTokens ?? 0} write`}</pre>
+tokens: ${event.inputTokens ?? "unavailable"} in + ${event.outputTokens ?? "unavailable"} out + ${event.reasoningTokens ?? "unavailable"} reasoning
+cache:  ${event.cacheReadTokens ?? "unavailable"} read + ${event.cacheWriteTokens ?? "unavailable"} write
+status: ${status}`}</pre>
     </details>
   );
 }
