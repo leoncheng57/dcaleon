@@ -93,13 +93,30 @@ test.describe("desktop right tools panel", () => {
   test("keeps the panel usable beside tall permission and question banners", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await mockBrowser(page);
-    await page.goto("/sessions/ses_mock_done?directory=/tmp/mock-project");
+    // Page-owned responses cannot be cleared by another spec answering shared banners.
+    await page.route("**/api/permission-requests?*", (route) => route.fulfill({ json: {
+      requests: Array.from({ length: 3 }, (_, index) => ({
+        id: `perm_right_tools_${index}`, sessionID: "ses_mock_right_tools", permission: "bash",
+        patterns: ["npm test"], metadata: {}, always: [],
+      })),
+    } }));
+    await page.route("**/api/sessions/ses_mock_right_tools/questions?*", (route) => route.fulfill({ json: {
+      requests: [{ id: "que_right_tools", sessionID: "ses_mock_right_tools", questions: [
+        { header: "Deployment", question: "Where should this ship?", options: [{ label: "Staging", description: "Preview deployment" }, { label: "Production", description: "Live deployment" }], custom: false },
+        { header: "Checks", question: "Which checks should run?", options: [{ label: "Unit", description: "Unit tests" }, { label: "E2E", description: "Browser tests" }], multiple: true, custom: true },
+      ] }],
+    } }));
+    await page.goto(conversation);
+    await expect(page.getByTestId("opencode-permission-request")).toHaveCount(3);
+    await expect(page.getByTestId("opencode-question-request")).toHaveCount(1);
+    await expect(page.getByTestId("opencode-session-inspector")).toBeVisible();
     await page.getByTestId("opencode-live-browser-open").click();
     const panel = page.getByTestId("opencode-right-tools-panel");
     await expect(page.getByTestId("opencode-live-browser-frame")).toBeVisible();
     expect((await panel.boundingBox())!.height).toBeGreaterThan(240);
     await page.getByTestId("opencode-right-tools-close").click();
     await expect(page.getByTestId("opencode-session-inspector")).toBeVisible();
+    expect((await page.getByTestId("opencode-session-inspector").boundingBox())!.height).toBeGreaterThan(240);
   });
 
   for (const [status, message] of [[403, "live browser is disabled"], [409, "browser page capacity reached"], [502, "Chromium unavailable"]] as const) {
