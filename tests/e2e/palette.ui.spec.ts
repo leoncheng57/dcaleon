@@ -27,6 +27,9 @@ test.describe("command palette", () => {
     await expect(input).toBeFocused();
     await expect(page.getByRole("option", { name: /Home/ })).toHaveAttribute("aria-selected", "true");
 
+    // Navigation order: Home, OpenCode (the hub, since / became a landing), MCPs.
+    await input.press("ArrowDown");
+    await expect(page.getByRole("option", { name: /OpenCode/ })).toHaveAttribute("aria-selected", "true");
     await input.press("ArrowDown");
     await expect(page.getByRole("option", { name: /MCPs/ })).toHaveAttribute("aria-selected", "true");
     await input.press("Enter");

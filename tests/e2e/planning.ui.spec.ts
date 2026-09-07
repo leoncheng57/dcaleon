@@ -29,7 +29,7 @@ test.describe("project planning", () => {
     const issueLink = page.getByTestId("opencode-planning-item-101");
     await expect(issueLink).toHaveAttribute("aria-haspopup", "dialog");
     const externalLink = page.getByTestId("opencode-planning-item-101-external");
-    await expect(externalLink).toHaveAttribute("href", "https://github.com/leoncheng57/custom-dca-opencode/issues/101");
+    await expect(externalLink).toHaveAttribute("href", "https://github.com/leoncheng57/dcaleon/issues/101");
     await expect(externalLink).toHaveAttribute("target", "_blank");
     await expect(externalLink).toHaveAttribute("rel", "noopener noreferrer");
   });
@@ -101,7 +101,7 @@ test.describe("project planning", () => {
     await expect(page.getByTestId("opencode-planning-item-comment")).toHaveCount(2);
     await expect(page.locator("[data-unsafe-description], [data-unsafe-comment]")).toHaveCount(0);
     await expect(page.getByTestId("opencode-planning-item-external"))
-      .toHaveAttribute("href", "https://github.com/leoncheng57/custom-dca-opencode/issues/101");
+      .toHaveAttribute("href", "https://github.com/leoncheng57/dcaleon/issues/101");
 
     await page.getByTestId("opencode-planning-item-close").click();
     await expect(page.getByTestId("opencode-planning-item-dialog")).toHaveCount(0);
@@ -236,7 +236,7 @@ test.describe("project planning", () => {
     await expect(trigger).toBeFocused();
     await expect(page.getByTestId("opencode-planning-create-success")).toContainText("Issue #103 created");
     await expect(page.getByTestId("opencode-planning-created-link"))
-      .toHaveAttribute("href", "https://github.com/leoncheng57/custom-dca-opencode/issues/103");
+      .toHaveAttribute("href", "https://github.com/leoncheng57/dcaleon/issues/103");
     const createdRow = page.getByTestId("opencode-planning-row").filter({ hasText: "Create issues from planning" });
     await page.getByTestId("opencode-planning-section-none-toggle").click();
     await expect(createdRow).toBeVisible();

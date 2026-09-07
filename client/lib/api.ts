@@ -151,6 +151,64 @@ export interface DshConfigResponse {
   presets: DshPresetSummary[];
   workspaces: DshWorkspaceSummary[];
 }
+
+export type ClaudePresetMode = "read-only" | "build";
+export interface ClaudePresetSummary {
+  id: string;
+  label: string;
+  model: string;
+  effort?: string;
+  permissionMode: string;
+  mode: ClaudePresetMode;
+}
+export interface ClaudeWorkspaceSummary {
+  id: string;
+  label: string;
+  source?: "allowlist" | "discovered";
+}
+export type ClaudeIsolation = "direct" | "worktree";
+export interface ClaudeChangedFile { path: string; status: string }
+export interface ClaudeChanges { files: ClaudeChangedFile[]; diff: string; truncated: boolean; gone?: boolean }
+export interface ClaudePrCheck { id: string; name: string; status: string; webUrl: string }
+export interface ClaudePrStatus { url: string; title: string; state: string; author: string; pipeline: string | null; mergeable: boolean | null; number: number; project: string; checks: ClaudePrCheck[] }
+export interface ClaudeConfigResponse {
+  enabled: true;
+  configured: boolean;
+  cliVersion: string;
+  sandbox: "seatbelt" | "test-unsafe";
+  presets: ClaudePresetSummary[];
+  workspaces: ClaudeWorkspaceSummary[];
+  models: string[];
+}
+export interface ClaudeTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  thinkingTokens: number;
+  contextWindow: number;
+  costUsd: number;
+}
+export interface ClaudeSessionSummary {
+  id: string;
+  title: string;
+  presetId: string;
+  workspaceId: string;
+  workspaceLabel?: string;
+  mode: ClaudePresetMode;
+  isolation?: ClaudeIsolation;
+  branch?: string;
+  prUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  running: boolean;
+  tokenUsage?: ClaudeTokenUsage;
+}
+export interface ClaudeUsageBucket { utilization: number; resetsAt: string | null }
+export type ClaudeUsage =
+  | { available: true; session: ClaudeUsageBucket; weekly: ClaudeUsageBucket; weeklyByModel: Record<string, ClaudeUsageBucket>; subscriptionType: string | null; rateLimitTier: string | null }
+  | { available: false; reason: string };
+
 export type DshTrajectoryCategory = "turn" | "request" | "message" | "tool" | "compaction" | "child" | "status" | "error";
 export interface DshTrajectoryUsage {
   inputTokens: number;
@@ -696,7 +754,7 @@ function scoped(path: string, directory: string, extra: Record<string, string> =
 
 export const api = {
   health: () => fetch("/api/health").then((r) => json<HealthResponse>(r)),
-  appConfig: () => fetch("/api/app-config").then((r) => json<{ publicAppUrl: string | null; dshEnabled: boolean }>(r)),
+  appConfig: () => fetch("/api/app-config").then((r) => json<{ publicAppUrl: string | null; dshEnabled: boolean; dshConfigured: boolean; claudeEnabled: boolean; claudeConfigured: boolean }>(r)),
   projects: () => fetch("/api/projects").then((r) => json<{ root: string; projects: DiscoveredProject[] }>(r)),
   projectPins: () => fetch("/api/project-pins").then((r) => json<{ directories: string[] }>(r)),
   saveProjectPins: (directories: string[]) =>
@@ -757,6 +815,55 @@ export const api = {
   cancelDsh: (id: string) => fetch(`/api/dsh/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
   dshEventsUrl: (id: string) => `/api/dsh/events?${new URLSearchParams({ sessionId: id })}`,
+
+  claudeConfig: () => fetch("/api/claude/config").then((r) => json<ClaudeConfigResponse>(r)),
+  claudeSessions: () => fetch("/api/claude/sessions").then((r) => json<{ sessions: ClaudeSessionSummary[] }>(r)),
+  createClaudeSession: (input: { presetId: string; workspaceId: string; isolation?: ClaudeIsolation; title?: string }) =>
+    fetch("/api/claude/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
+  claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
+    json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
+  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean; reminder?: string; workflow?: string } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // Playbooks travel as ids only; the server resolves the trusted bodies.
+    body: JSON.stringify({
+      text,
+      ...(options.modelOverride ? { modelOverride: options.modelOverride } : {}),
+      plan: !!options.plan,
+      ...(options.reminder ? { reminder: options.reminder } : {}),
+      ...(options.workflow ? { workflow: options.workflow } : {}),
+    }),
+  }).then((r) => json<{ accepted: boolean }>(r)),
+  /** Reminders visible to this session, scoped server-side by the session's own cwd. */
+  claudeReminders: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/reminders`).then((r) => json<{ reminders: ReminderSummary[] }>(r)),
+  cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
+    json<{ cancelled: boolean }>(r)),
+  claudeEventsUrl: (id: string) => `/api/claude/events?${new URLSearchParams({ sessionId: id })}`,
+  claudeChanges: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/changes`).then((r) => json<ClaudeChanges>(r)),
+  mergeClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/merge`, { method: "POST" }).then((r) =>
+    json<{ merged: boolean; mergeCommit: string }>(r)),
+  discardClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/discard`, { method: "POST" }).then((r) =>
+    json<{ discarded: boolean }>(r)),
+  claudeTree: (id: string, path = "") => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/tree?${new URLSearchParams({ path })}`).then((r) =>
+    json<{ path: string; dirs: WorkspaceNode[]; files: WorkspaceNode[] }>(r)),
+  claudeFile: (id: string, path: string, signal?: AbortSignal) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}/file?${new URLSearchParams({ path })}`, { signal }).then((r) => json<WorkspaceFile>(r)),
+  claudeReferences: (id: string, paths: string[], signal?: AbortSignal) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}/references`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths }),
+      signal,
+    }).then((r) => json<{ references: WorkspaceReference[] }>(r)),
+  openClaudePr: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/pr`, { method: "POST" }).then((r) =>
+    json<{ url: string; number: number }>(r)),
+  claudePrStatus: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/pr`).then((r) =>
+    json<{ pr: import("./api.js").ClaudePrStatus | null }>(r)),
+  claudeUsage: () => fetch("/api/claude/usage").then((r) => json<ClaudeUsage>(r)),
   dshTrajectory: (id: string, options: { limit?: number; before?: number } = {}) => {
     const query = new URLSearchParams({ limit: String(options.limit ?? 200) });
     if (options.before !== undefined) query.set("before", String(options.before));

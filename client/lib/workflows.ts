@@ -90,6 +90,8 @@ export function groupWorkflows(catalogue: WorkflowSummary[]): WorkflowGroup[] {
 
 export const KNOWN_APP_ROUTES = [
   "/",
+  "/opencode",
+  "/claude",
   "/settings",
   "/settings/notifications",
   "/tools",
@@ -107,6 +109,7 @@ export function isKnownAppRoute(value: string): boolean {
     const url = new URL(route, "http://workflow.invalid");
     return url.origin === "http://workflow.invalid" && [
       /^\/$/,
+      /^\/opencode$/,
       /^\/settings$/,
       /^\/settings\/notifications$/,
       /^\/tools$/,
@@ -116,6 +119,7 @@ export function isKnownAppRoute(value: string): boolean {
       /^\/playbooks(?:\/(?:workflows|reminders)(?:\/[A-Za-z0-9_-]+)?)?$/,
       /^\/sessions\/[A-Za-z0-9_-]+$/,
       /^\/dsh(?:\/sessions\/[A-Za-z0-9_-]+)?$/,
+      /^\/claude(?:\/sessions\/[A-Za-z0-9_-]+)?$/,
     ].some((pattern) => pattern.test(url.pathname));
   } catch {
     return false;

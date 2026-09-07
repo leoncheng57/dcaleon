@@ -1108,6 +1108,89 @@ several decisions below.
     Release Please bootstrap is pinned to the parent of the workflow's introduction,
     so enabling releases does not turn the repository's full pre-release history into
     one fabricated changelog.
+34. **The Claude Code runtime is a third island that drives the unmodified `claude`
+    binary, non-interactive by policy.** Off by default behind `CLAUDE_RUNTIME_ENABLED`;
+    a disabled route answers 404, a misconfigured one 503 with reasons, exactly like DSH
+    (decision 28b's separate-privilege-lane rule applies — an OpenCode or DSH grant never
+    authorizes this lane). It exists for one reason the other two runtimes cannot serve: it
+    can be driven by a Claude subscription seat. Load-bearing facts, each of which cost a
+    measurement:
+    - **There is no interactive approval.** A bidirectional `claude -p --output-format
+      stream-json --input-format stream-json` emits no `control_request`/`can_use_tool`;
+      a blocked tool surfaces only as a terminal `system/permission_denied`. So the lane
+      is non-interactive by construction, not by omission. Presets therefore select a
+      non-interactive Claude permission mode, never `ask` (`server/claude/config.ts`
+      rejects `ask`), and the generated settings map a would-be ask to deny.
+    - **`claude -p` is one-shot**, unlike DSH's long-lived bridge. The supervisor spawns a
+      fresh process per prompt with `--session-id` (first turn) / `--resume` (after), and
+      cancel is SIGTERM of the in-flight child (`server/claude/supervisor.ts`). No pool.
+    - **The credential lives in the macOS Keychain, and the BFF never touches it.** The
+      env allowlist forwards no credential var; `claude` authenticates itself. This is
+      decision 3's boundary as *code discipline*: reading `~/.claude`/Keychain to broker a
+      token is the one thing this lane must never do, because that is exactly what
+      Anthropic's policy prohibits for third-party tools. **But the env must carry the user
+      IDENTITY** — `USER`/`LOGNAME`/`__CF_USER_TEXT_ENCODING`, synthesized when a
+      launchd-minimal env lacks them. Measured the hard way: without `$USER`, even an
+      un-sandboxed `claude` reports "Not logged in", because macOS resolves the login
+      Keychain by user. Identity is not a credential; forwarding it is not brokering auth.
+    - **Seatbelt is the write authority, but not a credential boundary.** Unlike the DSH
+      profile it keeps HOME real and must grant read of `~/Library/Keychains` plus the
+      securityd family, or subscription auth breaks — so the sandbox confines workspace
+      *writes* (read-only presets get none; Build adds only the allowlisted workspace) and
+      deliberately does not isolate the credential store. Verified on macOS in
+      `tests/claude-seatbelt.test.ts`, which the `host-contract-macos` CI job runs.
+    - **The pin is enforced at runtime, DSH-style.** `CLAUDE_CLI_VERSION` is validated into
+      `errors[]` and re-asserted against the `system/init` frame's `claude_code_version`;
+      a mismatch fails the turn. The binary auto-updates, so this is not optional — the
+      wire format is undocumented and a silent upgrade must fail closed, not mis-parse.
+34a. **Real Claude sessions isolate by git worktree, and Seatbelt's one outward grant is
+    the project's `.git`.** A Build session chooses *direct* (edits land in the project) or
+    *worktree* (`git worktree add` on `claude/<uuid>` under `CLAUDE_STATE_DIR/worktrees`,
+    never inside the project — `server/claude/worktree.ts`). Worktrees keep metadata and
+    objects in the shared `.git`, so the worktree profile grants `<project>/.git` write; it
+    is inherent to git worktrees and is the only Seatbelt write that reaches outside the
+    session's own directory. Rules that cost a real test each:
+    - **Merge refuses a dirty project.** A merge must never be confused with the human's
+      own in-progress edits; `mergeWorktree` checks `isDirty(project)` first and also
+      refuses a branch with nothing to merge. Uncommitted worktree work is committed before
+      merging so nothing the agent wrote is silently dropped.
+    - **Changes are read from git every time, never cached** (`workspaceChanges`): direct
+      sessions diff against HEAD, worktree sessions against the base commit so the agent's
+      own commits count; untracked files are included; output is bounded and says so.
+    - **Sessions are durable** (`CLAUDE_SESSIONS_FILE`, atomic write, reload on boot) and a
+      session that was mid-turn at shutdown is marked *Interrupted by a server restart* —
+      the same "detect, never auto-resume" stance as decision 5.
+    - **Discovered projects are workspaces too** (`CLAUDE_PROJECTS_ROOT`, default
+      `PROJECTS_DIR`, via the app's own `discoverProjects`), each with a dev/inode identity
+      re-verified before spawn. The static allowlist still applies; the state dir may not
+      live under the projects root.
+
+34b. **The Claude lane shares the OpenCode composer's playbooks and the app's notification
+    lane by translation, not by a second implementation — and the root is no longer any
+    runtime's home.**
+    - **Playbooks travel as ids; bodies are resolved server-side, in the OpenCode order.**
+      `POST /claude/sessions/:id/prompt` accepts `reminder` and `workflow` ids and
+      `server/claude/prompt.ts` composes workflow injector first, reminder after — the same
+      `composePromptText` order as `server/opencode/sessions.ts`, using the same
+      `withWorkflowTag`/`withReminderTag`. The transcript keeps the human's words plus the
+      chips (`reminders`/`workflows` on the user row); only the binary sees the sentinels.
+      Reminders are listed from a session-scoped route (`GET /claude/sessions/:id/reminders`)
+      because a worktree cwd lives under the state dir, outside `requireWorkspaceDirectory`'s
+      roots, and because the browser never names a path. Workflows whose submit path is an
+      OpenCode route (session update, managed child, start-DCA, both review captures) are not
+      offered; the Claude form only fills the composer.
+    - **A finished turn becomes the bus events the NotificationService already understands.**
+      `ClaudeSessionStore.finish()` — the one place every run ends — emits `finished`;
+      `server/claude/notifications.ts` publishes `session.updated` (seeding a titled root so the
+      service never asks OpenCode about a `claude-` id) then `session.idle` / `session.error` /
+      the `MessageAbortedError` shape for a cancel, so a Claude Stop reads like an OpenCode Stop.
+      `server/index.ts` constructs the store itself and hands the service Claude-aware
+      metadata/excerpt lookups. `claude-` is the id discriminator for the click route
+      (`conversationUrl`) and the in-app row (`sessionRoute`): both go to `/claude/sessions/<id>`.
+    - **`/` is a near-empty landing that points at the public repository; the OpenCode hub
+      lives at `/opencode`, a navbar peer of DSH and Claude.** Every runtime is reached from
+      the navbar, so the root belongs to none of them. `/sessions/:id` stays where it was:
+      moving it would break deep links, notification click URLs and phone transfer for no gain.
 
 ## Client conventions (inherited from the OpenHands runner, still enforced)
 

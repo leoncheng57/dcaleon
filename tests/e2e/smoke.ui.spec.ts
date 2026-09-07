@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const DIR = process.platform === "darwin" ? "/private/tmp/mock-project" : "/tmp/mock-project";
 const SECOND_DIR = process.platform === "darwin" ? "/private/tmp/mock-second-project" : "/tmp/mock-second-project";
-const hub = `/?directory=${encodeURIComponent(DIR)}`;
+const hub = `/opencode?directory=${encodeURIComponent(DIR)}`;
 const MOCK_URL = `http://127.0.0.1:${process.env.MOCK_OPENCODE_PORT || 4599}`;
 const FORGE_URL = `http://127.0.0.1:${process.env.MOCK_PREVIEW_PORT || 4600}`;
 
@@ -224,9 +224,9 @@ test.describe("hub", () => {
   });
 
   test("prompts for a directory when none is set", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/opencode");
     await page.evaluate(() => localStorage.clear());
-    await page.goto("/");
+    await page.goto("/opencode");
     await expect(page.getByTestId("opencode-start")).toBeDisabled();
   });
 
@@ -278,7 +278,7 @@ test.describe("hub", () => {
 
   test("keeps an undiscovered URL workspace selected", async ({ page }) => {
     const other = `${DIR}/src`;
-    await page.goto(`/?directory=${encodeURIComponent(other)}`);
+    await page.goto(`/opencode?directory=${encodeURIComponent(other)}`);
     await expect(page.getByTestId("opencode-other-workspace")).toContainText("Other workspace");
     await expect(page.getByTestId("opencode-project-select-other")).toHaveAttribute("aria-pressed", "true");
   });
@@ -410,7 +410,7 @@ test.describe("hub", () => {
       }));
     }, { directory: SECOND_DIR });
     // No ?directory= and no stored selection: the panel must still render.
-    await page.goto("/");
+    await page.goto("/opencode");
 
     await expect(page.getByTestId("opencode-recent-sessions")).toBeVisible();
     await expect(page.getByTestId("opencode-recently-active-row")).toHaveCount(2);

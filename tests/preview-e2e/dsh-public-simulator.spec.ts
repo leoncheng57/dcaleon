@@ -4,18 +4,15 @@ test("runs the DSH fixture flow under the nested public preview path", async ({ 
   await page.goto("./");
   await expect(page.getByTestId("opencode-public-simulator-banner")).toContainText("fixture data only");
 
-  const dshNav = page.getByTestId("dsh-nav");
-  await expect(dshNav).toContainText("DSH");
-  await expect(dshNav).toHaveRole("link");
-  await page.getByTestId("opencode-nav-more").click();
-  await expect(page.getByTestId("opencode-nav-more-menu").getByText("DSH lab", { exact: true })).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  await dshNav.click();
-  await expect(page).toHaveURL(/\/custom-dca-opencode\/pr-previews\/pr-1\/#\/dsh$/u);
+  await page.getByTestId("island-selector-trigger").click();
+  const dshCard = page.getByTestId("island-selector-dsh");
+  await expect(dshCard).toContainText("DSH");
+  await dshCard.click();
+  await expect(page).toHaveURL(/\/dcaleon\/pr-previews\/pr-1\/#\/dsh$/u);
   await expect(page.getByTestId("dsh-home")).toBeVisible();
 
   await page.getByTestId("dsh-create").click();
-  await expect(page).toHaveURL(/\/custom-dca-opencode\/pr-previews\/pr-1\/#\/dsh\/sessions\/dsh-/u);
+  await expect(page).toHaveURL(/\/dcaleon\/pr-previews\/pr-1\/#\/dsh\/sessions\/dsh-/u);
   await expect(page.getByTestId("dsh-conversation")).toBeVisible();
 
   await page.getByTestId("dsh-prompt").fill("Inspect the public DSH fixture");

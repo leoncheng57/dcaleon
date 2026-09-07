@@ -34,7 +34,8 @@ export const SCREENSHOT_VIEWPORTS = Object.keys(VIEWPORTS) as ScreenshotViewport
  * shadow a later route's stable root.
  */
 export const SCREENSHOT_ROUTES: ReadonlyArray<{ readonly pattern: RegExp; readonly stableRoot: string }> = [
-  { pattern: /^\/$/, stableRoot: "opencode-hub" },
+  { pattern: /^\/$/, stableRoot: "opencode-home" },
+  { pattern: /^\/opencode$/, stableRoot: "opencode-hub" },
   { pattern: /^\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "opencode-conversation" },
   { pattern: /^\/settings$/, stableRoot: "opencode-settings" },
   { pattern: /^\/settings\/notifications$/, stableRoot: "opencode-notifications" },
@@ -46,6 +47,8 @@ export const SCREENSHOT_ROUTES: ReadonlyArray<{ readonly pattern: RegExp; readon
   { pattern: /^\/playbooks(?:\/(?:workflows|reminders)(?:\/[A-Za-z0-9_-]+)?)?$/, stableRoot: "opencode-playbooks" },
   { pattern: /^\/dsh$/, stableRoot: "dsh-home" },
   { pattern: /^\/dsh\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "dsh-conversation" },
+  { pattern: /^\/claude$/, stableRoot: "claude-home" },
+  { pattern: /^\/claude\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "claude-conversation" },
 ];
 
 /**
