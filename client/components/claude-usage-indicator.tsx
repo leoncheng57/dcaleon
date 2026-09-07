@@ -107,8 +107,12 @@ export function ClaudeUsageIndicator({ tokenUsage }: { tokenUsage?: ClaudeTokenU
       </button>
 
       {open && (
+        // The trigger is the first item in the session header's stats row, so it
+        // sits at the far left of the viewport. A right-aligned panel would grow
+        // leftward from there and clip off screen, so anchor to the trigger's left
+        // edge and cap the width to what the viewport can still show.
         <div
-          className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-3 shadow-lg"
+          className="absolute left-0 top-full z-50 mt-1 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-3 shadow-lg"
           data-testid="claude-usage-popover"
         >
           <div className="mb-2 text-xs font-medium">Usage limits</div>

@@ -241,6 +241,47 @@ test.describe("Claude Code runtime", () => {
     await expect(bell).toHaveAttribute("aria-label", /unresolved/u);
   });
 
+  // The usage trigger is the leftmost control in the session header, so a
+  // right-aligned panel grows leftward past the viewport edge and the limits are
+  // unreadable. Stub the endpoint because e2e has no Claude credentials, and the
+  // indicator renders nothing while usage is unavailable.
+  test("opens the usage popover fully inside the viewport at both viewports", async ({ page }) => {
+    await page.route("**/api/claude/usage", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        session: { utilization: 42, resetsAt: null },
+        weekly: { utilization: 17, resetsAt: null },
+        weeklyByModel: { opus: { utilization: 9, resetsAt: null } },
+        subscriptionType: "max",
+        rateLimitTier: "default",
+      }),
+    }));
+    await createSession(page);
+
+    for (const size of [{ width: 1280, height: 900 }, { width: 390, height: 740 }]) {
+      await page.setViewportSize(size);
+      const trigger = page.getByTestId("claude-usage-trigger");
+      await expect(trigger).toBeVisible();
+      await trigger.click();
+      const popover = page.getByTestId("claude-usage-popover");
+      await expect(popover).toBeVisible();
+      await expect(popover).toContainText("Usage limits");
+
+      const box = await popover.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(size.width);
+      // Nothing may leak horizontally out of the document either.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
+        .toBeLessThanOrEqual(1);
+
+      await trigger.click();
+      await expect(popover).toHaveCount(0);
+    }
+  });
+
   test("opens a transcript file reference in the Files drawer", async ({ page }) => {
     await createSession(page);
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");
