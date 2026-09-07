@@ -131,10 +131,10 @@ test.describe("Claude Code runtime", () => {
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
     await page.getByTestId("claude-open-runlog").click();
     await expect(page.getByTestId("opencode-command-list")).toBeVisible();
-    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("Write");
-    // Filtering to edits keeps the Write; reads filter it out.
+    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("claude-e2e.txt");
+    // Filtering to edits keeps the file write; reads filter it out.
     await page.getByTestId("opencode-runlog-filter-edit").click();
-    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("Write");
+    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("claude-e2e.txt");
     await page.getByTestId("opencode-runlog-filter-read").click();
     await expect(page.getByTestId("opencode-runlog-empty")).toBeVisible();
   });
