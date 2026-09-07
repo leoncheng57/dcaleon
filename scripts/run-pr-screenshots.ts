@@ -44,6 +44,8 @@ if (parsed.requests.length > 0) {
 }
 
 const manifest = createManifest(outputDir, parsed.requests, prNumber, sourceSha);
+const coverageFile = option("--coverage-file");
+if (coverageFile) manifest.coverage = JSON.parse(readFileSync(coverageFile, "utf8"));
 writeFileSync(path.join(outputDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 rmSync(normalizedRequest);
 console.log(`Validated ${manifest.screenshots.length} screenshot(s) in ${outputDir}`);

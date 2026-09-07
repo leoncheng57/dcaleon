@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { reviewScenario } from "./review-scenarios.js";
 
 export const MAX_SCREENSHOTS = 10;
 export const MAX_ROUTE_LENGTH = 2_048;
@@ -61,6 +62,7 @@ export function screenshotStableRoot(pathname: string): string | null {
 }
 
 export type ScreenshotRequest = {
+  scenarioId?: string;
   requestedRoute: string;
   fullPage: boolean;
   filenames: Record<ScreenshotViewport, string>;
@@ -78,6 +80,7 @@ export type ScreenshotManifest = {
   prNumber: number;
   sourceSha: string;
   capturedAt: string;
+  coverage?: { reason: string; needsLocalReview: boolean };
   screenshots: Array<Omit<ScreenshotRequest, "filenames"> & {
     captures: Record<ScreenshotViewport, ScreenshotCapture>;
   }>;
@@ -177,21 +180,27 @@ export function normalizeScreenshotRequests(value: unknown): ScreenshotRequest[]
   const seen = new Set<string>();
   return value.map((raw, index) => {
     assertRecord(raw, `screenshot ${index + 1}`);
+    const scenario = raw.scenarioId === undefined ? undefined : reviewScenario(String(raw.scenarioId));
+    if (scenario) {
+      if (raw.requestedRoute !== undefined && raw.requestedRoute !== scenario.route) throw new Error("scenario route does not match the trusted catalogue");
+      raw = { ...raw, requestedRoute: scenario.route, fullPage: !scenario.target };
+    }
     if (typeof raw.requestedRoute !== "string" || typeof raw.fullPage !== "boolean") {
       throw new Error(`screenshot ${index + 1} has invalid route metadata`);
     }
     validateRoute(raw.requestedRoute);
-    const label = screenshotRequestLabel(raw.requestedRoute, raw.fullPage);
+    const label = scenario ? `scenario:${scenario.id}` : screenshotRequestLabel(raw.requestedRoute, raw.fullPage);
     if (seen.has(label)) {
       throw new Error(`route ${JSON.stringify(label)} is requested more than once; a route may appear at most once on its own and at most once as "full:"`);
     }
     seen.add(label);
     return {
+      ...(scenario ? { scenarioId: scenario.id } : {}),
       requestedRoute: raw.requestedRoute,
       fullPage: raw.fullPage,
       filenames: {
-        desktop: screenshotFilename(raw.requestedRoute, raw.fullPage, index, "desktop"),
-        mobile: screenshotFilename(raw.requestedRoute, raw.fullPage, index, "mobile"),
+        desktop: screenshotFilename(scenario ? `${raw.requestedRoute}#review-${scenario.id}` : raw.requestedRoute, raw.fullPage, index, "desktop"),
+        mobile: screenshotFilename(scenario ? `${raw.requestedRoute}#review-${scenario.id}` : raw.requestedRoute, raw.fullPage, index, "mobile"),
       },
     };
   });
@@ -207,11 +216,12 @@ export function parseScreenshotBlock(body: string): { blockFound: boolean; reque
   const block = matches[0][1];
   if (block.length > MAX_BLOCK_LENGTH) throw new Error(`screenshots block exceeds ${MAX_BLOCK_LENGTH} characters`);
 
-  const rawRequests: Array<{ requestedRoute: string; fullPage: boolean }> = [];
+  const rawRequests: Array<{ requestedRoute?: string; fullPage?: boolean; scenarioId?: string }> = [];
   for (const rawLine of block.split(/\r?\n/u)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
     if (line !== rawLine) throw new Error(`route ${JSON.stringify(rawLine)} has leading or trailing whitespace`);
+    if (line.startsWith("scenario:")) { rawRequests.push({ scenarioId: line.slice(9) }); continue; }
     const fullPage = line.startsWith("full:");
     rawRequests.push({ requestedRoute: fullPage ? line.slice("full:".length) : line, fullPage });
   }
@@ -226,20 +236,23 @@ export function pngDimensions(buffer: Buffer): { width: number; height: number }
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
+export function validCaptureDimensions(request: Pick<ScreenshotRequest, "fullPage" | "scenarioId">, viewport: ScreenshotViewport, dimensions: { width: number; height: number }): boolean {
+  const expected = VIEWPORTS[viewport];
+  if (request.scenarioId && reviewScenario(request.scenarioId).target) return dimensions.width > 0 && dimensions.width <= expected.width && dimensions.height > 0 && dimensions.height <= MAX_FULL_PAGE_HEIGHT;
+  return dimensions.width === expected.width && (request.fullPage ? dimensions.height >= expected.height && dimensions.height <= MAX_FULL_PAGE_HEIGHT : dimensions.height === expected.height);
+}
+
 export function createManifest(outputDir: string, requests: ScreenshotRequest[], prNumber: number, sourceSha: string): ScreenshotManifest {
   if (!Number.isSafeInteger(prNumber) || prNumber < 0) throw new Error("prNumber must be a non-negative integer");
   if (!/^(local|[0-9a-f]{40})$/u.test(sourceSha)) throw new Error("sourceSha must be local or a 40-character lowercase commit SHA");
   const capturedAt = new Date().toISOString();
-  const screenshots = requests.map(({ requestedRoute, fullPage, filenames }) => {
+  const screenshots = requests.map(({ requestedRoute, fullPage, filenames, scenarioId }) => {
     const captures = Object.fromEntries(SCREENSHOT_VIEWPORTS.map((viewport) => {
       const filename = filenames[viewport];
       const buffer = readFileSync(path.join(outputDir, filename));
       if (buffer.length > MAX_PNG_BYTES) throw new Error(`${filename} exceeds ${MAX_PNG_BYTES} bytes`);
       const dimensions = pngDimensions(buffer);
-      const expected = VIEWPORTS[viewport];
-      if (dimensions.width !== expected.width || (fullPage
-        ? dimensions.height < expected.height || dimensions.height > MAX_FULL_PAGE_HEIGHT
-        : dimensions.height !== expected.height)) {
+      if (!validCaptureDimensions({ fullPage, scenarioId }, viewport, dimensions)) {
         throw new Error(`${filename} has invalid capture dimensions`);
       }
       return [viewport, {
@@ -249,7 +262,7 @@ export function createManifest(outputDir: string, requests: ScreenshotRequest[],
         sha256: createHash("sha256").update(buffer).digest("hex"),
       }];
     })) as Record<ScreenshotViewport, ScreenshotCapture>;
-    return { requestedRoute, fullPage, captures };
+    return { requestedRoute, fullPage, ...(scenarioId ? { scenarioId } : {}), captures };
   });
   return { schemaVersion: 2, prNumber, sourceSha, capturedAt, screenshots };
 }
@@ -267,12 +280,13 @@ export function validateAndPublishBundle(bundleDir: string, destination: string,
   }
   const requests = normalizeScreenshotRequests(raw.screenshots.map((item, index) => {
     assertRecord(item, `manifest screenshot ${index + 1}`);
-    return { requestedRoute: item.requestedRoute, fullPage: item.fullPage };
+    return { requestedRoute: item.requestedRoute, fullPage: item.fullPage, ...(item.scenarioId !== undefined ? { scenarioId: item.scenarioId } : {}) };
   }));
   const expectedFiles = new Set(["manifest.json", ...requests.flatMap(({ filenames }) => SCREENSHOT_VIEWPORTS.map((viewport) => filenames[viewport]))]);
   if (entries.length !== expectedFiles.size || entries.some((entry) => !expectedFiles.has(entry))) throw new Error("bundle contains an unexpected or missing file");
 
   const manifest = raw as unknown as ScreenshotManifest;
+  if (manifest.coverage && (typeof manifest.coverage.reason !== "string" || manifest.coverage.reason.length > 2000 || typeof manifest.coverage.needsLocalReview !== "boolean")) throw new Error("invalid coverage metadata");
   for (const [index, request] of requests.entries()) {
     const declared = manifest.screenshots[index];
     assertRecord(declared?.captures, `manifest screenshot ${index + 1} captures`);
@@ -284,11 +298,7 @@ export function validateAndPublishBundle(bundleDir: string, destination: string,
       const buffer = readFileSync(filePath);
       const dimensions = pngDimensions(buffer);
       const digest = createHash("sha256").update(buffer).digest("hex");
-      const expectedDimensions = VIEWPORTS[viewport];
-      const validDimensions = dimensions.width === expectedDimensions.width
-        && (request.fullPage
-          ? dimensions.height >= expectedDimensions.height && dimensions.height <= MAX_FULL_PAGE_HEIGHT
-          : dimensions.height === expectedDimensions.height);
+      const validDimensions = validCaptureDimensions(request, viewport, dimensions);
       if (!validDimensions || buffer.length > MAX_PNG_BYTES || capture.bytes !== buffer.length || capture.sha256 !== digest || capture.dimensions?.width !== dimensions.width || capture.dimensions?.height !== dimensions.height) {
         throw new Error(`${expectedFilename} does not match its manifest metadata`);
       }

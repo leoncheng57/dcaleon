@@ -18,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -26,17 +30,21 @@ jobs:
 
       - run: npm ci
 
-      - name: Read screenshot request from event
-        run: jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-body.txt"
+      - name: Select review coverage without AI keys
+        id: selection
+        run: |
+          npx tsx scripts/select-review-captures.ts "$RUNNER_TEMP/review-requests.json" "$RUNNER_TEMP/review-coverage.json"
+          echo "count=$(jq length "$RUNNER_TEMP/review-requests.json")" >> "$GITHUB_OUTPUT"
 
       - name: Install Chromium
-        if: contains(github.event.pull_request.body || '', '```screenshots')
+        if: steps.selection.outputs.count != '0'
         run: npx playwright install --with-deps chromium
 
       - name: Capture and validate screenshots
         run: >-
           npm run screenshots --
-          --body-file "$RUNNER_TEMP/pr-body.txt"
+          --request-file "$RUNNER_TEMP/review-requests.json"
+          --coverage-file "$RUNNER_TEMP/review-coverage.json"
           --output-dir screenshot-output
           --pr-number "${{ github.event.pull_request.number }}"
           --sha "${{ github.event.pull_request.head.sha }}"
