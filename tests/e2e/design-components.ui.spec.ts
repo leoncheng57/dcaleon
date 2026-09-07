@@ -54,6 +54,15 @@ for (const viewport of [{ width: 320, height: 740 }, { width: 390, height: 740 }
 
     test("is reachable from Docs and fits light, dark, and reduced-motion views", async ({ page }) => {
       await page.goto("/docs");
+      await page.getByTestId("opencode-nav-more").click();
+      await page.getByTestId("opencode-nav-design-components").click();
+      await expect(page).toHaveURL(/\/design-components$/);
+      await page.getByTestId("opencode-nav-more").click();
+      await page.getByTestId("opencode-palette-open").click();
+      await page.getByTestId("opencode-palette-input").fill("Design components");
+      await page.getByTestId("opencode-palette-option").filter({ hasText: "Design components" }).click();
+      await expect(page.getByTestId("opencode-command-palette")).toHaveCount(0);
+      await page.goto("/docs");
       await page.getByTestId("opencode-docs-design-components").click();
       await expect(page).toHaveURL(/\/design-components$/);
       for (const colorScheme of ["light", "dark"] as const) {
