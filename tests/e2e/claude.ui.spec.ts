@@ -144,6 +144,8 @@ test.describe("Claude Code runtime", () => {
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Hello from mock claude");
+    // Export lives in the shared More menu, like OpenCode's secondary actions.
+    await page.getByTestId("claude-session-menu-trigger").click();
     await page.getByTestId("claude-open-export").click();
     await expect(page.getByTestId("claude-export-md")).toBeVisible();
     await expect(page.getByTestId("claude-export-json")).toBeVisible();

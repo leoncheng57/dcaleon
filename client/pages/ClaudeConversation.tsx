@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Download, Eye, FolderOpen, GitBranch, GitMerge, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -14,6 +14,7 @@ import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
 import { SessionShell } from "../components/session-shell.js";
+import { SessionOverflowMenu } from "../components/session-overflow-menu.js";
 import { ReminderPicker } from "../components/reminder-picker.js";
 import { WorkflowPicker } from "../components/workflow-picker.js";
 import { api, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary, type ReminderSummary, type WorkflowSummary } from "../lib/api.js";
@@ -480,8 +481,16 @@ export function ClaudeConversationPage() {
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setRunlogOpen(true)} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setExportOpen(true)} disabled={events.length === 0} aria-label="Export transcript" title="Export" data-testid="claude-open-export"><Download aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" disabled aria-label="Live preview coming soon" title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+            {session?.prUrl && (
+              <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} aria-label="Open pull request status" title="Reviews" data-testid="claude-open-reviews"><GitPullRequest aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+            )}
+            <SessionOverflowMenu
+              testIds={{ root: "claude-session-menu", trigger: "claude-session-menu-trigger", panel: "claude-session-menu-panel" }}
+              items={[
+                { id: "export", label: "Export transcript", icon: <Download aria-hidden="true" size={15} />, onSelect: () => setExportOpen(true), disabled: events.length === 0, testId: "claude-open-export" },
+                { id: "preview", label: "Live preview", icon: <Eye aria-hidden="true" size={15} />, onSelect: () => undefined, disabled: true, title: "Live preview is coming soon", testId: "claude-preview-soon" },
+              ]}
+            />
           </>
         ),
       }}
