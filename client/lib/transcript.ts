@@ -64,6 +64,15 @@ export interface AgentEvent extends TranscriptBase {
   text: string;
   /** Mode this response was produced under, when the backend states it exactly. */
   mode?: MessageMode;
+  /** Finalised accounting, attached only to the turn's last prose row. */
+  messageCost?: number;
+  cumulativeCost?: number;
+  messageDurationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
 /**

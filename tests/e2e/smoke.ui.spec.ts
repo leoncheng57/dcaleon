@@ -675,6 +675,15 @@ test.describe("transcript", () => {
     await expect(page.getByTestId("opencode-thought")).toContainText("2.0s");
   });
 
+  test("shows muted per-message cost and latency with an ASCII breakdown", async ({ page }) => {
+    await page.goto(conversation);
+    const metrics = page.getByTestId("opencode-message-metrics");
+    await expect(metrics).toContainText("8.0s · $0.0421 · $0.0421 session");
+    await metrics.locator("summary").press("Enter");
+    await expect(metrics.getByTestId("opencode-message-metrics-diagram")).toContainText("prompt -> agent turn -> response");
+    await expect(metrics.getByTestId("opencode-message-metrics-diagram")).toContainText("100 in + 900 out + 250 reasoning");
+  });
+
   test("shows live context usage against the model limit", async ({ page }) => {
     await page.goto(conversation);
     await expect(page.getByTestId("opencode-context-tokens")).toContainText("%");

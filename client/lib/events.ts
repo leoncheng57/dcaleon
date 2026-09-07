@@ -610,14 +610,53 @@ export function normalizeTranscript(
 ): Transcript {
   const events: TranscriptEvent[] = [];
   const usage: UsageSnapshot[] = [];
+  let cumulativeCost = 0;
 
   for (const message of messages) {
-    events.push(...normalizeMessage(message));
+    const messageEvents = normalizeMessage(message);
     const messageId = message.info?.id ?? "unknown";
+    const messageUsage: UsageSnapshot[] = [];
     for (const part of message.parts || []) {
       const snapshot = usageFrom(part, messageId);
-      if (snapshot) usage.push(snapshot);
+      if (snapshot) {
+        usage.push(snapshot);
+        messageUsage.push(snapshot);
+      }
     }
+
+    if (message.info?.role === "assistant" && messageUsage.length > 0) {
+      const messageCost = messageUsage.reduce((total, snapshot) => total + snapshot.cost, 0);
+      cumulativeCost += messageCost;
+      const tokens = messageUsage.reduce<UsageSnapshot["tokens"]>((total, snapshot) => ({
+        input: total.input + snapshot.tokens.input,
+        output: total.output + snapshot.tokens.output,
+        reasoning: total.reasoning + snapshot.tokens.reasoning,
+        cacheRead: total.cacheRead + snapshot.tokens.cacheRead,
+        cacheWrite: total.cacheWrite + snapshot.tokens.cacheWrite,
+        ...(
+          total.total === undefined && snapshot.tokens.total === undefined
+            ? {}
+            : { total: (total.total ?? 0) + (snapshot.tokens.total ?? 0) }
+        ),
+      }), { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 });
+      const created = message.info.time?.created;
+      const completed = message.info.time?.completed;
+      const durationMs = typeof created === "number" && typeof completed === "number" && completed >= created
+        ? completed - created
+        : undefined;
+      const prose = messageEvents.filter((event): event is Extract<TranscriptEvent, { kind: "agent" }> => event.kind === "agent").at(-1);
+      if (prose) {
+        prose.messageCost = messageCost;
+        prose.cumulativeCost = cumulativeCost;
+        if (durationMs !== undefined) prose.messageDurationMs = durationMs;
+        prose.inputTokens = tokens.input;
+        prose.outputTokens = tokens.output;
+        prose.reasoningTokens = tokens.reasoning;
+        prose.cacheReadTokens = tokens.cacheRead;
+        prose.cacheWriteTokens = tokens.cacheWrite;
+      }
+    }
+    events.push(...messageEvents);
   }
 
   return {

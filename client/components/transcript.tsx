@@ -50,6 +50,33 @@ function TimeLabel({ timestamp, className }: { timestamp: string; className?: st
   );
 }
 
+function formatMessageCost(cost: number): string {
+  return `$${cost.toFixed(cost < 1 ? 4 : 2)}`;
+}
+
+function MessageMetrics({ event }: { event: AgentEvent }) {
+  if (event.messageCost === undefined || event.cumulativeCost === undefined) return null;
+  const duration = event.messageDurationMs === undefined ? null : formatDurationMs(event.messageDurationMs);
+  return (
+    <details className="group text-[10px] tabular-nums text-[var(--color-text-muted)] opacity-70" data-testid="opencode-message-metrics">
+      <summary className="cursor-pointer list-none whitespace-nowrap [&::-webkit-details-marker]:hidden">
+        <span className="sr-only">Message metrics: </span>
+        {duration && <><span title="Total agent turn latency">{duration}</span><span aria-hidden> · </span></>}
+        <span title="Cost of this agent message">{formatMessageCost(event.messageCost)}</span>
+        <span aria-hidden> · </span>
+        <span title="Cumulative session cost">{formatMessageCost(event.cumulativeCost)} session</span>
+      </summary>
+      <pre className="mt-1 max-w-full overflow-x-auto text-right font-mono text-[10px] leading-relaxed" data-testid="opencode-message-metrics-diagram">{`prompt -> agent turn -> response
+   |${duration ? `---- ${duration} ----` : "-- latency unavailable --"}|
+   +-> ${formatMessageCost(event.messageCost)} this message
+       +-> ${formatMessageCost(event.cumulativeCost)} session total
+
+tokens: ${event.inputTokens ?? 0} in + ${event.outputTokens ?? 0} out + ${event.reasoningTokens ?? 0} reasoning
+cache:  ${event.cacheReadTokens ?? 0} read + ${event.cacheWriteTokens ?? 0} write`}</pre>
+    </details>
+  );
+}
+
 /**
  * One attachment chip.
  *
@@ -323,9 +350,10 @@ function AgentProse({ event, onExport }: { event: AgentEvent; onExport?: (event:
       >
         <Markdown source={event.text} />
       </div>
-      <div className="mt-1 flex justify-end">
+      <div className="mt-1 flex flex-wrap items-start justify-end gap-x-2">
         <ShareAction event={event} onShare={onExport} />
         <TimeLabel timestamp={event.timestamp} />
+        <MessageMetrics event={event} />
       </div>
     </div>
   );
