@@ -297,7 +297,7 @@ describe("parsePullRequestNumber", () => {
   it("accepts the three forms a human actually has to hand", () => {
     expect(parsePullRequestNumber("253")).toBe(253);
     expect(parsePullRequestNumber(" #253 ")).toBe(253);
-    expect(parsePullRequestNumber("https://github.com/leoncheng57/custom-dca-opencode/pull/253")).toBe(253);
+    expect(parsePullRequestNumber("https://github.com/leoncheng57/dcaleon/pull/253")).toBe(253);
     expect(parsePullRequestNumber("https://github.com/o/r/pull/253/files#diff-abc")).toBe(253);
   });
 

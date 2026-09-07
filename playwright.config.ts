@@ -47,7 +47,7 @@ const stateFiles =
 // sessions can branch, merge and discard without perturbing the OpenCode
 // fixtures. ensureGitFixture repairs it to a known baseline on every run, which
 // is what lets a merge from the previous run not accumulate.
-const CLAUDE_PROJECT = `/tmp/custom-dca-opencode-claude-e2e-project-${PORT}`;
+const CLAUDE_PROJECT = `/tmp/dcaleon-claude-e2e-project-${PORT}`;
 if (process.env.TEST_WORKER_INDEX === undefined) {
   ensureGitFixture({
     directory: CLAUDE_PROJECT,
@@ -57,7 +57,7 @@ if (process.env.TEST_WORKER_INDEX === undefined) {
   });
 }
 
-const LOG_DIR = `/tmp/custom-dca-opencode-e2e-logs-${PORT}`;
+const LOG_DIR = `/tmp/dcaleon-e2e-logs-${PORT}`;
 if (process.env.TEST_WORKER_INDEX === undefined) {
   mkdirSync(LOG_DIR, { recursive: true });
   const at = (offsetMs: number) => new Date(Date.UTC(2026, 7, 29, 12, 0, 0) + offsetMs).toISOString();
@@ -123,7 +123,7 @@ export const appServer = {
     PROJECTS_DIR: "/tmp",
     PROJECT_PINS_FILE: stateFiles.PROJECT_PINS_FILE,
     MODEL_PINS_FILE: stateFiles.MODEL_PINS_FILE,
-    OPENCODE_WORKTREE_ROOT: "/tmp/custom-dca-opencode-e2e-worktrees",
+    OPENCODE_WORKTREE_ROOT: "/tmp/dcaleon-e2e-worktrees",
     NOTIFICATION_PREFS_FILE: stateFiles.NOTIFICATION_PREFS_FILE,
     NOTIFICATION_HISTORY_FILE: stateFiles.NOTIFICATION_HISTORY_FILE,
     INSTRUCTION_AUDIT_FILE: stateFiles.INSTRUCTION_AUDIT_FILE,
@@ -138,7 +138,7 @@ export const appServer = {
     // NODE_ENV is set on the server command above, never on the build.
     DSH_TEST_UNSAFE_BRIDGE: "true",
     DSH_SDK_VERSION: "0.1.1rc2",
-    DSH_STATE_DIR: `/tmp/custom-dca-opencode-dsh-state-${PORT}`,
+    DSH_STATE_DIR: `/tmp/dcaleon-dsh-state-${PORT}`,
     DSH_BRIDGE_SCRIPT: `${process.cwd()}/tests/e2e/mock-dsh-bridge.py`,
     DSH_PRESETS_JSON: JSON.stringify([
       {
@@ -165,14 +165,14 @@ export const appServer = {
       label: "DSH E2E workspace",
       directory: process.cwd(),
     }]),
-    DSH_EXPERIMENT_LEDGER: `/tmp/custom-dca-opencode-dsh-ledger-${PORT}.json`,
+    DSH_EXPERIMENT_LEDGER: `/tmp/dcaleon-dsh-ledger-${PORT}.json`,
     CLAUDE_RUNTIME_ENABLED: "true",
     // Unsafe path (mock binary, no Seatbelt) is refused unless NODE_ENV=test,
     // which is set on the server command above, never on the build.
     CLAUDE_TEST_UNSAFE: "true",
     CLAUDE_CLI_VERSION: "2.1.257",
     CLAUDE_BINARY: `${process.cwd()}/tests/e2e/mock-claude.mjs`,
-    CLAUDE_STATE_DIR: `/tmp/custom-dca-opencode-claude-state-${PORT}`,
+    CLAUDE_STATE_DIR: `/tmp/dcaleon-claude-state-${PORT}`,
     CLAUDE_PRESETS_JSON: JSON.stringify([
       { id: "e2e-readonly", label: "E2E read-only", model: "mock-claude", effort: "high", permissionMode: "default", mode: "read-only" },
       { id: "e2e-build", label: "E2E Build", model: "mock-claude-opus", permissionMode: "bypassPermissions", mode: "build" },
@@ -182,7 +182,7 @@ export const appServer = {
       label: "Claude E2E workspace",
       directory: CLAUDE_PROJECT,
     }]),
-    CLAUDE_EXPERIMENT_LEDGER: `/tmp/custom-dca-opencode-claude-ledger-${PORT}.json`,
+    CLAUDE_EXPERIMENT_LEDGER: `/tmp/dcaleon-claude-ledger-${PORT}.json`,
   },
 };
 

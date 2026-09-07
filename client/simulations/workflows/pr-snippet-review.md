@@ -57,7 +57,7 @@ Step 3 is the test that used to assert the opposite.
 
 ```
 $ gh pr comment 341 -F -
-  https://github.com/leoncheng57/custom-dca-opencode/pull/341#issuecomment-...
+  https://github.com/leoncheng57/dcaleon/pull/341#issuecomment-...
 ```
 
 ## assistant

@@ -9,7 +9,7 @@
 // The fix is per-run paths plus a startup cleanup, so the two things worth
 // pinning down mechanically are: the paths really are unique per run, and the
 // cleanup really cannot reach a file it was not given. The second matters more
-// than it looks — a glob over `/tmp/custom-dca-opencode-e2e-*` would delete a
+// than it looks — a glob over `/tmp/dcaleon-e2e-*` would delete a
 // sibling worktree's live state, turning an isolation fix into a worse bug.
 //
 // This file deliberately does NOT import playwright.config.ts. Importing it
@@ -100,13 +100,13 @@ describe("e2e state file cleanup", () => {
   it("refuses to delete a path it was not given", () => {
     const outsiders = [
       "/tmp/some-other-tool.json",
-      "/tmp/custom-dca-opencode-e2e-worktrees", // the worktree ROOT is a directory and is not ours to remove
-      "/tmp/custom-dca-opencode-e2e-worktrees/project/state.json", // nested, so not "directly under" the prefix
-      "/tmp/custom-dca-opencode-e2e-*.json", // a glob is never a path
-      "/tmp/custom-dca-opencode-e2e-../../etc/passwd",
+      "/tmp/dcaleon-e2e-worktrees", // the worktree ROOT is a directory and is not ours to remove
+      "/tmp/dcaleon-e2e-worktrees/project/state.json", // nested, so not "directly under" the prefix
+      "/tmp/dcaleon-e2e-*.json", // a glob is never a path
+      "/tmp/dcaleon-e2e-../../etc/passwd",
       `${E2E_STATE_PREFIX}notification-history.json.bak`,
       `${E2E_STATE_PREFIX}`,
-      "custom-dca-opencode-e2e-relative.json",
+      "dcaleon-e2e-relative.json",
       "",
       42,
       null,
@@ -221,7 +221,7 @@ describe("playwright config wiring", () => {
     // The worktree ROOT is deliberately still a constant directory (it is not
     // BFF state and does not accumulate across runs), so only `.json` state
     // files are forbidden here.
-    expect(source.match(/\/tmp\/custom-dca-opencode-e2e-[^"`\s]*\.json/g) ?? []).toEqual([]);
+    expect(source.match(/\/tmp\/dcaleon-e2e-[^"`\s]*\.json/g) ?? []).toEqual([]);
   });
 
   it("only mutates the filesystem in the runner, not in re-imported workers", () => {

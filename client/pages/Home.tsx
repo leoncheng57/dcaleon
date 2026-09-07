@@ -5,7 +5,7 @@ import { ExternalLink } from "lucide-react";
  * Claude) is a peer reached from the navbar, so the root no longer belongs to
  * any one of them. Anything worth explaining lives in the public repository.
  */
-export const REPOSITORY_URL = "https://github.com/leoncheng57/custom-dca-opencode";
+export const REPOSITORY_URL = "https://github.com/leoncheng57/dcaleon";
 
 export function HomePage() {
   return (
@@ -22,7 +22,7 @@ export function HomePage() {
           className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-info)] underline underline-offset-4"
           data-testid="opencode-home-repository"
         >
-          leoncheng57/custom-dca-opencode
+          leoncheng57/dcaleon
           <ExternalLink aria-hidden="true" size={14} />
         </a>
       </div>

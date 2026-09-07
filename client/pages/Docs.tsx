@@ -71,7 +71,7 @@ export function DocsPage() {
               Understand the system before changing the seam.
             </h1>
             <p className="mt-5 max-w-2xl text-sm leading-relaxed text-[var(--color-text-muted)] sm:text-base">
-              A visual entry point to the architecture, operating boundaries, and evidence behind custom-dca-opencode.
+              A visual entry point to the architecture, operating boundaries, and evidence behind dcaleon.
             </p>
           </div>
           <aside className="border-l-4 border-[var(--color-border-focus)] bg-[var(--color-background-surface-neutral-muted)] p-5">

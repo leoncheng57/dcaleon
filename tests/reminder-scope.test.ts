@@ -23,14 +23,14 @@ afterAll(async () => {
 
 describe("parseGitHubRemote", () => {
   it("accepts the spellings git actually writes", () => {
-    const expected = { owner: "leoncheng57", repo: "custom-dca-opencode" };
+    const expected = { owner: "leoncheng57", repo: "dcaleon" };
     for (const remote of [
-      "https://github.com/leoncheng57/custom-dca-opencode.git",
-      "https://github.com/leoncheng57/custom-dca-opencode",
-      "git@github.com:leoncheng57/custom-dca-opencode.git",
-      "ssh://git@github.com/leoncheng57/custom-dca-opencode.git",
-      "https://github.com/leoncheng57/custom-dca-opencode/",
-      "  https://github.com/leoncheng57/custom-dca-opencode.git  ",
+      "https://github.com/leoncheng57/dcaleon.git",
+      "https://github.com/leoncheng57/dcaleon",
+      "git@github.com:leoncheng57/dcaleon.git",
+      "ssh://git@github.com/leoncheng57/dcaleon.git",
+      "https://github.com/leoncheng57/dcaleon/",
+      "  https://github.com/leoncheng57/dcaleon.git  ",
     ]) {
       expect(parseGitHubRemote(remote), remote).toEqual(expected);
     }
@@ -39,12 +39,12 @@ describe("parseGitHubRemote", () => {
   it("refuses look-alikes rather than matching loosely", () => {
     for (const remote of [
       // A different host that embeds the right-looking path.
-      "https://evil.test/leoncheng57/custom-dca-opencode.git",
-      "git@evil.test:leoncheng57/custom-dca-opencode.git",
+      "https://evil.test/leoncheng57/dcaleon.git",
+      "git@evil.test:leoncheng57/dcaleon.git",
       // A subdomain is not github.com.
-      "https://github.com.evil.test/leoncheng57/custom-dca-opencode",
+      "https://github.com.evil.test/leoncheng57/dcaleon",
       // Extra path segments must not be collapsed to owner/repo.
-      "https://github.com/leoncheng57/custom-dca-opencode/tree/main",
+      "https://github.com/leoncheng57/dcaleon/tree/main",
       "https://github.com/leoncheng57",
       // Nonsense and empties.
       "",
@@ -57,17 +57,17 @@ describe("parseGitHubRemote", () => {
   });
 
   it("compares case-insensitively once formatted", () => {
-    const upper = parseGitHubRemote("https://github.com/LeonCheng57/Custom-DCA-OpenCode.git");
+    const upper = parseGitHubRemote("https://github.com/LeonCheng57/Dcaleon.git");
     expect(upper).not.toBeNull();
-    expect(formatIdentity(upper!)).toBe("leoncheng57/custom-dca-opencode");
+    expect(formatIdentity(upper!)).toBe("leoncheng57/dcaleon");
   });
 });
 
 describe("resolveRepositoryIdentity", () => {
   it("reads the origin remote of a real repository", async () => {
-    const directory = await repository("https://github.com/leoncheng57/custom-dca-opencode.git");
+    const directory = await repository("https://github.com/leoncheng57/dcaleon.git");
     const identity = await resolveRepositoryIdentity(directory);
-    expect(identity && formatIdentity(identity)).toBe("leoncheng57/custom-dca-opencode");
+    expect(identity && formatIdentity(identity)).toBe("leoncheng57/dcaleon");
   });
 
   it("returns null for a repository with no origin", async () => {
@@ -85,7 +85,7 @@ describe("resolveRepositoryIdentity", () => {
   });
 
   it("treats a worktree as the same identity as its primary checkout", async () => {
-    const primary = await repository("https://github.com/leoncheng57/custom-dca-opencode.git");
+    const primary = await repository("https://github.com/leoncheng57/dcaleon.git");
     execFileSync("git", ["-C", primary, "commit", "-q", "--allow-empty", "-m", "seed"], {
       env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
     });
@@ -95,7 +95,7 @@ describe("resolveRepositoryIdentity", () => {
     // The worktree directory name says nothing about the repository, which is
     // exactly why identity must come from git rather than the path.
     const identity = await resolveRepositoryIdentity(linked);
-    expect(identity && formatIdentity(identity)).toBe("leoncheng57/custom-dca-opencode");
+    expect(identity && formatIdentity(identity)).toBe("leoncheng57/dcaleon");
   });
 });
 
@@ -105,7 +105,7 @@ describe("scope_repository frontmatter", () => {
   ].join("\n"));
 
   it("parses and lowercases a valid owner/repo", () => {
-    expect(preset("LeonCheng57/Custom-DCA-OpenCode")?.scopeRepository).toBe("leoncheng57/custom-dca-opencode");
+    expect(preset("LeonCheng57/Dcaleon")?.scopeRepository).toBe("leoncheng57/dcaleon");
   });
 
   it("rejects the preset outright when the scope is malformed", () => {

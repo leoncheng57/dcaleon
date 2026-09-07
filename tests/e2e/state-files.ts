@@ -20,7 +20,7 @@
 // So every run gets its own file set and starts from an empty one.
 //
 // Deletion here is deliberately narrow. A sibling worktree may be mid-run in the
-// same /tmp right now, so this module never globs `/tmp/custom-dca-opencode-e2e-*`:
+// same /tmp right now, so this module never globs `/tmp/dcaleon-e2e-*`:
 // it only unlinks paths it was handed, and it refuses anything that is not a
 // plain `.json` file sitting directly under the e2e prefix. That is the same
 // principle the mock's `/test/*/reset` endpoints already follow — a reset may
@@ -29,7 +29,7 @@
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 /** Every e2e state file lives directly under this prefix, and nothing else may be removed. */
-export const E2E_STATE_PREFIX = "/tmp/custom-dca-opencode-e2e-";
+export const E2E_STATE_PREFIX = "/tmp/dcaleon-e2e-";
 
 /** A plain `<name>.json` directly under the prefix: no `/`, no `..`, no globs, no whitespace. */
 const OWNED_FILE = /^[A-Za-z0-9._-]+\.json$/;

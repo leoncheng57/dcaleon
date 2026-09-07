@@ -380,7 +380,7 @@ describe("GitHub planning issue creation", () => {
       expect(init?.method).toBe("POST");
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBe("Bearer server-secret");
-      expect(headers.get("user-agent")).toBe("custom-dca-opencode");
+      expect(headers.get("user-agent")).toBe("dcaleon");
       expect(JSON.parse(String(init?.body))).toEqual({ title: "New issue", body: "Details", labels: ["frontend"] });
       return response(rawItem(123, { title: "New issue", html_url: "https://attacker.invalid/issue" }), 201);
     });

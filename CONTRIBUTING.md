@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for improving custom-dca-opencode. This guide covers the repository's
+Thank you for improving dcaleon. This guide covers the repository's
 development workflow and the checks that pull requests must pass.
 
 Use the self-contained [visual reading index](docs/contributing/index.html) to choose a
@@ -81,7 +81,7 @@ services.
 
 The Catalog panel and the Tools page report **what the connected OpenCode process says**.
 None of it is proof that a capability ran, and the distinction matters when debugging
-(issue [#55](https://github.com/leoncheng57/custom-dca-opencode/issues/55)):
+(issue [#55](https://github.com/leoncheng57/dcaleon/issues/55)):
 
 | State | Means | Does **not** mean |
 |---|---|---|
@@ -350,7 +350,7 @@ A screenshot documents appearance and is not proof that the interaction is corre
 keep a real assertion for the behavior in a permanent spec such as
 [`tests/e2e/workspace-files.ui.spec.ts`](tests/e2e/workspace-files.ui.spec.ts). Broader
 capture and publishing automation is tracked in
-[#119](https://github.com/leoncheng57/custom-dca-opencode/issues/119).
+[#119](https://github.com/leoncheng57/dcaleon/issues/119).
 
 ## Security-sensitive changes
 

@@ -68,10 +68,10 @@ const baseMessages: RawMessage[] = [
 ];
 
 const planningItems: PlanningItem[] = [
-  { id: "112", number: 112, type: "issue", title: "CICD. add a preview deployed pr step", state: "open", merged: false, labels: ["priority:medium", "deployment"], author: "leoncheng57", url: "https://github.com/leoncheng57/custom-dca-opencode/issues/112", createdAt: "2026-08-23T10:00:00Z", updatedAt: "2026-08-25T18:00:00Z", commentCount: 1, childCount: 0, completedChildCount: 0, parentNumber: 153 },
-  { id: "153", number: 153, type: "issue", title: "Use GitHub's deployment infra to build a public simulator", state: "open", merged: false, labels: ["priority:high", "deployment"], author: "leoncheng57", url: "https://github.com/leoncheng57/custom-dca-opencode/issues/153", createdAt: "2026-08-24T09:00:00Z", updatedAt: "2026-08-25T19:00:00Z", commentCount: 2, childCount: 2, completedChildCount: 1, parentNumber: null },
-  { id: "178", number: 178, type: "pull_request", title: "Show native task child model provenance", state: "open", merged: false, labels: ["priority:medium", "frontend"], author: "contributor", url: "https://github.com/leoncheng57/custom-dca-opencode/pull/178", createdAt: "2026-08-25T13:00:00Z", updatedAt: "2026-08-25T20:00:00Z", commentCount: 3, childCount: 0, completedChildCount: 0, parentNumber: null },
-  { id: "109", number: 109, type: "issue", title: "Publish the migrated agent-skills catalog", state: "closed", merged: false, labels: ["priority:low", "documentation"], author: "leoncheng57", url: "https://github.com/leoncheng57/custom-dca-opencode/issues/109", createdAt: "2026-08-20T09:00:00Z", updatedAt: "2026-08-23T19:00:00Z", commentCount: 4, childCount: 0, completedChildCount: 0, parentNumber: 153 },
+  { id: "112", number: 112, type: "issue", title: "CICD. add a preview deployed pr step", state: "open", merged: false, labels: ["priority:medium", "deployment"], author: "leoncheng57", url: "https://github.com/leoncheng57/dcaleon/issues/112", createdAt: "2026-08-23T10:00:00Z", updatedAt: "2026-08-25T18:00:00Z", commentCount: 1, childCount: 0, completedChildCount: 0, parentNumber: 153 },
+  { id: "153", number: 153, type: "issue", title: "Use GitHub's deployment infra to build a public simulator", state: "open", merged: false, labels: ["priority:high", "deployment"], author: "leoncheng57", url: "https://github.com/leoncheng57/dcaleon/issues/153", createdAt: "2026-08-24T09:00:00Z", updatedAt: "2026-08-25T19:00:00Z", commentCount: 2, childCount: 2, completedChildCount: 1, parentNumber: null },
+  { id: "178", number: 178, type: "pull_request", title: "Show native task child model provenance", state: "open", merged: false, labels: ["priority:medium", "frontend"], author: "contributor", url: "https://github.com/leoncheng57/dcaleon/pull/178", createdAt: "2026-08-25T13:00:00Z", updatedAt: "2026-08-25T20:00:00Z", commentCount: 3, childCount: 0, completedChildCount: 0, parentNumber: null },
+  { id: "109", number: 109, type: "issue", title: "Publish the migrated agent-skills catalog", state: "closed", merged: false, labels: ["priority:low", "documentation"], author: "leoncheng57", url: "https://github.com/leoncheng57/dcaleon/issues/109", createdAt: "2026-08-20T09:00:00Z", updatedAt: "2026-08-23T19:00:00Z", commentCount: 4, childCount: 0, completedChildCount: 0, parentNumber: 153 },
 ];
 
 const defaultPreferences: NotificationPreferences = {
@@ -433,7 +433,7 @@ export function createPublicSimulator(): typeof fetch {
     if (path === "/api/workspace/commits") return response({ commits: [{ sha: "abc123456789", shortSha: "abc1234", subject: "Add PR preview deployment", author: "Preview Contributor", authoredAt: "2026-08-25T18:30:00Z" }, { sha: "def456789012", shortSha: "def4567", subject: "Add deterministic simulator fixtures", author: "Preview Contributor", authoredAt: "2026-08-25T18:00:00Z" }] });
     if (path === "/api/worktrees") return response({ worktrees: [{ name: "preview-pipeline", branch: "feat/pr-preview-pipeline", directory: `${SIMULATOR_DIRECTORY}.worktrees/preview-pipeline` }] });
 
-    if (path === "/api/planning/items") return response({ repository: { owner: "leoncheng57", repo: "custom-dca-opencode", url: "https://github.com/leoncheng57/custom-dca-opencode" }, items: planningItems, truncated: false, epicsTruncated: false, fetchedAt: new Date().toISOString() });
+    if (path === "/api/planning/items") return response({ repository: { owner: "leoncheng57", repo: "dcaleon", url: "https://github.com/leoncheng57/dcaleon" }, items: planningItems, truncated: false, epicsTruncated: false, fetchedAt: new Date().toISOString() });
     if (path.startsWith("/api/observability/logs")) {
       const source = new URLSearchParams(path.split("?")[1] ?? "").get("source") ?? "audit";
       const now = new Date();
@@ -468,7 +468,7 @@ export function createPublicSimulator(): typeof fetch {
         platform: "darwin",
         servicesAvailable: true,
         services: [
-          { label: "ai.custom-dca-opencode.bff", role: "bff", loaded: true, pid: 47322, restartCost: "safe", restartNote: "Rebuilds before swapping; browsers reconnect briefly. Active agent turns are unaffected." },
+          { label: "ai.dcaleon.bff", role: "bff", loaded: true, pid: 47322, restartCost: "safe", restartNote: "Rebuilds before swapping; browsers reconnect briefly. Active agent turns are unaffected." },
           { label: "ai.opencode.serve", role: "opencode", loaded: true, pid: 83146, restartCost: "destructive", restartNote: "Interrupts the running turn. Session history survives but nothing resumes automatically." },
         ],
         assets: [
@@ -484,7 +484,7 @@ export function createPublicSimulator(): typeof fetch {
     }
     if (path === "/api/planning/labels") return response({ labels: ["deployment", "documentation", "frontend", "priority:high", "priority:medium", "priority:low"].map((name) => ({ name, description: `${name} work` })), truncated: false });
     if (path === "/api/planning/issues" && method === "POST") {
-      const issue: PlanningItem = { id: `sim-${planningItems.length}`, number: 900 + planningItems.length, type: "issue", title: String(body.title), state: "open", merged: false, labels: body.labels || [], author: "preview-user", url: "https://github.com/leoncheng57/custom-dca-opencode/issues", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), commentCount: 0, childCount: 0, completedChildCount: 0, parentNumber: null };
+      const issue: PlanningItem = { id: `sim-${planningItems.length}`, number: 900 + planningItems.length, type: "issue", title: String(body.title), state: "open", merged: false, labels: body.labels || [], author: "preview-user", url: "https://github.com/leoncheng57/dcaleon/issues", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), commentCount: 0, childCount: 0, completedChildCount: 0, parentNumber: null };
       planningItems.push(issue); return response({ issue }, 201);
     }
     const planningRoute = routeMatch(path, /^\/api\/planning\/items\/(\d+)(\/labels)?$/u);

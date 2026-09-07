@@ -1,6 +1,6 @@
 # Architecture
 
-custom-dca-opencode is a host-native web client for one long-lived OpenCode server. It adds a
+dcaleon is a host-native web client for one long-lived OpenCode server. It adds a
 mobile-friendly interface, notifications, local Git and forge context, and operational controls
 without replacing the OpenCode CLI.
 

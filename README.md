@@ -1,9 +1,9 @@
-# custom-dca-opencode
+# dcaleon
 
 **Status: early alpha.** The phases in the Status table below are implemented and verified,
 but interfaces and behaviour can still change without notice, and there is no stability,
 support, or production-readiness guarantee. Known gaps and planned work are tracked in the
-[issue list](https://github.com/leoncheng57/custom-dca-opencode/issues).
+[issue list](https://github.com/leoncheng57/dcaleon/issues).
 
 A custom local coding-agent IDE built on the [OpenCode](https://opencode.ai) server API.
 
@@ -44,7 +44,7 @@ and the live `/skill` Catalog panel remains the connected OpenCode process's inv
 of externally installed content. The former standalone catalog app is retired.
 
 There is no public static catalogue. Playbooks is read from the running Runner, and
-the retired GitHub Pages catalogue at `/custom-dca-opencode/agent-skills/` has been
+the retired GitHub Pages catalogue at `/dcaleon/agent-skills/` has been
 removed from `gh-pages` rather than left serving a stale index (AGENTS.md decision 32).
 The unrelated <https://leoncheng.dev/agent-skills/> site belongs to an archived
 separate repository that this repository's token cannot modify.
@@ -222,7 +222,7 @@ outside the tested checkout. Linux containers also cannot prove macOS `/tmp` →
 ### Interactive PR previews
 
 Every same-repository pull request receives a public, interactive simulator at
-`https://leoncheng.dev/custom-dca-opencode/pr-previews/pr-<number>/`. The **PR preview**
+`https://leoncheng.dev/dcaleon/pr-previews/pr-<number>/`. The **PR preview**
 workflow runs on `opened`, `reopened`, and every `synchronize` event, so each pushed commit
 rebuilds the preview. It tests the production bundle in Chromium, publishes only that PR's
 directory on `gh-pages`, creates a transient GitHub Deployment, and updates one
@@ -353,7 +353,7 @@ The DSH subprocess inherits only a small environment allowlist (`PATH`, basic lo
 state, and explicitly named DeepSeek/OpenAI/Anthropic provider keys). GitHub, OpenCode,
 notification, and unrelated DCA credentials are not forwarded. DSH remains local behind the BFF; do not expose or reverse-proxy its
 native Web UI. The full dual-runtime decision and phased estimate are tracked in
-[issue #225](https://github.com/leoncheng57/custom-dca-opencode/issues/225).
+[issue #225](https://github.com/leoncheng57/dcaleon/issues/225).
 
 Each DSH conversation also has a mobile-first **DSH Trajectory** inspector. It renders
 the pinned `dsh-v0.1.1-rc.2` `session.event` vocabulary (turns, steps, request metadata,

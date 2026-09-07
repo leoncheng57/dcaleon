@@ -6,7 +6,7 @@ test.describe("landing page and runtime navigation", () => {
   test("the root is a minimal landing that points at the public repository", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByTestId("opencode-home")).toBeVisible();
-    await expect(page.getByTestId("opencode-home-repository")).toHaveAttribute("href", "https://github.com/leoncheng57/custom-dca-opencode");
+    await expect(page.getByTestId("opencode-home-repository")).toHaveAttribute("href", "https://github.com/leoncheng57/dcaleon");
     // The OpenCode hub no longer owns the root.
     await expect(page.getByTestId("opencode-hub")).toHaveCount(0);
     await expect(page).toHaveTitle("DCA");

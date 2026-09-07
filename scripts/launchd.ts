@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const BFF_LABEL = "ai.custom-dca-opencode.bff";
+export const BFF_LABEL = "ai.dcaleon.bff";
 export const DEFAULT_SUPERVISED_PORT = 3210;
 
 export interface BffPlistOptions {

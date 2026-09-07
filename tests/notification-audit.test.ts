@@ -210,7 +210,7 @@ describe("notification audit", () => {
     });
 
     it("audit events with directory paths only log correlationIds", () => {
-      const directory = "/Users/someone/Projects/custom-dca-opencode";
+      const directory = "/Users/someone/Projects/dcaleon";
       const sessionID = "ses_abc123xyz789";
       const requestID = "req_sensitive_data_here";
 

@@ -46,7 +46,7 @@ import { fileURLToPath } from "node:url";
 export const RUN_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Every generated resource shares this prefix so an operator can spot strays. */
-export const RESOURCE_PREFIX = "custom-dca-opencode-e2e";
+export const RESOURCE_PREFIX = "dcaleon-e2e";
 
 /** Bounds on the exported bundle. A run may not fill the host disk. */
 export const ARTIFACT_LIMITS = {

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { filterByScope, isInScope } from "../server/reminders/loader.js";
 import { parseReminderMarkdown } from "../server/reminders/reminders.js";
 
-const SCOPE = "leoncheng57/custom-dca-opencode";
+const SCOPE = "leoncheng57/dcaleon";
 const roots: string[] = [];
 
 async function repository(remote?: string): Promise<string> {
