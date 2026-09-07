@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Download, Eye, FolderOpen, GitBranch, GitMerge, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowDown, Download, Eye, FolderOpen, GitBranch, GitMerge, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -255,6 +255,10 @@ export function ClaudeConversationPage() {
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const following = useRef(true);
+  const scrollInitialized = useRef(false);
+  const [newActivity, setNewActivity] = useState(false);
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
   const sessionScope = useRef(id);
@@ -350,7 +354,34 @@ export function ClaudeConversationPage() {
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
-  useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [events, session?.running]);
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    if (!scrollInitialized.current || following.current) {
+      scroller.scrollTop = scroller.scrollHeight;
+      scrollInitialized.current = true;
+      setNewActivity(false);
+    } else {
+      setNewActivity(true);
+    }
+  }, [events]);
+
+  const updateFollow = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 96;
+    following.current = nearBottom;
+    if (nearBottom) setNewActivity(false);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    following.current = true;
+    setNewActivity(false);
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+  }, []);
+
   const items = useMemo(() => collapseActionGroups(events), [events]);
   const activity = useMemo(() => runningActivity(events), [events]);
 
@@ -469,15 +500,28 @@ export function ClaudeConversationPage() {
           <Button size="sm" variant="ghost" disabled title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="mr-1" size={14} /> Preview <span className="ml-1 rounded bg-[var(--color-background-surface-neutral-muted)] px-1 text-[10px] uppercase">Beta</span></Button>
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8" data-testid="claude-transcript">
-        <div className="mx-auto max-w-4xl">
-          {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p></div>}
-          <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>
-            <Transcript items={items} wrap collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
-          </WorkspaceReferenceProvider>
-          {session?.running && <div className="mt-5"><RunningIndicator activity={activity} /></div>}
-          <div ref={bottom} />
+      <div className="relative min-h-0 flex-1">
+        <div ref={scrollerRef} onScroll={updateFollow} className="h-full overflow-y-auto px-4 py-5 sm:px-8" data-testid="claude-transcript">
+          <div className="mx-auto max-w-4xl">
+            {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p></div>}
+            <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>
+              <Transcript items={items} wrap collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
+            </WorkspaceReferenceProvider>
+            {session?.running && <div className="mt-5"><RunningIndicator activity={activity} /></div>}
+            <div ref={bottom} />
+          </div>
         </div>
+        {newActivity && (
+          <button
+            type="button"
+            className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-[var(--color-background-surface-neutral-muted)]"
+            onClick={jumpToLatest}
+            data-testid="claude-jump-to-latest"
+          >
+            <ArrowDown aria-hidden="true" size={13} />
+            New activity
+          </button>
+        )}
       </div>
       <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="claude-composer">
         <div className="mx-auto max-w-3xl">
