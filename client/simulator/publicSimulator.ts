@@ -474,6 +474,15 @@ export function createPublicSimulator(): typeof fetch {
     if (path === "/api/worktrees") return response({ worktrees: [{ name: "preview-pipeline", branch: "feat/pr-preview-pipeline", directory: `${SIMULATOR_DIRECTORY}.worktrees/preview-pipeline` }] });
 
     if (path === "/api/planning/items") return response({ repository: { owner: "leoncheng57", repo: "dcaleon", url: "https://github.com/leoncheng57/dcaleon" }, items: planningItems, truncated: false, epicsTruncated: false, fetchedAt: new Date().toISOString() });
+    if (path === "/api/observability/resources") return response({
+      sampledAt: new Date().toISOString(), available: true,
+      host: { cpuPercent: 24, cores: 8, usedMemoryBytes: 10 * 1024 ** 3, totalMemoryBytes: 16 * 1024 ** 3 },
+      total: { cpuPercent: 42, memoryBytes: 640 * 1024 ** 2, processCount: 2, warmingCount: 0 },
+      processes: [
+        { pid: 101, parentPid: 1, label: "DCA server", cpuPercent: 2, memoryBytes: 128 * 1024 ** 2 },
+        { pid: 102, parentPid: 101, label: "Claude", cpuPercent: 40, memoryBytes: 512 * 1024 ** 2 },
+      ], truncated: false, opencode: "unavailable",
+    });
     if (path.startsWith("/api/observability/logs")) {
       const source = new URLSearchParams(path.split("?")[1] ?? "").get("source") ?? "audit";
       const now = new Date();

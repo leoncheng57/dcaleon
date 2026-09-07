@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { registerResourceProcess } from "../resource-processes.js";
 import { EventEmitter } from "node:events";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -129,6 +130,7 @@ export class DshBridge extends EventEmitter {
         stdio: ["pipe", "pipe", "pipe"],
       });
       this.child = child;
+      registerResourceProcess(child, "DSH");
       const readyTimer = setTimeout(() => {
         if (ready) return;
         reject(new Error("DSH bridge did not become ready within 10 seconds"));

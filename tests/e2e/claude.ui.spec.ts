@@ -31,6 +31,91 @@ test.describe("Claude Code runtime", () => {
     await expect(page.getByTestId("claude-attachment-chip")).toHaveCount(0);
   });
 
+  test("queues multiple follow-ups and flushes them in FIFO order", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").fill("queue fixture: initial");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("claude-stop")).toBeVisible();
+
+    for (const text of ["queue fixture: one", "queue fixture: two", "queue fixture: three"]) {
+      await page.getByTestId("claude-prompt").fill(text);
+      await page.getByTestId("claude-send").click();
+    }
+    await expect(page.getByTestId("claude-queued-banner")).toContainText("3 queued");
+    await expect(page.getByTestId("claude-queued-item")).toHaveCount(3);
+
+    const replies = page.getByTestId("opencode-agent-message-body");
+    await expect(replies.filter({ hasText: "Queue echo: queue fixture: three" })).toBeVisible();
+    const text = await replies.allTextContents();
+    expect(text.findIndex((value) => value.includes("queue fixture: one"))).toBeLessThan(text.findIndex((value) => value.includes("queue fixture: two")));
+    expect(text.findIndex((value) => value.includes("queue fixture: two"))).toBeLessThan(text.findIndex((value) => value.includes("queue fixture: three")));
+    await expect(page.getByTestId("claude-queued-banner")).toHaveCount(0);
+  });
+
+  test("cancels only the selected queued follow-up and restores it to the draft", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").fill("queue fixture: initial");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("claude-stop")).toBeVisible();
+    for (const text of ["queue fixture: one", "queue fixture: two", "queue fixture: three"]) {
+      await page.getByTestId("claude-prompt").fill(text);
+      await page.getByTestId("claude-send").click();
+    }
+
+    await page.getByTestId("claude-queued-dismiss").nth(1).click();
+    await expect(page.getByTestId("claude-queued-item")).toHaveCount(2);
+    await expect(page.getByTestId("claude-queued-item").nth(0)).toContainText("queue fixture: one");
+    await expect(page.getByTestId("claude-queued-item").nth(1)).toContainText("queue fixture: three");
+    await expect(page.getByTestId("claude-prompt")).toHaveValue("queue fixture: two");
+  });
+
+  test("retains queued follow-ups across in-app navigation", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").fill("queue fixture: navigation");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("claude-stop")).toBeVisible();
+    for (const text of ["queue fixture: after navigation one", "queue fixture: after navigation two"]) {
+      await page.getByTestId("claude-prompt").fill(text);
+      await page.getByTestId("claude-send").click();
+    }
+    await expect(page.getByTestId("claude-queued-item")).toHaveCount(2);
+
+    await page.getByTestId("claude-back").click({ force: true });
+    await expect(page.getByTestId("claude-home")).toBeVisible();
+    await page.goBack();
+    await expect(page.getByTestId("claude-queued-item")).toHaveCount(2);
+    await expect(page.getByTestId("claude-queued-item").nth(0)).toContainText("after navigation one");
+    await expect(page.getByTestId("claude-queued-item").nth(1)).toContainText("after navigation two");
+    // Do not leave the deliberately long-running fixture alive for later
+    // specs. Stop preserves the queue; this test only owns the active process.
+    await page.getByTestId("claude-stop").click();
+  });
+
+  test("pauses after a queued send error without dropping later items", async ({ page }) => {
+    await page.route("**/api/claude/sessions/*/prompt", async (route) => {
+      const body = route.request().postDataJSON() as { text?: string };
+      if (body.text === "queue fixture: rejected") {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "fixture rejection" }) });
+        return;
+      }
+      await route.continue();
+    });
+    await createSession(page);
+    await page.getByTestId("claude-prompt").fill("queue fixture: initial");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("claude-stop")).toBeVisible();
+    for (const text of ["queue fixture: rejected", "queue fixture: stays queued"]) {
+      await page.getByTestId("claude-prompt").fill(text);
+      await page.getByTestId("claude-send").click();
+    }
+
+    await expect(page.getByTestId("claude-prompt")).toHaveValue("queue fixture: rejected");
+    await expect(page.getByTestId("claude-queued-banner")).toContainText("1 queued — paused after a failed send");
+    await expect(page.getByTestId("claude-queued-item")).toContainText("queue fixture: stays queued");
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId("claude-queued-item")).toHaveCount(1);
+  });
+
   test("does not leak tool inputs or init data into the transcript", async ({ page }) => {
     await createSession(page);
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");

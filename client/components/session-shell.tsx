@@ -3,6 +3,7 @@ import { ArrowDown, Globe } from "lucide-react";
 
 import { Button } from "../ds/button.js";
 import { SessionActionBar } from "./session-action-bar.js";
+import { ResourceIndicator } from "./resource-indicator.js";
 import { RightToolsPanel } from "./right-tools-panel.js";
 import { TranscriptBrowserContext } from "../lib/transcriptBrowser.js";
 import { RunningIndicator, Transcript } from "../components/transcript.js";
@@ -122,7 +123,10 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
         </div>
         {(header.stats || header.actions || browserSessionID) && (
           <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
-            {header.stats && <div className="min-w-0 shrink-0">{header.stats}</div>}
+            <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-x-2">
+              {header.stats}
+              <ResourceIndicator />
+            </div>
             <SessionActionBar testId={testIds.actions}>
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0"
                 onClick={() => setToolsOpen(true)} disabled={!browserSessionID}
