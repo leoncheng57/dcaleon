@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import type { Readable } from "node:stream";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
 
@@ -138,6 +138,8 @@ interface RunInput {
   /** Explicit per-turn mode: "plan" for read-only planning, "build" for writing. */
   turnMode: "plan" | "build";
   text: string;
+  /** Turn-scoped image directory, removed after the child closes. */
+  cleanupDirectory?: string;
 }
 
 export class ClaudeSupervisor extends EventEmitter {
@@ -146,6 +148,15 @@ export class ClaudeSupervisor extends EventEmitter {
 
   constructor(private config: ClaudeConfig) {
     super();
+  }
+
+  private cleanup(directory: string | undefined): void {
+    if (!directory) return;
+    try {
+      rmSync(directory, { recursive: true, force: true });
+    } catch (cause) {
+      this.emit("diagnostic", `could not remove Claude image attachments: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
   }
 
   private settingsPath(sessionUuid: string): string {
@@ -214,6 +225,7 @@ export class ClaudeSupervisor extends EventEmitter {
       child.once("error", (cause) => {
         this.children.delete(sessionId);
         this.buffers.delete(sessionId);
+        this.cleanup(input.cleanupDirectory);
         reject(cause);
       });
       child.stdout.on("data", (chunk: Buffer) => this.receiveChunk(sessionId, chunk));
@@ -228,6 +240,7 @@ export class ClaudeSupervisor extends EventEmitter {
         if (remainder && remainder.length) this.receiveLine(sessionId, remainder.toString("utf8"));
         this.children.delete(sessionId);
         this.buffers.delete(sessionId);
+        this.cleanup(input.cleanupDirectory);
         this.emit("exit", { sessionId, code });
       });
     });

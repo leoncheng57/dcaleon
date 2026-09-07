@@ -828,7 +828,7 @@ export const api = {
     }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
   claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
     json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
-  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean; reminder?: string; workflow?: string } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
+  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean; reminder?: string; workflow?: string; images?: Array<{ filename: string; mime: string; url: string }> } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     // Playbooks travel as ids only; the server resolves the trusted bodies.
@@ -838,6 +838,7 @@ export const api = {
       plan: !!options.plan,
       ...(options.reminder ? { reminder: options.reminder } : {}),
       ...(options.workflow ? { workflow: options.workflow } : {}),
+      ...(options.images?.length ? { images: options.images.map(({ mime, url }) => ({ mime, data: url })) } : {}),
     }),
   }).then((r) => json<{ accepted: boolean }>(r)),
   /** Reminders visible to this session, scoped server-side by the session's own cwd. */

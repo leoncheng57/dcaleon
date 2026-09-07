@@ -1,6 +1,6 @@
 import { Router, type Response } from "express";
 import type { EventEmitter } from "node:events";
-import { realpath, stat } from "node:fs/promises";
+import { realpath, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import type { ClaudeConfig, ClaudePreset } from "../claude/config.js";
@@ -12,6 +12,7 @@ import { createPullRequest, getReviewStatus, parseReviewUrl } from "../forge.js"
 import { getReviewDetails } from "../forge-details.js";
 import { listClaudeTree, readClaudeFile, resolveClaudeReferences } from "../claude/files.js";
 import { composeClaudePrompt } from "../claude/prompt.js";
+import { ClaudeAttachmentError, stageClaudeImages } from "../claude/attachments.js";
 import { publishClaudeRunEvents } from "../claude/notifications.js";
 import { PathError } from "../paths.js";
 import { visibleReminder, visibleReminders } from "../reminders/loader.js";
@@ -200,7 +201,15 @@ export function claudeRoutes(
     if (reminderId !== undefined && !reminder) return error(res, 400, `unknown reminder "${reminderId}"`);
     const workflow = workflowId === undefined ? undefined : workflowCatalogue().find((item) => item.id === workflowId);
     if (workflowId !== undefined && !workflow) return error(res, 400, `unknown workflow "${workflowId}"`);
-    const composed = composeClaudePrompt({ text, reminder, workflow });
+    let staged;
+    try {
+      staged = await stageClaudeImages(config.sessionRoot, session.sessionUuid, req.body?.images);
+    } catch (cause) {
+      if (cause instanceof ClaudeAttachmentError) return error(res, 400, cause.message);
+      console.warn("[claude]", cause instanceof Error ? cause.message : String(cause));
+      return error(res, 500, "Claude image attachments could not be staged");
+    }
+    const composed = composeClaudePrompt({ text, imagePaths: staged.paths, reminder, workflow });
     // The transcript keeps the human's own words plus chips; only the binary
     // sees the sentinel blocks.
     store.startRun(session, text, { reminders: composed.reminders, workflows: composed.workflows, plan });
@@ -213,9 +222,11 @@ export function claudeRoutes(
         ...(requestedModel ? { model: requestedModel } : {}),
         turnMode: plan ? "plan" : "build",
         text: composed.text,
+        ...(staged.directory ? { cleanupDirectory: staged.directory } : {}),
       });
       res.status(202).json({ accepted: true });
     } catch (cause) {
+      if (staged.directory) await rm(staged.directory, { recursive: true, force: true });
       store.applyFrame(session.id, { type: "error", subtype: "spawn_failed" });
       console.warn("[claude]", cause instanceof Error ? cause.message : String(cause));
       error(res, 502, "Claude process failed to start");
