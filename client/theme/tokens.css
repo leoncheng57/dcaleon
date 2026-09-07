@@ -95,7 +95,11 @@
    * roles, not application statuses. Keep every foreground readable against
    * the editor surface in both appearances. Retuned for the warm field: the
    * white-theme values were chosen against #ffffff and lost separation once
-   * the page stopped being the lightest thing on it. */
+   * the page stopped being the lightest thing on it.
+   *
+   * workspace-files.ui.spec.ts gates every rendered token at 4.5:1 against
+   * --color-background-surface, so darkening a surface can push the dimmest
+   * token (comment) under the bar — re-check the ratios when either moves. */
   --color-syntax-comment: #645b4e;
   --color-syntax-keyword: #6b21a8;
   --color-syntax-name: #075985;
@@ -199,7 +203,7 @@
   --color-text-warning: #fcd34d;
   --color-text-danger: #fca5a5;
 
-  --color-syntax-comment: #6b7280;
+  --color-syntax-comment: #7f858f;
   --color-syntax-keyword: #d8b4fe;
   --color-syntax-name: #7dd3fc;
   --color-syntax-string: #86efac;
