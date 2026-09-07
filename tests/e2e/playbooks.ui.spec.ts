@@ -213,8 +213,8 @@ test.describe("Playbooks", () => {
 
   test("lists every reminder beside the workflows, grouped and readable", async ({ page }) => {
     await page.goto("/playbooks");
-    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(12);
-    await expect(page.getByTestId("opencode-playbook-reminder-group")).toHaveCount(5);
+    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(13);
+    await expect(page.getByTestId("opencode-playbook-reminder-group")).toHaveCount(6);
     await expect(page.getByTestId("opencode-playbook-reminder-group").nth(0)).toHaveAccessibleName("Plan & Design");
     // The two categories stay visually distinct, so a reader can tell what a
     // card will do before opening it.
@@ -264,7 +264,7 @@ test.describe("Playbooks", () => {
     await page.getByTestId("opencode-playbook-close").click();
     await expect(page).toHaveURL("/playbooks/reminders");
     await expect(page.getByTestId("opencode-playbook-dialog")).toHaveCount(0);
-    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(12);
+    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(13);
   });
 
   // ── Simulations ───────────────────────────────────────────────────────────
