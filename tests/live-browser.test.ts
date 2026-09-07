@@ -5,16 +5,28 @@
 // Chromium can reach the unauthenticated OpenCode server on 127.0.0.1:4096,
 // the LAN, and cloud metadata. These tests pin the refusal set.
 
-import { describe, expect, it } from "vitest";
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   assessTarget,
+  assessWebSocketTarget,
   isBlockedHostname,
   isPrivateAddress,
   parseLiveBrowserConfig,
   resetPolicyCache,
 } from "../server/browser/policy.js";
 import { validSessionID } from "../server/browser/errors.js";
+import { parseLiveBrowserInput, parseStreamProfile } from "../server/browser/routes.js";
+import { screencastOptions } from "../server/browser/manager.js";
+import { assertPrivateBrowserProfile, BrowserProfilePermissionError } from "../server/browser/profile.js";
+
+const temporaryProfiles: string[] = [];
+afterEach(() => {
+  for (const profile of temporaryProfiles.splice(0)) rmSync(profile, { recursive: true, force: true });
+});
 
 describe("parseLiveBrowserConfig", () => {
   it("is disabled by default with a cap of 10 and a 30 minute reaper", () => {
@@ -35,6 +47,11 @@ describe("parseLiveBrowserConfig", () => {
 });
 
 describe("isPrivateAddress", () => {
+  it("blocks URL-normalized IPv4-mapped private literals", () => {
+    expect(isPrivateAddress("::ffff:7f00:1")).toBe(true);
+    expect(isPrivateAddress("::ffff:c0a8:101")).toBe(true);
+    expect(isPrivateAddress("::ffff:808:808")).toBe(false);
+  });
   it.each([
     "127.0.0.1",
     "127.255.255.255",
@@ -116,6 +133,88 @@ describe("assessTarget", () => {
     resetPolicyCache();
     const verdict = await assessTarget("https://this-host-does-not-exist.invalid/");
     expect(verdict.ok).toBe(false);
+  });
+});
+
+describe("assessWebSocketTarget", () => {
+  it("applies the same private-address boundary to WebSockets", async () => {
+    expect(await assessWebSocketTarget("ws://127.0.0.1:4096/event")).toMatchObject({ ok: false });
+    expect(await assessWebSocketTarget("wss://[::1]/socket")).toMatchObject({ ok: false });
+  });
+
+  it("allows public WebSocket targets and refuses other protocols", async () => {
+    expect(await assessWebSocketTarget("wss://8.8.8.8/socket")).toMatchObject({ ok: true });
+    expect(await assessWebSocketTarget("https://example.com/socket")).toMatchObject({ ok: false });
+  });
+});
+
+describe("live browser input parsing", () => {
+  it("refuses duplicate touch identifiers and out-of-bounds coordinates", () => {
+    expect(parseLiveBrowserInput({ type: "touch", phase: "start", points: [{ id: 0, x: 2, y: 3 }, { id: 0, x: 4, y: 5 }] })).toBeNull();
+    expect(parseLiveBrowserInput({ type: "touch", phase: "move", points: [{ id: 0, x: -1, y: 3 }] })).toBeNull();
+  });
+  it("accepts bounded integer viewport updates", () => {
+    expect(parseLiveBrowserInput({ type: "viewport", width: 390, height: 740 })).toEqual({
+      type: "viewport",
+      width: 390,
+      height: 740,
+    });
+    expect(parseLiveBrowserInput({ type: "viewport", width: 319, height: 740 })).toBeNull();
+    expect(parseLiveBrowserInput({ type: "viewport", width: 390.5, height: 740 })).toBeNull();
+    expect(parseLiveBrowserInput({ type: "viewport", width: 390, height: 1201 })).toBeNull();
+  });
+
+  it("accepts valid touch sequences and rejects malformed or excessive points", () => {
+    expect(parseLiveBrowserInput({ type: "touch", phase: "start", points: [{ x: 12, y: 18, id: 0 }] })).toEqual({
+      type: "touch",
+      phase: "start",
+      points: [{ x: 12, y: 18, id: 0 }],
+    });
+    expect(parseLiveBrowserInput({ type: "touch", phase: "end", points: [] })).toEqual({ type: "touch", phase: "end", points: [] });
+    expect(parseLiveBrowserInput({ type: "touch", phase: "start", points: [] })).toBeNull();
+    expect(parseLiveBrowserInput({ type: "touch", phase: "end", points: [{ x: 1, y: 1 }] })).toBeNull();
+    expect(parseLiveBrowserInput({ type: "touch", phase: "move", points: [{ x: Number.NaN, y: 1 }] })).toBeNull();
+    expect(parseLiveBrowserInput({
+      type: "touch",
+      phase: "move",
+      points: Array.from({ length: 11 }, (_, id) => ({ x: id, y: id, id })),
+    })).toBeNull();
+  });
+
+  it("uses only the two server-owned stream profiles", () => {
+    expect(parseStreamProfile("coarse")).toBe("coarse");
+    expect(parseStreamProfile("anything-else")).toBe("default");
+    expect(screencastOptions("coarse").quality).toBeLessThan(screencastOptions("default").quality);
+    expect(screencastOptions("coarse").everyNthFrame).toBeGreaterThan(screencastOptions("default").everyNthFrame);
+  });
+});
+
+describe("persistent browser profile permissions", () => {
+  function profile(): string {
+    const created = mkdtempSync(path.join(tmpdir(), "dcaleon-browser-profile-"));
+    temporaryProfiles.push(created);
+    chmodSync(created, 0o700);
+    return created;
+  }
+
+  it("accepts a private directory tree", () => {
+    const root = profile();
+    mkdirSync(path.join(root, "Default"), { mode: 0o700 });
+    writeFileSync(path.join(root, "Default", "Cookies"), "fixture", { mode: 0o600 });
+    expect(() => assertPrivateBrowserProfile(root)).not.toThrow();
+  });
+
+  it("refuses group/other access and symbolic links", () => {
+    const root = profile();
+    const cookies = path.join(root, "Cookies");
+    writeFileSync(cookies, "fixture", { mode: 0o600 });
+    chmodSync(root, 0o755);
+    expect(() => assertPrivateBrowserProfile(root)).toThrow(BrowserProfilePermissionError);
+    chmodSync(root, 0o700);
+    chmodSync(cookies, 0o644);
+    expect(() => assertPrivateBrowserProfile(root)).not.toThrow();
+    symlinkSync(cookies, path.join(root, "linked-cookies"));
+    expect(() => assertPrivateBrowserProfile(root)).toThrow(/symbolic link/);
   });
 });
 

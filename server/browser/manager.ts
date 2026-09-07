@@ -1,6 +1,6 @@
 // server/browser/manager.ts — one Chromium, one Page per conversation session.
 //
-// Lifecycle contract (design doc "Live Session Browser — 2026-08-27"):
+// Lifecycle contract (design doc "Live Browser and Right Tools Panel — 2026-09-07"):
 //   - Chromium launches lazily on first open, never at BFF boot.
 //   - One shared persistent context (shared cookie jar — deliberate trade so
 //     logged-in browsing works across sessions), one Page per sessionID.
@@ -11,23 +11,41 @@
 //     reclaimable); an idle reaper closes pages after BROWSER_IDLE_MINUTES.
 //     Cookies survive reaping in the persistent profile.
 //   - Popups/new tabs are intercepted, never honoured: the URL is surfaced to
-//     the client so the drawer can ask "open here or in a new tab?".
+//     the client so the panel can ask "open here or in a new tab?".
 
 import { mkdirSync } from "node:fs";
-import path from "node:path";
 import { chromium, type BrowserContext, type CDPSession, type Page } from "playwright-core";
 
-import { assessTarget, type LiveBrowserConfig } from "./policy.js";
+import { assessTarget, assessWebSocketTarget, type LiveBrowserConfig } from "./policy.js";
 import {
+  BROWSER_VIEWPORT,
   CapacityError,
   NavigationRefused,
   UnknownSessionError,
   validSessionID,
   type BrowserSlot,
+  type BrowserStreamProfile,
+  type BrowserViewport,
   type LiveBrowserInputEvent,
 } from "./errors.js";
+import { assertPrivateBrowserProfile } from "./profile.js";
 
-const VIEWPORT = { width: 1280, height: 800 };
+const DEFAULT_VIEWPORT: BrowserViewport = {
+  width: BROWSER_VIEWPORT.defaultWidth,
+  height: BROWSER_VIEWPORT.defaultHeight,
+};
+
+export function screencastOptions(profile: BrowserStreamProfile): {
+  format: "jpeg";
+  quality: number;
+  maxWidth: number;
+  maxHeight: number;
+  everyNthFrame: number;
+} {
+  return profile === "coarse"
+    ? { format: "jpeg", quality: 42, maxWidth: BROWSER_VIEWPORT.maxWidth, maxHeight: BROWSER_VIEWPORT.maxHeight, everyNthFrame: 4 }
+    : { format: "jpeg", quality: 68, maxWidth: BROWSER_VIEWPORT.maxWidth, maxHeight: BROWSER_VIEWPORT.maxHeight, everyNthFrame: 2 };
+}
 
 export interface PageState {
   sessionID: string;
@@ -46,6 +64,7 @@ interface Managed {
   lastUsedAt: number;
   loading: boolean;
   pendingPopup: string | null;
+  viewport: BrowserViewport;
   stream: { res: NodeJS.WritableStream & { destroyed?: boolean }; boundary: string } | null;
 }
 
@@ -55,6 +74,7 @@ export class BrowserManager {
   private context: BrowserContext | null = null;
   private launching: Promise<BrowserContext> | null = null;
   private readonly pages = new Map<string, Managed>();
+  private opening: Promise<unknown> = Promise.resolve();
   private readonly reaper: NodeJS.Timeout;
 
   constructor(config: LiveBrowserConfig, profileDir: string) {
@@ -70,10 +90,19 @@ export class BrowserManager {
       // 0700: the profile is a credential store an unauthenticated BFF can
       // drive; it must not be readable by other local users.
       mkdirSync(this.profileDir, { recursive: true, mode: 0o700 });
+      assertPrivateBrowserProfile(this.profileDir);
       const context = await chromium.launchPersistentContext(this.profileDir, {
         headless: true,
-        viewport: VIEWPORT,
+        viewport: DEFAULT_VIEWPORT,
         acceptDownloads: false,
+        serviceWorkers: "block",
+        args: [
+          "--disable-background-networking",
+          "--disable-domain-reliability",
+          "--disable-features=PreconnectToSearch",
+          "--dns-prefetch-disable",
+          "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+        ],
         ...(this.config.executablePath ? { executablePath: this.config.executablePath } : {}),
       });
       // The SSRF boundary, applied to every request the browser makes —
@@ -84,6 +113,15 @@ export class BrowserManager {
         if (verdict.ok) await route.continue().catch(() => undefined);
         else await route.abort("blockedbyclient").catch(() => undefined);
       });
+      // WebSocket upgrades bypass HTTP request routing. Playwright holds the
+      // socket closed until this policy explicitly connects it to the server.
+      await context.routeWebSocket(/.*/, async (socket) => {
+        const verdict = await assessWebSocketTarget(socket.url());
+        if (verdict.ok) socket.connectToServer();
+        else await socket.close({ code: 1008, reason: "private or local WebSocket blocked" });
+      });
+      // Persistent contexts may create a startup tab; it owns no session slot.
+      await Promise.all(context.pages().map((page) => page.close()));
       context.on("close", () => {
         this.context = null;
         this.launching = null;
@@ -100,6 +138,12 @@ export class BrowserManager {
 
   /** Create or reattach the page for a session. Throws CapacityError at the cap. */
   async open(sessionID: string, initialUrl?: string): Promise<PageState> {
+    const result = this.opening.then(() => this.openPage(sessionID, initialUrl));
+    this.opening = result.catch(() => undefined);
+    return result;
+  }
+
+  private async openPage(sessionID: string, initialUrl?: string): Promise<PageState> {
     const existing = this.pages.get(sessionID);
     if (existing) {
       existing.lastUsedAt = Date.now();
@@ -112,16 +156,25 @@ export class BrowserManager {
     const context = await this.contextOrLaunch();
     const page = await context.newPage();
     const cdp = await context.newCDPSession(page);
-    const managed: Managed = { page, cdp, lastUsedAt: Date.now(), loading: false, pendingPopup: null, stream: null };
+    const managed: Managed = {
+      page,
+      cdp,
+      lastUsedAt: Date.now(),
+      loading: false,
+      pendingPopup: null,
+      viewport: { ...DEFAULT_VIEWPORT },
+      stream: null,
+    };
     this.pages.set(sessionID, managed);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true }).catch(() => undefined);
 
     page.on("popup", (popup) => {
       // Intercepted, not honoured: a session owns exactly one page. The URL
-      // is parked for the drawer's "open here or in a new tab?" prompt.
+      // is parked for the panel's "open here or in a new tab?" prompt.
       void (async () => {
         await popup.waitForLoadState("domcontentloaded", { timeout: 3_000 }).catch(() => undefined);
         const url = popup.url();
-        if (url && url !== "about:blank") managed.pendingPopup = url;
+        if (url && (await assessTarget(url)).ok) managed.pendingPopup = url;
         await popup.close().catch(() => undefined);
       })();
     });
@@ -133,14 +186,8 @@ export class BrowserManager {
       this.pages.delete(sessionID);
     });
 
-    if (initialUrl) {
-      const verdict = await assessTarget(initialUrl);
-      if (verdict.ok) {
-        managed.loading = true;
-        await page.goto(verdict.url, { waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => undefined);
-        managed.loading = false;
-      }
-    }
+    if (initialUrl) await this.navigate(sessionID, { action: "goto", url: initialUrl });
+    await cdp.send("Page.setWebLifecycleState", { state: "frozen" });
     return this.state(sessionID);
   }
 
@@ -174,14 +221,15 @@ export class BrowserManager {
       const verdict = await assessTarget(candidate);
       if (!verdict.ok) throw new NavigationRefused(verdict.reason);
       managed.loading = true;
-      await managed.page.goto(verdict.url, { waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => undefined);
-      managed.loading = false;
+      try {
+        await managed.page.goto(verdict.url, { waitUntil: "domcontentloaded", timeout: 20_000 });
+      } finally { managed.loading = false; }
     } else if (request.action === "back") {
-      await managed.page.goBack({ waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => undefined);
+      await managed.page.goBack({ waitUntil: "domcontentloaded", timeout: 20_000 });
     } else if (request.action === "forward") {
-      await managed.page.goForward({ waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => undefined);
+      await managed.page.goForward({ waitUntil: "domcontentloaded", timeout: 20_000 });
     } else {
-      await managed.page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 }).catch(() => undefined);
+      await managed.page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     }
     return this.state(sessionID);
   }
@@ -192,15 +240,15 @@ export class BrowserManager {
     const { page } = managed;
     switch (event.type) {
       case "click":
-        await page.mouse.click(clamp(event.x, VIEWPORT.width), clamp(event.y, VIEWPORT.height), {
+        await page.mouse.click(clamp(event.x, managed.viewport.width), clamp(event.y, managed.viewport.height), {
           button: event.button === "right" ? "right" : "left",
         });
         break;
       case "move":
-        await page.mouse.move(clamp(event.x, VIEWPORT.width), clamp(event.y, VIEWPORT.height));
+        await page.mouse.move(clamp(event.x, managed.viewport.width), clamp(event.y, managed.viewport.height));
         break;
       case "scroll":
-        await page.mouse.move(clamp(event.x, VIEWPORT.width), clamp(event.y, VIEWPORT.height));
+        await page.mouse.move(clamp(event.x, managed.viewport.width), clamp(event.y, managed.viewport.height));
         await page.mouse.wheel(0, Math.max(-2000, Math.min(2000, event.deltaY)));
         break;
       case "key":
@@ -210,6 +258,26 @@ export class BrowserManager {
       case "type":
         await page.keyboard.type(event.text.slice(0, 1024));
         break;
+      case "viewport":
+        managed.viewport = { width: event.width, height: event.height };
+        await page.setViewportSize(managed.viewport);
+        break;
+      case "touch":
+        await managed.cdp.send("Input.dispatchTouchEvent", {
+          type: event.phase === "start"
+            ? "touchStart"
+            : event.phase === "move"
+              ? "touchMove"
+              : event.phase === "end"
+                ? "touchEnd"
+                : "touchCancel",
+          touchPoints: event.points.map((point) => ({
+            x: clamp(point.x, managed.viewport.width),
+            y: clamp(point.y, managed.viewport.height),
+            id: point.id,
+          })),
+        });
+        break;
     }
   }
 
@@ -217,7 +285,11 @@ export class BrowserManager {
    * Attach an MJPEG stream. Only the streamed page is "visible": everything
    * else stays frozen, which is what makes a cap of 10 defensible.
    */
-  async attachStream(sessionID: string, res: import("express").Response): Promise<void> {
+  async attachStream(
+    sessionID: string,
+    res: import("express").Response,
+    profile: BrowserStreamProfile = "default",
+  ): Promise<void> {
     const managed = this.require(sessionID);
     this.endStream(managed);
     managed.lastUsedAt = Date.now();
@@ -229,7 +301,6 @@ export class BrowserManager {
       Connection: "close",
     });
     managed.stream = { res, boundary };
-    await managed.cdp.send("Page.setWebLifecycleState", { state: "active" }).catch(() => undefined);
 
     const onFrame = (frame: { data: string; sessionId: number }) => {
       if (managed.stream?.res !== res || res.destroyed) return;
@@ -241,20 +312,21 @@ export class BrowserManager {
       void managed.cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => undefined);
     };
     managed.cdp.on("Page.screencastFrame", onFrame);
-    await managed.cdp
-      .send("Page.startScreencast", { format: "jpeg", quality: 60, maxWidth: VIEWPORT.width, maxHeight: VIEWPORT.height, everyNthFrame: 2 })
-      .catch(() => undefined);
-
     res.on("close", () => {
       managed.cdp.off("Page.screencastFrame", onFrame);
-      if (managed.stream?.res === res) managed.stream = null;
+      if (managed.stream?.res !== res) return;
+      managed.stream = null;
       void managed.cdp.send("Page.stopScreencast").catch(() => undefined);
-      // Drawer closed: halt timers so the renderer can be reclaimed.
+      // Panel hidden: halt timers so the renderer can be reclaimed.
       void managed.cdp.send("Page.setWebLifecycleState", { state: "frozen" }).catch(() => undefined);
     });
+    await managed.cdp.send("Page.setWebLifecycleState", { state: "active" });
+    if (managed.stream?.res !== res || res.destroyed) return;
+    await managed.cdp.send("Page.startScreencast", screencastOptions(profile));
   }
 
   async close(sessionID: string): Promise<void> {
+    await this.opening;
     const managed = this.pages.get(sessionID);
     if (!managed) return;
     this.pages.delete(sessionID);

@@ -38,6 +38,8 @@ interface SessionInspectorProps {
   modelCatalogue?: ModelCatalogue | null;
   defaultModel?: ModelSelection;
   trajectory?: { sessionId: string; running: boolean };
+  /** Keep shared inspector state mounted while another desktop right panel is visible. */
+  desktopHidden?: boolean;
 }
 
 const TAB_LABELS: Record<InspectorTab, string> = {
@@ -803,6 +805,7 @@ export function SessionInspector({
   modelCatalogue = null,
   defaultModel,
   trajectory,
+  desktopHidden = false,
 }: SessionInspectorProps) {
   const [desktopViewport, setDesktopViewport] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const commandScope = `${directory}\0${sessionID}`;
@@ -944,7 +947,7 @@ export function SessionInspector({
   return (
     <>
       <aside
-        className="hidden w-80 shrink-0 overflow-y-auto border-l border-[var(--color-border-default)] lg:block"
+        className={`${desktopHidden ? "hidden" : "hidden lg:block"} w-80 shrink-0 overflow-y-auto border-l border-[var(--color-border-default)]`}
         aria-label="Session details"
         data-testid="opencode-session-inspector"
         data-inspector-scroll

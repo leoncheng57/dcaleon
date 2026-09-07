@@ -10,7 +10,7 @@ import { SessionShell } from "../components/session-shell.js";
 import { SessionOverflowMenu } from "../components/session-overflow-menu.js";
 import { SessionInspector } from "../components/session-inspector.js";
 import { WorkspacePanels } from "../components/workspace-panels.js";
-import { LiveBrowserDrawer } from "../components/live-browser-drawer.js";
+import { RightToolsPanel } from "../components/right-tools-panel.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { AutoPermissionsControl } from "../components/auto-permissions-control.js";
 import { ModelPicker } from "../components/model-picker.js";
@@ -933,6 +933,7 @@ export function ConversationPage() {
       }}
       inspector={{
         desktop: (
+        <>
         <SessionInspector
           directory={directory}
           sessionID={id}
@@ -945,12 +946,14 @@ export function ConversationPage() {
           onMobileClose={() => setInspectorOpen(false)}
           modelCatalogue={modelCatalogue}
           defaultModel={selectedModel}
+          desktopHidden={liveBrowserOpen}
         />
+        {liveBrowserOpen && <RightToolsPanel sessionID={id} onClose={() => setLiveBrowserOpen(false)} />}
+        </>
         ),
       }}
       overlays={(
         <>
-      {liveBrowserOpen && <LiveBrowserDrawer sessionID={id ?? ""} onClose={() => setLiveBrowserOpen(false)} />}
       {workspaceOpen && (
         <WorkspacePanels
           directory={directory}

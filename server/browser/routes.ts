@@ -1,7 +1,7 @@
 // server/browser/routes.ts — browser-facing API for the live session browser.
 //
 // Disabled unless LIVE_BROWSER_ENABLED=true (routes then answer 403 with the
-// reason rather than 404, so the drawer can explain itself). The manager is
+// reason rather than 404, so the panel can explain itself). The manager is
 // created lazily by index.ts only when enabled, so a disabled deployment
 // never loads playwright-core at all.
 
@@ -9,10 +9,12 @@ import { Router, type Request, type Response } from "express";
 
 import {
   CapacityError,
+  BROWSER_VIEWPORT,
   NavigationRefused,
   UnknownSessionError,
   validSessionID,
   type LiveBrowserInputEvent,
+  type BrowserStreamProfile,
 } from "./errors.js";
 import type { BrowserManager } from "./manager.js";
 import type { LiveBrowserConfig } from "./policy.js";
@@ -81,7 +83,7 @@ export function liveBrowserRoutes(config: LiveBrowserConfig, manager: BrowserMan
     const id = sessionID(req, res);
     if (!id) return;
     try {
-      await manager.attachStream(id, res);
+      await manager.attachStream(id, res, parseStreamProfile(req.query.profile));
     } catch (error) {
       if (!res.headersSent) fail(res, error);
       else res.end();
@@ -114,7 +116,7 @@ export function liveBrowserRoutes(config: LiveBrowserConfig, manager: BrowserMan
   router.post("/browser/:sessionID/input", async (req, res) => {
     const id = sessionID(req, res);
     if (!id) return;
-    const event = parseInput(req.body);
+    const event = parseLiveBrowserInput(req.body);
     if (!event) {
       res.status(400).json({ error: "unrecognized input event" });
       return;
@@ -137,7 +139,7 @@ export function liveBrowserRoutes(config: LiveBrowserConfig, manager: BrowserMan
   return router;
 }
 
-function parseInput(body: unknown): LiveBrowserInputEvent | null {
+export function parseLiveBrowserInput(body: unknown): LiveBrowserInputEvent | null {
   if (!body || typeof body !== "object") return null;
   const event = body as Record<string, unknown>;
   const num = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
@@ -163,7 +165,38 @@ function parseInput(body: unknown): LiveBrowserInputEvent | null {
       return typeof event.key === "string" && event.key.length > 0 ? { type: "key", key: event.key } : null;
     case "type":
       return typeof event.text === "string" && event.text.length > 0 ? { type: "type", text: event.text } : null;
+    case "viewport": {
+      const width = num(event.width);
+      const height = num(event.height);
+      if (width === null || height === null || !Number.isInteger(width) || !Number.isInteger(height)) return null;
+      if (width < BROWSER_VIEWPORT.minWidth || width > BROWSER_VIEWPORT.maxWidth) return null;
+      if (height < BROWSER_VIEWPORT.minHeight || height > BROWSER_VIEWPORT.maxHeight) return null;
+      return { type: "viewport", width, height };
+    }
+    case "touch": {
+      const phase = event.phase;
+      if (phase !== "start" && phase !== "move" && phase !== "end" && phase !== "cancel") return null;
+      if (!Array.isArray(event.points) || event.points.length > 10) return null;
+      if ((phase === "start" || phase === "move") && event.points.length === 0) return null;
+      if ((phase === "end" || phase === "cancel") && event.points.length !== 0) return null;
+      const points = event.points.map((raw, index) => {
+        if (!raw || typeof raw !== "object") return null;
+        const point = raw as Record<string, unknown>;
+        const x = num(point.x);
+        const y = num(point.y);
+        const id = point.id === undefined ? index : num(point.id);
+        if (x === null || y === null || x < 0 || y < 0 || x > BROWSER_VIEWPORT.maxWidth || y > BROWSER_VIEWPORT.maxHeight || id === null || !Number.isInteger(id) || id < 0 || id > 31) return null;
+        return { x, y, id };
+      });
+      if (points.some((point) => point === null)) return null;
+      if (new Set(points.map((point) => point!.id)).size !== points.length) return null;
+      return { type: "touch", phase, points: points as Array<{ x: number; y: number; id: number }> };
+    }
     default:
       return null;
   }
+}
+
+export function parseStreamProfile(value: unknown): BrowserStreamProfile {
+  return value === "coarse" ? "coarse" : "default";
 }

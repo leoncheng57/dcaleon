@@ -1191,6 +1191,21 @@ several decisions below.
       lives at `/opencode`, a navbar peer of DSH and Claude.** Every runtime is reached from
       the navbar, so the root belongs to none of them. `/sessions/:id` stays where it was:
       moving it would break deep links, notification click URLs and phone transfer for no gain.
+35. **The live Browser is one destination in a single right tools slot.** The functional
+    Browser, Minichats WIP page and Terminal WIP page share one selector; the latter two make
+    the information architecture visible without claiming #56 or #59 has shipped. On desktop
+    the tools slot participates in the conversation flex row and replaces the persistent
+    Inspector while open—there is no modal scrim and no simultaneous pair of right sidebars.
+    Browser uses a fixed 42rem width; WIP destinations use 28rem. Below `lg` the same surface
+    is full-screen and safe-area-aware. Closing restores the Inspector and opener focus.
+    Hiding Browser unmounts only its MJPEG response, so `Page.stopScreencast` freezes the
+    server-owned page while its URL, history and shared-profile login survive. The client may
+    request bounded viewport/touch input and either the default or coarse stream profile; the
+    server owns the bounds and actual CDP parameters. The persistent profile is refused when
+    its root grants group/other access, service workers and speculative network
+    activity are disabled, WebSockets pass the same private-host policy as HTTP(S), and WebRTC
+    is constrained to avoid non-proxied UDP. The dated design snapshot is **Live Browser and
+    Right Tools Panel — 2026-09-07**; it supersedes rather than edits the 2026-08-27 proposal.
 
 ## Client conventions (inherited from the OpenHands runner, still enforced)
 
@@ -1217,12 +1232,14 @@ several decisions below.
   stripped of links, executable DOM, embedded resources and unsafe CSS before mounting.
 - `playwright-core@1.62.1` (exact) is the live session browser's CDP client
   (issue #229): one server-side persistent Chromium context, one page per
-  conversation session, streamed to the drawer as MJPEG. It is loaded only when
+  conversation session, streamed to the right tools panel as MJPEG. It is loaded only when
   `LIVE_BROWSER_ENABLED=true` and reuses the browser install the E2E suite
   already manages; hand-rolling a CDP transport is precisely the thing not to
-  do. All navigation and subresources pass `server/browser/policy.ts`, which
-  blocks loopback/private/link-local ranges, `file://` and downloads — without
-  it the panel could reach the unauthenticated OpenCode server on 127.0.0.1.
+  do. Navigation, subresources and WebSockets pass `server/browser/policy.ts`,
+  which blocks loopback/private/link-local ranges, `file://` and downloads;
+  service workers/speculative connections are disabled and the persistent
+  credential profile must be private to the host user. Without those controls
+  the panel could reach the unauthenticated OpenCode server on 127.0.0.1.
 - `qrcode-generator@2.0.4` is the sole QR runtime dependency: it creates the
   phone-transfer matrix entirely in the browser, avoiding URL disclosure to an
   external image service. The app reads its matrix API and renders a React SVG

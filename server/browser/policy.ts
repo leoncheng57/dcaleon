@@ -2,12 +2,12 @@
 //
 // A headless browser is itself an SSRF engine, and this one is driven by an
 // unauthenticated endpoint reachable from every tailnet peer. Without this
-// module the drawer can reach 127.0.0.1:4096 — the OpenCode server that runs
+// module the panel can reach 127.0.0.1:4096 — the OpenCode server that runs
 // shell commands as the host user — plus the LAN and cloud metadata ranges.
 // The block applies to NAVIGATION and SUBRESOURCES alike: an <img> pointing at
 // a loopback URL is the same hole as typing it in the address bar.
 //
-// Design doc: "Live Session Browser — 2026-08-27" (docs/engineering-design).
+// Design doc: "Live Browser and Right Tools Panel — 2026-09-07".
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -72,6 +72,13 @@ function isPrivateV6(address: string): boolean {
   const v4 = /(?:^|:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(lower);
   if (v4) return isPrivateV4(v4[1]);
   const compact = lower.replace(/^\[|\]$/g, "");
+  // URL normalisation converts mapped dotted IPv4 to hexadecimal hextets.
+  const mapped = /^(?:::ffff:|0:0:0:0:0:ffff:)([a-f0-9]{1,4}):([a-f0-9]{1,4})$/.exec(compact);
+  if (mapped) {
+    const high = parseInt(mapped[1], 16);
+    const low = parseInt(mapped[2], 16);
+    return isPrivateV4(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`);
+  }
   if (compact === "::" || compact === "::1") return true;
   const head = firstHextet(compact);
   if (head === null) return true;
@@ -99,8 +106,8 @@ export function isBlockedHostname(hostname: string): boolean {
 export type NavigationVerdict = { ok: true; url: string } | { ok: false; reason: string };
 
 // DNS answers are cached briefly so subresource storms do not become a
-// resolver storm. Short TTL keeps rebinding windows small; the per-request
-// re-check (not just per-navigation) is the actual rebinding defence.
+// resolver storm. This is not DNS pinning: Chromium resolves separately, so
+// deployment-level egress controls are required against DNS rebinding.
 const DNS_TTL_MS = 30_000;
 const dnsCache = new Map<string, { at: number; private: boolean }>();
 
@@ -143,6 +150,23 @@ export async function assessTarget(rawUrl: string): Promise<NavigationVerdict> {
   if (isBlockedHostname(hostname)) return { ok: false, reason: "host is private or local" };
   if (await resolvesPrivate(hostname)) return { ok: false, reason: "host resolves to a private address" };
   return { ok: true, url: url.toString() };
+}
+
+/** WebSockets bypass ordinary request routing, but share the same host rule. */
+export async function assessWebSocketTarget(rawUrl: string): Promise<NavigationVerdict> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return { ok: false, reason: "not a valid URL" };
+  }
+  if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+    return { ok: false, reason: `scheme ${url.protocol.replace(/:$/, "")} is not allowed` };
+  }
+  const transport = new URL(url.toString());
+  transport.protocol = url.protocol === "wss:" ? "https:" : "http:";
+  const verdict = await assessTarget(transport.toString());
+  return verdict.ok ? { ok: true, url: url.toString() } : verdict;
 }
 
 /** Test seam: clear the DNS verdict cache. */

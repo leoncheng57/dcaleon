@@ -18,6 +18,7 @@ import dotenv from "dotenv";
 
 import { readOpencodeConfig, checkHealth, EXPECTED_SERVER_VERSION } from "./opencode/client.js";
 import { EventBus } from "./opencode/events.js";
+import { bindBrowserSessionLifecycle } from "./browser/lifecycle.js";
 import { AutoPermissionService } from "./opencode/autoPermissions.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { settingsRoutes } from "./routes/settings.js";
@@ -140,6 +141,9 @@ const liveBrowserManager = liveBrowser.enabled
     )
   : null;
 app.use("/api", liveBrowserRoutes(liveBrowser, liveBrowserManager));
+if (liveBrowserManager) {
+  bindBrowserSessionLifecycle(bus, liveBrowserManager);
+}
 
 /**
  * Liveness for this BFF plus reachability of the OpenCode server behind it.
