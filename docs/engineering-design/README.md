@@ -13,8 +13,9 @@ or mirrored diagrams: editing a repository copy would create a competing source.
 | [Live Session Browser — 2026-08-27](https://app.notion.com/p/Live-Session-Browser-2026-08-27-3c9a232837d98154bb51f23fe99394a5) | 2026-08-27 | Live per-session interactive web browser: headless Chromium, screencast transport, capacity and memory model, and the SSRF boundary. Proposed, not implemented. | Private until manually published |
 | [Hub Homepage Redesign — 2026-08-28](https://app.notion.com/p/Hub-Homepage-Redesign-2026-08-28-3caa232837d981a188b8f59dc880437a) | 2026-08-28 | Merges composer-first and activity-first Hub layouts: a cross-project "needs attention" band, a scrollable 25-item Recents cap, and collapsed-by-default project/worktree pickers. Proposed, not implemented. | Private until manually published |
 | [Logging and Audit Persistence — 2026-08-29](https://app.notion.com/p/Logging-and-Audit-Persistence-2026-08-29-3cba232837d9813b8dc9c0e592678e01) | 2026-08-29 | Five alternatives for bounding the unrotated launchd log, and the chosen one: move notification audit lines into a BFF-owned, size- and age-bounded `audit.jsonl`. Implemented as an unmerged draft PR. | Private until manually published |
+| [Claude Code Local-Binary Runtime — 2026-09-06](https://app.notion.com/p/Claude-Code-Local-Binary-Runtime-2026-09-06-3d4a232837d981c5823dfc2789c8d0a3) | 2026-09-06 | Third runtime driving the unmodified `claude` binary on a subscription seat: Seatbelt sandbox, per-prompt spawn, worktree isolation, credential boundary, transcript contract, parity features (playbooks, notifications, usage, island selector). PR #341. | Private until manually published |
 
-All five pages are children of [Public Engineering Design Docs](https://app.notion.com/p/Public-Engineering-Design-Docs-3c8a232837d980d2b294db846b968a57) under `Custom Projects` in `Leon (Professional)`.
+All six pages are children of [Public Engineering Design Docs](https://app.notion.com/p/Public-Engineering-Design-Docs-3c8a232837d980d2b294db846b968a57) under `Custom Projects` in `Leon (Professional)`.
 
 ## Snapshot contract
 
