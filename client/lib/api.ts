@@ -52,6 +52,8 @@ export interface Todo {
   status: string;
   priority: string;
 }
+export interface ClaudeMemoryEntry { filename: string; type: string; description?: string; body: string; truncated?: true }
+export interface ClaudeMemorySnapshot { index: string; indexTruncated?: true; entries: ClaudeMemoryEntry[]; truncated: boolean }
 
 /** Mirrors `server/opencode/subagents.ts`; see there for how each is derived. */
 export type SubagentState = "launched" | "running" | "completed" | "failed" | "unknown";
@@ -1263,6 +1265,8 @@ export const api = {
   // server needs to know which project is selected before it will list it.
   reminders: (directory: string) =>
     fetch(`/api/reminders?directory=${encodeURIComponent(directory)}`).then((r) => json<{ reminders: ReminderSummary[] }>(r)),
+  memory: (directory: string) => fetch(scoped("/memory", directory)).then((r) => json<ClaudeMemorySnapshot>(r)),
+  deleteMemory: (directory: string, filename: string) => fetch(scoped(`/memory/${encodeURIComponent(filename)}`, directory), { method: "DELETE" }).then((r) => json<void>(r)),
   workflows: () =>
     fetch("/api/workflows").then((r) => json<{ workflows: WorkflowSummary[] }>(r)),
 
