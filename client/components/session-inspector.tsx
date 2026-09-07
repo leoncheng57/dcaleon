@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { Button } from "../ds/button.js";
@@ -40,6 +40,7 @@ interface SessionInspectorProps {
   trajectory?: { sessionId: string; running: boolean };
   /** Keep shared inspector state mounted while another desktop right panel is visible. */
   desktopHidden?: boolean;
+  runLogOverride?: ReactNode;
 }
 
 const TAB_LABELS: Record<InspectorTab, string> = {
@@ -585,6 +586,7 @@ function InspectorContent({
   tabs,
   onOpenManagedChild,
   trajectory,
+  runLogOverride,
 }: {
   catalogue: CatalogResponse | null;
   catalogError: string | null;
@@ -606,6 +608,7 @@ function InspectorContent({
   tabs: readonly InspectorTab[];
   onOpenManagedChild: () => void;
   trajectory?: { sessionId: string; running: boolean };
+  runLogOverride?: ReactNode;
 }) {
   const [trajectoryOpen, setTrajectoryOpen] = useState(false);
   const subagentCount = subagents.report?.tasks.length ?? 0;
@@ -630,7 +633,7 @@ function InspectorContent({
           >
             {TAB_LABELS[name]}
             {name === "todo" && todos.length ? ` ${todos.length}` : ""}
-            {name === "runlog" && commands.length ? ` ${commands.length}` : ""}
+            {name === "runlog" && !runLogOverride && commands.length ? ` ${commands.length}` : ""}
             {name === "subagents" && subagentCount ? ` ${subagentCount}` : ""}
           </button>
         ))}
@@ -639,7 +642,7 @@ function InspectorContent({
       <div className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {tab === "todo" && <TodoPanel todos={todos} loaded={todosLoaded} error={todosError} />}
 
-        {tab === "runlog" && (
+        {tab === "runlog" && (runLogOverride ?? (
           <RunLogPanel
             commands={commands}
             onJump={onJump}
@@ -647,7 +650,7 @@ function InspectorContent({
             commandExporting={commandExporting}
             commandExportError={commandExportError}
           />
-        )}
+        ))}
 
         {tab === "subagents" && (
           <SubagentPanel
@@ -806,6 +809,7 @@ export function SessionInspector({
   defaultModel,
   trajectory,
   desktopHidden = false,
+  runLogOverride,
 }: SessionInspectorProps) {
   const [desktopViewport, setDesktopViewport] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const commandScope = `${directory}\0${sessionID}`;
@@ -909,6 +913,7 @@ export function SessionInspector({
       catalogError={catalogError}
       catalogLoading={catalogLoading}
       commands={commands}
+      runLogOverride={runLogOverride}
       directory={directory}
       links={links}
       todos={todos}

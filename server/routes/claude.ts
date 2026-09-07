@@ -19,6 +19,7 @@ import { visibleReminder, visibleReminders } from "../reminders/loader.js";
 import { isValidReminderId } from "../reminders/reminders.js";
 import { isValidWorkflowId, workflowCatalogue } from "../workflows/workflows.js";
 import { fetchClaudeUsage } from "../claude/usage.js";
+import { TranscriptCursorError, type ClaudeActionCategory } from "../claude/transcript.js";
 
 const MAX_PROMPT = 40_000;
 
@@ -33,6 +34,7 @@ function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
     ...(session.worktree ? { branch: session.worktree.branch } : {}),
     ...(session.prUrl ? { prUrl: session.prUrl } : {}),
     ...(session.tokenUsage ? { tokenUsage: session.tokenUsage } : {}),
+    worktreeClosed: session.isolation === "worktree" && session.events.some((event) => event.kind === "status" && ["Merged into project", "Worktree discarded"].includes(event.label)),
   };
 }
 
@@ -146,7 +148,35 @@ export function claudeRoutes(
     if (!requireEnabled(res)) return;
     const session = store.get(req.params.id);
     if (!session) return error(res, 404, "Claude session not found");
-    res.json({ session: publicSession(session), events: session.events });
+    const query: { before?: string; after?: string; since?: string; q?: string; actions?: boolean; category?: ClaudeActionCategory } = {};
+    for (const key of ["before", "after", "since", "q"] as const) {
+      const value = req.query[key];
+      if (value !== undefined && (typeof value !== "string" || !value || value.length > (key === "q" ? 200 : 512))) return error(res, 400, "Invalid transcript query");
+      if (typeof value === "string") query[key] = value;
+    }
+    if ([query.before, query.after, query.since].filter(Boolean).length > 1) return error(res, 400, "Use one transcript cursor");
+    if (req.query.actions !== undefined && req.query.actions !== "true") return error(res, 400, "Invalid actions filter");
+    query.actions = req.query.actions === "true";
+    if (req.query.category !== undefined) {
+      if (!query.actions || typeof req.query.category !== "string" || !["edit", "command", "read", "failure", "other"].includes(req.query.category)) return error(res, 400, "Invalid action category");
+      query.category = req.query.category as ClaudeActionCategory;
+    }
+    try {
+      res.set("Cache-Control", "private, no-store");
+      res.json({ session: publicSession(session), ...store.transcript(session).read(query) });
+    } catch (cause) {
+      if (cause instanceof TranscriptCursorError) return error(res, 400, cause.message);
+      throw cause;
+    }
+  });
+
+  // Explicit full-history workflow only. Never used by polling or the main view.
+  router.get("/claude/sessions/:id/export", (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+    res.json({ events: session.events });
   });
 
   // The reminders this session may attach, scoped by the session's own cwd.

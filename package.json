@@ -52,6 +52,7 @@
     "@deepseek-ai/cordis": "4.0.1",
     "@deepseek-ai/dsh-session-persistence-jsonl": "0.1.1-rc.2",
     "@lezer/highlight": "^1.2.3",
+    "@tanstack/react-virtual": "^3.14.11",
     "clsx": "^2.1.1",
     "dotenv": "^17.3.1",
     "express": "^5.0.0",

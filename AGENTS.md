@@ -1225,18 +1225,34 @@ several decisions below.
 
 ## Claude transcript performance
 
-- Reconcile polling/SSE snapshots with `mergeEvents` so unchanged events keep their
-  array and row identities. Session summaries also retain identity when unchanged.
-- Claude renders the newest 50 display items by default. Loading history pins the
-  first item and restores a visible DOM anchor; new activity must not evict a reader's
-  older rows. Jump to latest restores the bounded tail. Show all also expands completed
-  action groups for browser search. Export, references and run log use the full history.
+- `GET /claude/sessions/:id` defaults to at most 50 events / 128 KiB of event data.
+  Opaque session-local cursors page backward/forward or request revisions with `since`.
+  Updated tool rows replace their objects; mutating one in place hides its revision.
+  Restart, retention and an oversized delta return a bounded replacement tail.
+- The conversation retains at most 150 events / 384 KiB of serialized event data;
+  normal following keeps 50. Earlier navigation evicts from the opposite end and pins
+  the reader. The measured virtualizer preserves the visible anchor. Jump to latest
+  returns to the tail; a pinned reader uses Load newer to traverse missing pages.
+- Search and run log filter full retained history on the server and own one separate
+  page. File references are validated as pages are read. Explicit export alone loads
+  original full events transiently and uses the existing export serializer; the normal
+  reading view shortens oversized fields and tells readers to download complete text.
+  "Complete" means the store's existing retained history (normally capped at 1,000
+  events), not the Claude CLI's entire conversation log.
+- `@tanstack/react-virtual` measures variable-height Markdown/tool rows and preserves
+  anchors through prepend/eviction. This runtime dependency avoids maintaining a second
+  scroll measurement/anchoring engine; only Claude opts into virtual rendering.
 - Completed groups default to collapsed only in Claude; the shared renderer's other
   callers keep their existing default. Running and failed calls are not grouped.
 - Visible active runs keep a 3s durable fallback; idle sessions use 30s. SSE still nudges
-  visible tabs immediately. Hidden tabs skip refresh/reconciliation, including results
-  from requests already in flight, and catch up on visibility restoration. The static
+  visible tabs immediately. Hidden tabs close Claude SSE, stop polling, abort in-flight
+  reads and catch up once on visibility restoration. Unchanged refreshes preserve event,
+  session and list identities. Reconnection uses a bounded recovery fetch. The static
   public simulator still performs its one initial load even when opened in a hidden tab.
+- The real-BFF browser fixture owns its own store, temporary workspace and SSE server.
+  The normal regression runs two pages for 15s. `CLAUDE_PERF_CHROME=1
+  CLAUDE_PERF_SOAK_MS=600000` selects installed Chrome and the ten-minute acceptance run.
+  It writes measured JSON evidence, not a promise about an arbitrary number of tabs.
 
 ## Resource monitor
 

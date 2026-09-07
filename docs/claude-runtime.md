@@ -119,6 +119,58 @@ and a finished turn rings the same bell.
   from the Claude store via the service's injectable lookups (`server/index.ts`); the click
   URL and the in-app row route to `/claude/sessions/<id>`.
 
+## Transcript paging and performance
+
+The conversation initially reads at most 50 events and 128 KiB of event data.
+`GET /api/claude/sessions/:id` returns `events` and `page`: opaque `before`/`after`
+navigation cursors, a `cursor` for `since` refreshes, total retained event count,
+and boundary/order metadata. Use only one of `before`, `after`, or `since` per request.
+An unchanged `since` response has no events. Revisions include tool completion updates,
+even when their original row is older. A stale cursor or more than a page of changes
+returns `page.reset: true` with a new tail, never an unbounded catch-up response.
+
+The normal view holds 50 events; reading earlier holds at most 150 events and 384 KiB
+of serialized event data. This bounds transcript data, not total browser heap. Rows
+are measured and virtualized. Loading earlier preserves the visible row and evicts
+newer data when necessary; Load newer and Jump to latest recover that data on demand.
+Large fields are previewed at no more than 8,000 characters (less when needed to keep
+an event within its byte budget), with an explicit shortened-preview notice. Original
+text remains in the server store and is available through explicit export.
+
+Search history replaces “Show all for browser search.” Search (`q`, at most 200
+characters) and run log (`actions=true`, optional `category`) filter original retained
+events on the server and return one bounded page at a time. File links resolve when
+their page is read, including search results. Markdown, JSON, and command downloads
+use the explicit `/export` read and release the full response after serialization;
+they do not populate conversation state. “Complete history” means the existing
+server store's retained events (normally the newest 1,000), not Claude's own CLI log.
+
+Hidden tabs close their Claude SSE connection, stop polling, and abort outstanding
+transcript requests. Becoming visible performs one bounded incremental catch-up;
+SSE reconnect uses a bounded recovery read. Visible fallback polling remains 3s
+while running and 30s while idle. The static public simulator has no SSE connection.
+
+Diagnostics live on `claude-history-controls` (`data-total-events`, resident event/page
+counts, refresh bytes and reconciliation milliseconds), and `claude-virtual-transcript`
+(rendered row and actual list-commit counts). The real-BFF performance fixture owns its
+store, temporary workspace and SSE endpoint, so simultaneous tests cannot reset it.
+
+Run the ten-minute installed-Chrome acceptance lane with unused server ports:
+
+```sh
+CI=true PORT=3446 MOCK_OPENCODE_PORT=4646 MOCK_PREVIEW_PORT=4746 \
+CLAUDE_PERF_CHROME=1 CLAUDE_PERF_SOAK_MS=600000 \
+npm run test:e2e:host -- tests/e2e/claude-performance.ui.spec.ts --workers=1 --retries=0
+```
+
+Without those performance environment variables the same two-page test runs for 15s
+in Playwright Chromium. Each page starts with 260 mixed events; one receives live SSE
+updates. The JSON attachment records browser version and measured duration, with
+thresholds of less than 500ms interaction latency, 200ms longest task, 150,000 bytes
+per response, 16,000 bytes per incremental response, 50ms reconciliation, 30 rendered
+rows, and three resident 50-event slots. These are reproducible fixture thresholds,
+not a guarantee for arbitrary Chrome profiles, extensions, hardware, or tab counts.
+
 ## Not in V1
 
 Interactive tool approval (unavailable, not deferred), reading `claude`'s own JSONL as a
