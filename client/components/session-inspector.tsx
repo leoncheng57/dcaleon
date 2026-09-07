@@ -14,10 +14,11 @@ import {
   type SessionLink,
   type SessionLinkIndex,
 } from "../lib/derive.js";
-import { api, type CatalogResponse, type McpStatus, type Todo } from "../lib/api.js";
+import { api, type CatalogResponse, type ClaudeMemorySnapshot, type McpStatus, type Todo } from "../lib/api.js";
 import { type InspectorTab } from "../lib/inspectorTabs.js";
 import { useSubagents, type SubagentsState } from "../lib/useSubagents.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
+import { DshTrajectoryInspector } from "./dsh-trajectory-inspector.js";
 import { ReviewCard } from "./review-card.js";
 import { SubagentPanel } from "./subagent-panel.js";
 import { ManagedChildDialog } from "./managed-child-dialog.js";
@@ -26,15 +27,17 @@ import type { ModelCatalogue, ModelSelection } from "../lib/models.js";
 
 interface SessionInspectorProps {
   directory: string;
+  sessionID: string;
   events: TranscriptEvent[];
-  todos: Todo[];
-  todosLoaded: boolean;
-  todosError: string | null;
+  todos?: Todo[];
+  todosLoaded?: boolean;
+  todosError?: string | null;
   requestedTab?: InspectorTab;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
-  modelCatalogue: ModelCatalogue | null;
+  modelCatalogue?: ModelCatalogue | null;
   defaultModel?: ModelSelection;
+  trajectory?: { sessionId: string; running: boolean };
 }
 
 const TAB_LABELS: Record<InspectorTab, string> = {
@@ -43,9 +46,42 @@ const TAB_LABELS: Record<InspectorTab, string> = {
   subagents: "Subagents",
   reviews: "Reviews",
   catalog: "Catalog",
+  trajectory: "Trajectory",
+  memory: "Memory",
 };
 
-const CORE_INSPECTOR_TABS = ["todo", "runlog", "subagents"] as const;
+const CORE_INSPECTOR_TABS = ["todo", "runlog", "subagents", "memory"] as const;
+
+function MemoryPanel({ directory }: { directory: string }) {
+  const [memory, setMemory] = useState<ClaudeMemorySnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const load = useCallback(() => {
+    setMemory(null);
+    setError(null);
+    void api.memory(directory).then(setMemory).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+  }, [directory]);
+  useEffect(() => { load(); }, [load]);
+  const remove = useCallback((filename: string) => {
+    if (!window.confirm(`Delete Claude memory ${filename}? This cannot be undone.`)) return;
+    setDeleting(filename);
+    void api.deleteMemory(directory, filename).then(() => {
+      setMemory((current) => current && { ...current, entries: current.entries.filter((entry) => entry.filename !== filename) });
+      if (expanded === filename) setExpanded(null);
+    }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))).finally(() => setDeleting(null));
+  }, [directory, expanded]);
+  if (error) return <section data-testid="opencode-memory-panel"><p className="text-sm text-[var(--color-text-danger)]" role="alert">Could not load Claude memory: {error}</p><Button className="mt-3" size="sm" variant="secondary" onClick={load}>Retry</Button></section>;
+  if (!memory) return <section data-testid="opencode-memory-panel"><p className="text-sm text-[var(--color-text-muted)]" role="status">Loading Claude memory...</p></section>;
+  return <section data-testid="opencode-memory-panel" className="space-y-3">
+    <div className="flex items-baseline justify-between gap-2"><h2 className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Project memory</h2><span className="text-xs text-[var(--color-text-muted)]">{memory.entries.length}{memory.truncated ? "+" : ""} entries</span></div>
+    {memory.entries.length === 0 ? <p className="text-sm text-[var(--color-text-muted)]">No Claude Code memory entries for this project.</p> : <ul className="space-y-2">{memory.entries.map((entry) => <li key={entry.filename} className="rounded border border-[var(--color-border-default)] p-3" data-testid="opencode-memory-entry">
+      <div className="flex min-w-0 items-start gap-2"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => setExpanded(expanded === entry.filename ? null : entry.filename)} aria-expanded={expanded === entry.filename}><p className="break-words text-sm font-medium">{entry.filename}</p><p className="mt-1 text-xs text-[var(--color-text-muted)]">{entry.type}{entry.description ? ` · ${entry.description}` : ""}</p></button><Button size="sm" variant="danger" disabled={deleting === entry.filename} onClick={() => remove(entry.filename)} data-testid="opencode-memory-delete">{deleting === entry.filename ? "Deleting…" : "Delete"}</Button></div>
+      {expanded === entry.filename && <div className="mt-3 border-t border-[var(--color-border-default)] pt-3"><pre className="whitespace-pre-wrap break-words text-xs leading-5">{entry.body}</pre>{entry.truncated && <p className="mt-2 text-xs text-[var(--color-text-warning)]">Entry truncated for display.</p>}</div>}
+    </li>)}</ul>}
+    {memory.index && <details className="text-xs"><summary className="cursor-pointer text-[var(--color-text-action-ghost)]">View memory index</summary><pre className="mt-2 whitespace-pre-wrap break-words rounded bg-[var(--color-background-surface-neutral-muted)] p-2">{memory.index}</pre>{memory.indexTruncated && <p className="mt-1 text-[var(--color-text-warning)]">Index truncated for display.</p>}</details>}
+  </section>;
+}
 
 /** One row in a non-review link group. Non-HTTP(S) targets never reach here. */
 function SessionLinkRow({ link }: { link: SessionLink }) {
@@ -546,6 +582,7 @@ function InspectorContent({
   subagents,
   tabs,
   onOpenManagedChild,
+  trajectory,
 }: {
   catalogue: CatalogResponse | null;
   catalogError: string | null;
@@ -566,7 +603,9 @@ function InspectorContent({
   subagents: SubagentsState;
   tabs: readonly InspectorTab[];
   onOpenManagedChild: () => void;
+  trajectory?: { sessionId: string; running: boolean };
 }) {
+  const [trajectoryOpen, setTrajectoryOpen] = useState(false);
   const subagentCount = subagents.report?.tasks.length ?? 0;
   return (
     <>
@@ -575,9 +614,6 @@ function InspectorContent({
           <button
             key={name}
             type="button"
-            // 3.75rem keeps all five tabs inside the 320px desktop aside
-            // without a horizontal scroll; the nav still scrolls if a sixth
-            // is ever added.
             className={`min-h-11 min-w-[3.75rem] shrink-0 flex-1 rounded px-1.5 py-1.5 text-xs lg:min-h-0 ${
               tab === name
                 ? "bg-[var(--color-background-surface-neutral-muted)] font-semibold"
@@ -642,6 +678,26 @@ function InspectorContent({
           </section>
         )}
         {tab === "catalog" && <CatalogPanel catalogue={catalogue} loading={catalogLoading} error={catalogError} directory={directory} onRefresh={onCatalogRefresh} />}
+        {tab === "trajectory" && trajectory && (
+          <>
+            <section data-testid="opencode-trajectory-panel">
+              <h2 className="mb-3 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">Trajectory</h2>
+              <Button size="sm" variant="secondary" onClick={() => setTrajectoryOpen(true)} data-testid="opencode-trajectory-open">
+                Open full trajectory
+              </Button>
+            </section>
+            {trajectoryOpen && (
+              <DshTrajectoryInspector
+                key={trajectory.sessionId}
+                sessionId={trajectory.sessionId}
+                open
+                running={trajectory.running}
+                onClose={() => setTrajectoryOpen(false)}
+              />
+            )}
+          </>
+        )}
+        {tab === "memory" && <MemoryPanel directory={directory} />}
       </div>
     </>
   );
@@ -734,7 +790,20 @@ function DesktopInspector({ title, onClose, children }: { title: string; onClose
   );
 }
 
-export function SessionInspector({ directory, sessionID, events, todos, todosLoaded, todosError, requestedTab, mobileOpen = false, onMobileClose, modelCatalogue, defaultModel }: SessionInspectorProps & { sessionID: string }) {
+export function SessionInspector({
+  directory,
+  sessionID,
+  events,
+  todos = [],
+  todosLoaded = true,
+  todosError = null,
+  requestedTab,
+  mobileOpen = false,
+  onMobileClose,
+  modelCatalogue = null,
+  defaultModel,
+  trajectory,
+}: SessionInspectorProps) {
   const [desktopViewport, setDesktopViewport] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const commandScope = `${directory}\0${sessionID}`;
   const commands = useMemo(() => extractCommands(events), [events]);
@@ -825,7 +894,13 @@ export function SessionInspector({ directory, sessionID, events, todos, todosLoa
 
   useEffect(() => () => catalogRequest.current?.controller.abort(), []);
 
-  const content = (onJump: (id: string) => void, tabs: readonly InspectorTab[] = CORE_INSPECTOR_TABS, activeTab = tab) => (
+  const coreTabs: InspectorTab[] = useMemo(() => {
+    const result: InspectorTab[] = [...CORE_INSPECTOR_TABS];
+    if (trajectory) result.push("trajectory");
+    return result;
+  }, [trajectory]);
+
+  const content = (onJump: (id: string) => void, tabs: readonly InspectorTab[] = coreTabs, activeTab = tab) => (
     <InspectorContent
       catalogue={catalogue?.directory === directory ? catalogue.value : null}
       catalogError={catalogError}
@@ -849,14 +924,22 @@ export function SessionInspector({ directory, sessionID, events, todos, todosLoa
         subagents.clearLaunchError();
         setManagedChildOpen(true);
       }}
+      trajectory={trajectory}
     />
   );
+  const defaultMobileTabs: InspectorTab[] = trajectory
+    ? ["runlog", "todo", "trajectory", "memory"]
+    : ["runlog", "todo", "subagents", "memory"];
   const mobileTabs = requestedTab === "reviews"
     ? ["reviews"] as const
     : requestedTab === "catalog"
       ? ["catalog"] as const
-      : ["runlog", "todo", "subagents"] as const;
-  const mobileTitle = requestedTab === "reviews" ? "Reviews" : requestedTab === "catalog" ? "Catalog" : "Run log";
+      : requestedTab === "memory"
+        ? ["memory"] as const
+        : requestedTab === "trajectory"
+          ? ["trajectory"] as const
+          : defaultMobileTabs;
+  const mobileTitle = requestedTab === "reviews" ? "Reviews" : requestedTab === "catalog" ? "Catalog" : requestedTab === "memory" ? "Memory" : requestedTab === "trajectory" ? "Trajectory" : "Run log";
 
   return (
     <>

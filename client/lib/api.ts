@@ -52,6 +52,8 @@ export interface Todo {
   status: string;
   priority: string;
 }
+export interface ClaudeMemoryEntry { filename: string; type: string; description?: string; body: string; truncated?: true }
+export interface ClaudeMemorySnapshot { index: string; indexTruncated?: true; entries: ClaudeMemoryEntry[]; truncated: boolean }
 
 /** Mirrors `server/opencode/subagents.ts`; see there for how each is derived. */
 export type SubagentState = "launched" | "running" | "completed" | "failed" | "unknown";
@@ -826,7 +828,7 @@ export const api = {
     }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
   claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
     json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
-  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean; reminder?: string; workflow?: string } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
+  promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean; reminder?: string; workflow?: string; images?: Array<{ filename: string; mime: string; url: string }> } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     // Playbooks travel as ids only; the server resolves the trusted bodies.
@@ -836,6 +838,7 @@ export const api = {
       plan: !!options.plan,
       ...(options.reminder ? { reminder: options.reminder } : {}),
       ...(options.workflow ? { workflow: options.workflow } : {}),
+      ...(options.images?.length ? { images: options.images.map(({ mime, url }) => ({ mime, data: url })) } : {}),
     }),
   }).then((r) => json<{ accepted: boolean }>(r)),
   /** Reminders visible to this session, scoped server-side by the session's own cwd. */
@@ -1263,6 +1266,8 @@ export const api = {
   // server needs to know which project is selected before it will list it.
   reminders: (directory: string) =>
     fetch(`/api/reminders?directory=${encodeURIComponent(directory)}`).then((r) => json<{ reminders: ReminderSummary[] }>(r)),
+  memory: (directory: string) => fetch(scoped("/memory", directory)).then((r) => json<ClaudeMemorySnapshot>(r)),
+  deleteMemory: (directory: string, filename: string) => fetch(scoped(`/memory/${encodeURIComponent(filename)}`, directory), { method: "DELETE" }).then((r) => json<void>(r)),
   workflows: () =>
     fetch("/api/workflows").then((r) => json<{ workflows: WorkflowSummary[] }>(r)),
 

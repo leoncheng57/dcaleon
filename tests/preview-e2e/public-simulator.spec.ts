@@ -7,9 +7,9 @@ test("serves an interactive, credential-free PR simulator", async ({ page }) => 
   await page.waitForLoadState("networkidle");
   expect(pageErrors).toEqual([]);
   await expect(page.getByTestId("opencode-public-simulator-banner")).toContainText("fixture data only");
-  // The root is a landing page; navigate to the OpenCode hub to verify the upstream badge.
-  await page.getByTestId("island-selector-trigger").click();
-  await page.getByTestId("island-selector-opencode").click();
+  // The front page is now a runtime picker; navigate to the OpenCode hub.
+  await expect(page.getByTestId("runtime-card-opencode")).toBeVisible();
+  await page.getByTestId("runtime-card-opencode").click();
   await expect(page.getByTestId("opencode-upstream-badge")).toContainText("1.18.23+dca.2");
   // "3. Existing sessions" is a <details> that ships collapsed, so its contents
   // are in the DOM but not visible until the toggle is clicked.

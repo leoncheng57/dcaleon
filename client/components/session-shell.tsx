@@ -2,6 +2,7 @@ import type { ClipboardEvent, FocusEvent, ReactNode, RefObject, KeyboardEvent as
 import { ArrowDown } from "lucide-react";
 
 import { Button } from "../ds/button.js";
+import { SessionActionBar } from "./session-action-bar.js";
 import { RunningIndicator, Transcript } from "../components/transcript.js";
 import type { DisplayItem, RunningActivity } from "../lib/derive.js";
 import type { UserEvent, AgentEvent } from "../lib/transcript.js";
@@ -108,9 +109,9 @@ export function SessionShell({ testIds, header, banners, transcript, scroll, com
         {(header.stats || header.actions) && (
           <div className="flex min-w-0 items-center gap-3">
             {header.stats}
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:ml-auto sm:w-fit sm:flex-none" aria-label="Session actions" data-testid={testIds.actions}>
+            <SessionActionBar testId={testIds.actions}>
               {header.actions}
-            </div>
+            </SessionActionBar>
           </div>
         )}
       </header>

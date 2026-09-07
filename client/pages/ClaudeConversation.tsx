@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, Info, ListChecks, OctagonX, PersonStanding, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -9,8 +9,8 @@ import { cn } from "../ds/utils.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
-import { ClaudeInspector } from "../components/claude-inspector.js";
 import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
+import { SessionInspector } from "../components/session-inspector.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
 import { SessionShell } from "../components/session-shell.js";
@@ -27,12 +27,14 @@ import {
   START_DCA_SESSION_WORKFLOW_ID,
 } from "../lib/workflows.js";
 import { collapseActionGroups, runningActivity } from "../lib/derive.js";
+import type { InspectorTab } from "../lib/inspectorTabs.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
 import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
+import { MAX_IMAGE_ATTACHMENTS, readImageAttachment, selectImageFiles, type ImageAttachment } from "../lib/attachments.js";
 
 function claudeModelCatalogue(modelIds: string[]): ModelCatalogue {
   return {
@@ -238,9 +240,15 @@ export function ClaudeConversationPage() {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
   const [changesOpen, setChangesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [runlogOpen, setRunlogOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [requestedInspectorTab, setRequestedInspectorTab] = useState<InspectorTab | undefined>();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [autoSafetyOpen, setAutoSafetyOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [modelCatalogue, setModelCatalogue] = useState<ModelCatalogue | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | undefined>();
@@ -253,7 +261,7 @@ export function ClaudeConversationPage() {
   const [workflowCatalogue, setWorkflowCatalogue] = useState<WorkflowSummary[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState("");
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
-  const [queued, setQueued] = useState<string | null>(null);
+  const [queued, setQueued] = useState<{ text: string; attachments: ImageAttachment[] } | null>(null);
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const refreshInFlight = useRef(false);
@@ -399,7 +407,16 @@ export function ClaudeConversationPage() {
   // A merged/discarded worktree session is finished: its cwd is gone.
   const worktreeClosed = session?.isolation === "worktree" && events.some((event) => event.kind === "status" && (event.label === "Merged into project" || event.label === "Worktree discarded"));
 
-  const sendText = async (text: string) => {
+  const addAttachments = (files: Iterable<File>) => {
+    const selection = selectImageFiles(files, attachments.length);
+    setAttachmentError(selection.error ?? "");
+    if (!selection.files.length) return;
+    void Promise.all(selection.files.map(readImageAttachment))
+      .then((next) => setAttachments((items) => [...items, ...next].slice(0, MAX_IMAGE_ATTACHMENTS)))
+      .catch(() => setAttachmentError("Could not read the selected image."));
+  };
+
+  const sendText = async (text: string, images: ImageAttachment[] = []) => {
     if (!text || sending || worktreeClosed) return;
     setSending(true);
     setError("");
@@ -409,12 +426,14 @@ export function ClaudeConversationPage() {
         plan: planMode,
         reminder: selectedReminder || undefined,
         workflow: selectedWorkflow || undefined,
+        images,
       });
       setSelectedReminder("");
       setSelectedWorkflow("");
       await refresh();
     } catch (cause) {
       setDraft(text);
+      setAttachments(images);
       setSending(false);
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -424,10 +443,13 @@ export function ClaudeConversationPage() {
     if (!text || worktreeClosed) return;
     setDraft("");
     if (sending || session?.running) {
-      setQueued(text);
+      setQueued({ text, attachments });
+      setAttachments([]);
       return;
     }
-    void sendText(text);
+    const images = attachments;
+    setAttachments([]);
+    void sendText(text, images);
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -447,9 +469,9 @@ export function ClaudeConversationPage() {
 
   useEffect(() => {
     if (!session?.running && !sending && queued) {
-      const text = queued;
+      const { text, attachments: images } = queued;
       setQueued(null);
-      void sendText(text);
+      void sendText(text, images);
     }
   }, [session?.running, sending, queued]);
 
@@ -466,24 +488,69 @@ export function ClaudeConversationPage() {
         controlsRow: "claude-mode-toggle",
       }}
       header={{
-        backLink: <Link to="/claude" className="shrink-0 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" data-testid="claude-back">Claude lab</Link>,
+        backLink: <Link to="/claude" className="hidden shrink-0 text-sm underline sm:inline" data-testid="claude-back">← Claude lab</Link>,
         title: session?.title ?? "Conversation",
         badges: (
           <>
             <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
             {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
             {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
+            {session?.running && <Badge variant="info">running</Badge>}
+            {session?.running && (
+              <button
+                type="button"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--color-text-danger)] hover:bg-[var(--color-background-surface-danger-muted)]"
+                onClick={() => void cancel()}
+                aria-label="Stop running agent"
+                title="Stop running agent"
+                data-testid="claude-stop"
+              >
+                <OctagonX aria-hidden="true" className="h-4 w-4" />
+              </button>
+            )}
           </>
         ),
         stats: <ClaudeUsageIndicator tokenUsage={session?.tokenUsage} />,
         actions: (
           <>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setRunlogOpen(true)} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             {session?.prUrl && (
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} aria-label="Open pull request status" title="Reviews" data-testid="claude-open-reviews"><GitPullRequest aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             )}
+            <div className="flex items-center gap-0.5 rounded-full border border-[var(--color-border-default)] px-1 opacity-50" title="Auto permissions always on — Claude runs non-interactively" data-testid="claude-auto-permissions-group">
+              <button type="button" role="switch" aria-checked={true} aria-label="Auto permissions (always on)" disabled className="flex min-h-9 min-w-[4.5rem] items-center justify-center rounded-full disabled:opacity-50" data-testid="claude-auto-permissions-toggle">
+                <span aria-hidden="true" className="relative h-7 w-16 rounded-full border border-current text-[var(--color-text-muted)]">
+                  <span className="absolute left-1 top-1 h-[1.125rem] w-[1.125rem] translate-x-9 rounded-full bg-current" />
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold">ON</span>
+                </span>
+              </button>
+              <div className="flex shrink-0">
+                <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="claude-auto-permissions-info">
+                  <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <Button
+              size="md"
+              variant="ghost"
+              className={cn("min-h-11 min-w-12 px-0", !sidebarOpen && "text-[var(--color-text-muted)] opacity-50")}
+              onClick={() => {
+                if (!sidebarOpen) {
+                  setSidebarOpen(true);
+                  setRequestedInspectorTab("runlog");
+                } else if (requestedInspectorTab === "runlog") {
+                  setSidebarOpen(false);
+                } else {
+                  setRequestedInspectorTab("runlog");
+                }
+              }}
+              aria-label={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
+              title={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
+              data-testid="claude-open-runlog"
+            >
+              <PersonStanding aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
             <SessionOverflowMenu
               testIds={{ root: "claude-session-menu", trigger: "claude-session-menu-trigger", panel: "claude-session-menu-panel" }}
               items={[
@@ -523,6 +590,13 @@ export function ClaudeConversationPage() {
         draft,
         onDraftChange: setDraft,
         composerRef,
+        onPaste: (event) => {
+          const images = [...event.clipboardData.items]
+            .filter((item) => item.kind === "file")
+            .map((item) => item.getAsFile())
+            .filter((file): file is File => file !== null);
+          if (images.length) addAttachments(images);
+        },
         onKeyDown: keyDown,
         placeholder: worktreeClosed ? "This worktree session is finished." : "Send a follow-up…",
         disabled: !session || worktreeClosed,
@@ -555,15 +629,21 @@ export function ClaudeConversationPage() {
               <div className="mb-2 flex items-start gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
                 <div className="min-w-0 flex-1">
                   <span className="text-[11px] font-medium text-[var(--color-text-info)]">Queued — will send when the current turn finishes</span>
-                  <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued}</p>
+                  <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued.text}</p>
                 </div>
-                <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
+                <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued.text); setAttachments(queued.attachments); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
               </div>
             )}
+            {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{attachments.map((attachment, index) => <button key={`${attachment.filename}-${index}`} type="button" onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="rounded border border-[var(--color-border-default)] px-2 py-1 text-xs" data-testid="claude-attachment-chip">{attachment.filename} x</button>)}</div>}
+            {attachmentError && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert" data-testid="claude-attachment-error">{attachmentError}</p>}
           </>
         ),
         bottomRailStart: (
           <>
+            <label className="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-md px-2.5 text-xs font-semibold text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)] sm:min-h-8" data-testid="claude-attach-label">
+              Attach
+              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple className="sr-only" data-testid="claude-attach" onChange={(event) => { addAttachments(event.target.files ?? []); event.target.value = ""; }} />
+            </label>
             {reminderCatalogue.length > 0 && (
               <ReminderPicker catalogue={reminderCatalogue} value={selectedReminder} onChange={setSelectedReminder} />
             )}
@@ -576,13 +656,18 @@ export function ClaudeConversationPage() {
           <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button>
         ) : null,
       }}
-      inspector={{
+      inspector={sidebarOpen ? {
         desktop: (
-          <div className="hidden lg:flex">
-            <ClaudeInspector events={events} title={session?.title ?? "claude-session"} />
-          </div>
+          <SessionInspector
+            directory={id}
+            sessionID={id}
+            events={events}
+            requestedTab={requestedInspectorTab}
+            mobileOpen={inspectorOpen}
+            onMobileClose={() => setInspectorOpen(false)}
+          />
         ),
-      }}
+      } : undefined}
       overlays={(
         <>
           {activeWorkflow && (
@@ -612,6 +697,15 @@ export function ClaudeConversationPage() {
                 <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "json"), serializeSessionJson(session?.title ?? "Claude session", events), "application/json")} data-testid="claude-export-json">Download JSON</Button>
               </div>
             </section>
+          )}
+          {autoSafetyOpen && (
+            <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-start sm:p-4 sm:pt-[10vh]" data-testid="claude-auto-permissions-safety-sheet">
+              <button type="button" className="absolute inset-0 bg-[var(--color-background-overlay)]" aria-label="Close auto permissions safety" onClick={() => setAutoSafetyOpen(false)} data-testid="claude-auto-permissions-safety-scrim" />
+              <section className="relative w-full rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl sm:max-w-md sm:rounded-xl" role="dialog" aria-modal="true" aria-label="Auto permissions safety">
+                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">Auto permissions safety</h2><button type="button" className="ml-auto min-h-11 min-w-11 rounded text-sm" onClick={() => setAutoSafetyOpen(false)} aria-label="Close auto permissions safety" data-testid="claude-auto-permissions-safety-close">Close</button></div>
+                <p className="mt-3 text-sm text-[var(--color-text-muted)]">Auto permissions approves every asked permission once, including arbitrary shell commands, external-directory access, and repeated requests from a doom loop. This affects every session using this project directory and resets to off when the BFF restarts.</p>
+              </section>
+            </div>
           )}
         </>
       )}

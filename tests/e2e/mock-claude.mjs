@@ -7,7 +7,7 @@
 // decide slow mode. `PRIVATE ...` sentinels ride in fields the BFF must never
 // surface (tool inputs, init data); the UI spec asserts none of them reach the DOM.
 import process from "node:process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const argv = process.argv.slice(2);
@@ -37,7 +37,13 @@ emit({
   tools: ["Read", "Bash"],
 });
 
-if (prompt.includes("stay running")) {
+if (prompt.includes("The user attached the following images")) {
+  const match = prompt.match(/^- (".*")$/m);
+  const imagePath = match ? JSON.parse(match[1]) : "";
+  const bytes = readFileSync(imagePath);
+  emit({ type: "assistant", message: { content: [{ type: "text", text: `Inspected attached image (${bytes.length} bytes)` }] } });
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
+} else if (prompt.includes("stay running")) {
   // Slow mode: stay alive until the supervisor sends SIGTERM (the cancel test).
   setInterval(() => {}, 1000);
 } else if (prompt.includes('<reminder name="') || prompt.includes('<workflow name="')) {

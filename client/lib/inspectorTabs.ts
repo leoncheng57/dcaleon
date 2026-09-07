@@ -1,4 +1,4 @@
-export const INSPECTOR_TABS = ["todo", "runlog", "subagents", "reviews", "catalog"] as const;
+export const INSPECTOR_TABS = ["todo", "runlog", "subagents", "reviews", "catalog", "trajectory", "memory"] as const;
 
 export type InspectorTab = (typeof INSPECTOR_TABS)[number];
 

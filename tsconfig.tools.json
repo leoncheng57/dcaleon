@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["scripts/**/*.ts", "playwright.preview.config.ts", "tests/e2e/screenshots.ui.spec.ts", "tests/e2e/state-files.ts", "tests/preview-e2e/**/*.ts"]
+  "include": ["scripts/**/*.ts", "playwright.preview.config.ts", "tests/e2e/screenshots.ui.spec.ts", "tests/e2e/review-*.ts", "tests/e2e/state-files.ts", "tests/preview-e2e/**/*.ts"]
 }

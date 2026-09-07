@@ -101,7 +101,13 @@ const dshConfig: DshConfigResponse = {
   sdkVersion: "0.1.1rc2",
   sandbox: "seatbelt",
   trajectory: { sensitiveDetailEnabled: false, fullExportEnabled: false },
-  presets: [{ id: DSH_PRESET_ID, label: "Preview preset", provider: "simulator", model: "sim-preview-v1", fingerprint: "0".repeat(64), mode: "read-only" }],
+  presets: [
+    { id: DSH_PRESET_ID, label: "Preview preset", provider: "simulator", model: "sim-preview-v1", fingerprint: "0".repeat(64), mode: "read-only" },
+    { id: "opus-readonly", label: "Opus read-only", provider: "anthropic", model: "claude-opus-5", fingerprint: "1".repeat(64), mode: "read-only" },
+    { id: "opus-build", label: "Opus build", provider: "anthropic", model: "claude-opus-5", fingerprint: "2".repeat(64), mode: "build" },
+    { id: "sonnet-readonly", label: "Sonnet read-only", provider: "anthropic", model: "claude-sonnet-5", fingerprint: "3".repeat(64), mode: "read-only" },
+    { id: "deepseek-r1", label: "DeepSeek R1", provider: "deepseek", model: "deepseek-r1", fingerprint: "4".repeat(64), mode: "read-only" },
+  ],
   workspaces: [{ id: DSH_WORKSPACE_ID, label: "Preview workspace" }],
 };
 

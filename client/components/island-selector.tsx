@@ -16,7 +16,7 @@ interface IslandDef {
   pathPrefix: string;
 }
 
-const ISLANDS: IslandDef[] = [
+export const ISLANDS: IslandDef[] = [
   {
     id: "opencode",
     label: "OpenCode",

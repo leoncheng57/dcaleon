@@ -62,6 +62,12 @@ several decisions below.
 
 ## Agent working conventions
 
+- **PR visual review is a normal local completion step.** When creating/updating a
+  PR, read `.agents/skills/pr-screenshots/SKILL.md` and run the gallery coverage plan.
+  Capture/inspect relevant changed UI states or record the nonvisual skip. AI runs
+  locally with existing authentication, never AI keys in Actions. Use
+  `npm run screenshots:gallery` and its separate actor-owned comment marker.
+
 - **Keep your own planning to-do list current as you work**, not just at the end. Mark
   an item `in_progress` before starting it and `completed` immediately after finishing
   it — never batch every update to the end of a multi-step task. This is about the
@@ -1211,7 +1217,9 @@ several decisions below.
   and was removed with it (decision 32). Its reasoning still stands for any future
   workflow assertion: a regex approximation of YAML is exactly how `+HEAD:gh-pages`
   passed a force-push check, so re-add it rather than hand-rolling a parser. It is an
-  optional peer of `vite`, so doing so is not a new ecosystem.
+  optional peer of `vite`, so doing so is not a new ecosystem. It is now restored as
+  a devDependency for the review publisher's structural asset-branch push-trigger
+  checks and tests of the screenshot workflow's permission boundary (#197/#429).
 - `mermaid` is the lazy-loaded diagram parser and layout engine for repository-owned
   in-app docs only. It runs with Mermaid strict security, then its generated SVG is
   stripped of links, executable DOM, embedded resources and unsafe CSS before mounting.
@@ -1260,6 +1268,14 @@ several decisions below.
   rewrite instead of a full rebuild. **Keep that seam.**
 
 ## Automated PR screenshots
+
+Absent a request block, changed files select curated scenarios automatically.
+An explicit block overrides selection; `scenario:hub-projects` and other IDs from
+`scripts/review-scenarios.ts` capture interactive element states alongside routes.
+The trusted publisher resolves IDs against main's catalogue, never artifact code.
+Unknown/shared changes get baseline screenshots and a local-review notice. See
+`docs/engineering-design/playwright-review.md` for the local light/dark gallery,
+Contents API publishing, author overrides and retention policy.
 
 Request deterministic screenshots with one root-relative route per line in the PR body:
 

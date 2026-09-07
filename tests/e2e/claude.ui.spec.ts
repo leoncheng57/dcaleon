@@ -17,6 +17,20 @@ test.describe("Claude Code runtime", () => {
     await expect(page.getByTestId("claude-prompt")).toBeEnabled();
   });
 
+  test("pastes an image into the composer and sends it to Claude", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").evaluate((textarea) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new Uint8Array([1, 2, 3, 4])], "pasted.png", { type: "image/png" }));
+      textarea.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: transfer }));
+    });
+    await expect(page.getByTestId("claude-attachment-chip")).toContainText("pasted.png");
+    await page.getByTestId("claude-prompt").fill("What is in this image?");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Inspected attached image (4 bytes)");
+    await expect(page.getByTestId("claude-attachment-chip")).toHaveCount(0);
+  });
+
   test("does not leak tool inputs or init data into the transcript", async ({ page }) => {
     await createSession(page);
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");
@@ -130,13 +144,13 @@ test.describe("Claude Code runtime", () => {
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
     await page.getByTestId("claude-open-runlog").click();
-    await expect(page.getByTestId("claude-runlog")).toBeVisible();
-    await expect(page.getByTestId("claude-runlog-timeline")).toContainText("Write");
-    // Filtering to edits keeps the Write; reads filter it out.
-    await page.getByTestId("claude-runlog-filter-edit").click();
-    await expect(page.getByTestId("claude-runlog-timeline")).toContainText("Write");
-    await page.getByTestId("claude-runlog-filter-read").click();
-    await expect(page.getByTestId("claude-runlog-empty")).toBeVisible();
+    await expect(page.getByTestId("opencode-command-list")).toBeVisible();
+    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("claude-e2e.txt");
+    // Filtering to edits keeps the file write; reads filter it out.
+    await page.getByTestId("opencode-runlog-filter-edit").click();
+    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("claude-e2e.txt");
+    await page.getByTestId("opencode-runlog-filter-read").click();
+    await expect(page.getByTestId("opencode-runlog-empty")).toBeVisible();
   });
 
   test("offers Markdown and JSON export of the transcript", async ({ page }) => {
@@ -239,6 +253,47 @@ test.describe("Claude Code runtime", () => {
     // Presence, not a count: sibling specs share the notification lane and may
     // be raising their own at the same time.
     await expect(bell).toHaveAttribute("aria-label", /unresolved/u);
+  });
+
+  // The usage trigger is the leftmost control in the session header, so a
+  // right-aligned panel grows leftward past the viewport edge and the limits are
+  // unreadable. Stub the endpoint because e2e has no Claude credentials, and the
+  // indicator renders nothing while usage is unavailable.
+  test("opens the usage popover fully inside the viewport at both viewports", async ({ page }) => {
+    await page.route("**/api/claude/usage", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        session: { utilization: 42, resetsAt: null },
+        weekly: { utilization: 17, resetsAt: null },
+        weeklyByModel: { opus: { utilization: 9, resetsAt: null } },
+        subscriptionType: "max",
+        rateLimitTier: "default",
+      }),
+    }));
+    await createSession(page);
+
+    for (const size of [{ width: 1280, height: 900 }, { width: 390, height: 740 }]) {
+      await page.setViewportSize(size);
+      const trigger = page.getByTestId("claude-usage-trigger");
+      await expect(trigger).toBeVisible();
+      await trigger.click();
+      const popover = page.getByTestId("claude-usage-popover");
+      await expect(popover).toBeVisible();
+      await expect(popover).toContainText("Usage limits");
+
+      const box = await popover.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(size.width);
+      // Nothing may leak horizontally out of the document either.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
+        .toBeLessThanOrEqual(1);
+
+      await trigger.click();
+      await expect(popover).toHaveCount(0);
+    }
   });
 
   test("opens a transcript file reference in the Files drawer", async ({ page }) => {

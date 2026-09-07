@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Boxes, ChevronDown, FolderOpen, GitPullRequest, Globe, Info, MessageSquareText, OctagonX, Share2, Waves, WrapText } from "lucide-react";
+import { Boxes, ChevronDown, FolderOpen, GitPullRequest, Globe, Info, MessageSquareText, OctagonX, PersonStanding, Share2, WrapText } from "lucide-react";
 
 import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
@@ -627,6 +627,16 @@ export function ConversationPage() {
               </span>
             )}
           </Button>
+          <AutoPermissionsControl
+            directory={directory}
+            testId="opencode-mobile-auto-permissions"
+            variant="pill"
+            trailing={
+              <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="opencode-mobile-auto-permissions-info">
+                <Info aria-hidden="true" className="h-3.5 w-3.5" />
+              </Button>
+            }
+          />
           <Button
             size="md"
             variant="ghost"
@@ -639,18 +649,8 @@ export function ConversationPage() {
             title="Open run log"
             data-testid="opencode-mobile-runlog-open"
           >
-            <Waves aria-hidden="true" className="h-3.5 w-3.5" />
+            <PersonStanding aria-hidden="true" className="h-3.5 w-3.5" />
           </Button>
-          <AutoPermissionsControl
-            directory={directory}
-            testId="opencode-mobile-auto-permissions"
-            variant="pill"
-            trailing={
-              <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="opencode-mobile-auto-permissions-info">
-                <Info aria-hidden="true" className="h-3.5 w-3.5" />
-              </Button>
-            }
-          />
           <SessionOverflowMenu
             testIds={{ root: "opencode-mobile-session-menu", trigger: "opencode-mobile-session-menu-trigger", panel: "opencode-mobile-session-menu-panel" }}
             items={[

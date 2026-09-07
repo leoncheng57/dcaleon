@@ -12,6 +12,14 @@ describe("composeClaudePrompt", () => {
     expect(composeClaudePrompt({ text: "hi" })).toEqual({ text: "hi", reminders: [], workflows: [] });
   });
 
+  it("adds generated image paths to the binary prompt without exposing them as chips", () => {
+    const composed = composeClaudePrompt({ text: "describe this", imagePaths: ["/private/state/image-1.png"] });
+    expect(composed.text).toContain("describe this\n\nThe user attached the following images");
+    expect(composed.text).toContain('"/private/state/image-1.png"');
+    expect(composed.reminders).toEqual([]);
+    expect(composed.workflows).toEqual([]);
+  });
+
   it("appends the workflow injector closest to the prompt and the reminder after it, like the OpenCode lane", () => {
     const composed = composeClaudePrompt({ text: "hi", reminder, workflow });
     expect(composed.text).toBe(`hi\n\n${workflowTag(workflow)}\n\n${reminderTag(reminder)}`);

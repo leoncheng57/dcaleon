@@ -187,14 +187,15 @@ jobs:
             const artifactUrl = artifact ? `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.RUN_ID}/artifacts/${artifact.id}` : context.payload.workflow_run.html_url;
             const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
             const lines = [marker, '## PR screenshots', ''];
+            if (manifest.coverage) lines.push(escapeHtml(manifest.coverage.reason), '', ...(manifest.coverage.needsLocalReview ? ['**Local AI review pending:** these are baseline scenarios; run the local gallery workflow for change-specific states.', ''] : []));
             if (manifest.screenshots.length === 0) {
               // Four backticks outside, three inside: a ```md wrapper is closed by the
               // inner block's own fence, which left a stray ``` in the rendered comment.
-              lines.push('No screenshots requested. Add this to the PR description:', '', '````md', '```screenshots', '/?directory=/tmp/mock-project', 'full:/sessions/ses_mock_done?directory=/tmp/mock-project', '```', '````');
+              lines.push('Capture skipped for this commit. To override, add routes or `scenario:<id>` lines in a `screenshots` block.');
             } else {
               lines.push('| Route | Desktop (dark) | Mobile (dark) |', '| --- | --- | --- |');
               for (const shot of manifest.screenshots) {
-                const route = escapeHtml(shot.requestedRoute).replaceAll('|', '&#124;');
+                const route = escapeHtml(shot.scenarioId ? `scenario:${shot.scenarioId} — ${shot.requestedRoute}` : shot.requestedRoute).replaceAll('|', '&#124;');
                 const alt = escapeHtml(shot.requestedRoute);
                 const desktopUrl = `${base}/${encodeURIComponent(shot.captures.desktop.filename)}?sha=${shortSha}`;
                 const mobileUrl = `${base}/${encodeURIComponent(shot.captures.mobile.filename)}?sha=${shortSha}`;
