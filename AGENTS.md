@@ -1207,6 +1207,14 @@ earlier entry shadow a later route's stable root and reintroduce the wrong wait 
 route whose testid differs per depth needs one pattern per depth (`/docs` vs `/docs/:slug`),
 not one pattern with an optional tail.
 
+**A PR that adds a route to that table cannot screenshot the new route in its own body.**
+Capture runs the PR's code, so the shot is taken and the artifact is valid; the publisher
+deliberately runs the *default branch's* validator against the untrusted manifest, and
+`main` does not know the route yet, so publication fails with `is not a known UI route`.
+That asymmetry is the fork-safety boundary working as intended — the publisher must never
+trust validation logic supplied by the branch it is publishing — so the fix is to request
+the route in a follow-up PR after the table lands, never to relax the publisher.
+
 The read-only `pull_request` workflow runs the production SPA and BFF against only the
 fixed Playwright OpenCode and forge mocks. A separate default-branch `workflow_run`
 publisher treats the artifact as untrusted, validates its manifest and PNGs, writes only
