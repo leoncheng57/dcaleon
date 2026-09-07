@@ -4,6 +4,8 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { resolveCaptureConfig, screenshotRequestLabel, screenshotStableRoot, SCREENSHOT_VIEWPORTS, VIEWPORTS, type ScreenshotRequest } from "../../scripts/pr-screenshots.js";
+import { reviewScenario } from "../../scripts/review-scenarios.js";
+import { installReviewFixtures, prepareReviewState } from "./review-capture.js";
 
 const config = resolveCaptureConfig(process.env, process.env.PR_SCREENSHOT_CAPTURE_REQUIRED === "true");
 const requests = config
@@ -16,11 +18,20 @@ test.describe("requested PR screenshots", () => {
     return;
   }
   for (const request of requests) {
-    test(`${screenshotRequestLabel(request.requestedRoute, request.fullPage)} @shots`, async ({ page }) => {
+    test(`${request.scenarioId ?? screenshotRequestLabel(request.requestedRoute, request.fullPage)} @shots`, async ({ page }) => {
+      await installReviewFixtures(page);
       await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
       await page.addInitScript(() => localStorage.setItem("theme", "dark"));
       for (const viewport of SCREENSHOT_VIEWPORTS) {
         await page.setViewportSize(VIEWPORTS[viewport]);
+        if (request.scenarioId) {
+          const scenario = reviewScenario(request.scenarioId);
+          await prepareReviewState(page, scenario);
+          const filename = path.join(config.outputDir, request.filenames[viewport]);
+          if (scenario.target) await page.getByTestId(scenario.target).filter({ visible: true }).screenshot({ path: filename });
+          else await page.screenshot({ path: filename, fullPage: true });
+          continue;
+        }
         const response = await page.goto(request.requestedRoute, { waitUntil: "domcontentloaded" });
         expect(response?.ok(), `route ${request.requestedRoute} should load`).toBe(true);
 

@@ -63,6 +63,7 @@ const RAW_CATALOGUE: WorkflowPreset[] = [
       'You are running the "Review a UI change with Playwright" workflow.',
       "- Start only what this check needs (prefer the dev server or the deterministic mock stack); do not run a full deployment.",
       "- Drive the named route with Playwright and exercise exactly the requested state or interaction.",
+      "- For dcaleon PR evidence, read .agents/skills/pr-screenshots/SKILL.md and use npm run screenshots:gallery for selection, capture and publication of inspected images when PR publication is authorized. AI work runs locally; Actions need no AI keys.",
       "- Collect evidence for the affected UI only: assertions for an interaction-only scope, plus focused screenshots of the affected area when the scope asks for visual evidence. Never regenerate the complete screenshot set.",
       "- Report what was verified, what failed, and where any evidence was written.",
     ].join("\n"),

@@ -9,6 +9,12 @@ or continue here for the canonical workflow.
 
 ## Before you start
 
+When creating/updating a PR, include the [local Playwright review workflow](docs/engineering-design/playwright-review.md)
+as a completion step: plan coverage, capture relevant UI states, inspect all images,
+then publish the gallery (or record a nonvisual skip). Coding agents should read
+`.agents/skills/pr-screenshots/SKILL.md`. CI uses no AI keys; custom scenario selection
+and visual inspection run in your locally authenticated agent.
+
 You need:
 
 - Node.js 22 or newer

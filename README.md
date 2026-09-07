@@ -257,6 +257,25 @@ npm run test:preview
 
 ### PR screenshots
 
+PR changes now select curated scenarios automatically; nonvisual changes report a
+skip, and shared/unmapped changes request local AI review. An explicit `screenshots`
+block overrides selection, accepting routes or `scenario:hub-projects` and other IDs
+from `npm run screenshots:gallery -- --list`. An empty block explicitly skips.
+
+For interactive element captures in **both light and dark appearances**, use the
+[local review workflow](docs/engineering-design/playwright-review.md):
+
+```sh
+npm run screenshots:gallery -- --plan
+npm run screenshots:gallery -- --pr 123 --scenarios hub-projects,planning-create
+# Inspect every image, then publish the manifest-bound bundle:
+npm run screenshots:gallery -- --pr 123 --publish --reviewed --bundle screenshot-output/gallery-EXAMPLE
+```
+
+The Contents API publisher keeps images on a side branch and posts SHA-pinned HTML
+previews in its own comment. AI runs locally; Actions need no AI keys. The existing
+trusted Pages publisher remains separate.
+
 Add a fenced block to a pull request description to capture mock-backed UI routes:
 
 ````md
