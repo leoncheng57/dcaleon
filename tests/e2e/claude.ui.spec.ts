@@ -130,13 +130,13 @@ test.describe("Claude Code runtime", () => {
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
     await page.getByTestId("claude-open-runlog").click();
-    await expect(page.getByTestId("claude-runlog")).toBeVisible();
-    await expect(page.getByTestId("claude-runlog-timeline")).toContainText("Write");
+    await expect(page.getByTestId("opencode-command-list")).toBeVisible();
+    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("Write");
     // Filtering to edits keeps the Write; reads filter it out.
-    await page.getByTestId("claude-runlog-filter-edit").click();
-    await expect(page.getByTestId("claude-runlog-timeline")).toContainText("Write");
-    await page.getByTestId("claude-runlog-filter-read").click();
-    await expect(page.getByTestId("claude-runlog-empty")).toBeVisible();
+    await page.getByTestId("opencode-runlog-filter-edit").click();
+    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("Write");
+    await page.getByTestId("opencode-runlog-filter-read").click();
+    await expect(page.getByTestId("opencode-runlog-empty")).toBeVisible();
   });
 
   test("offers Markdown and JSON export of the transcript", async ({ page }) => {

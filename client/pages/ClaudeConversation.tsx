@@ -517,15 +517,17 @@ export function ClaudeConversationPage() {
               variant="ghost"
               className={cn("min-h-11 min-w-12 px-0", !sidebarOpen && "text-[var(--color-text-muted)] opacity-50")}
               onClick={() => {
-                if (sidebarOpen) {
+                if (!sidebarOpen) {
+                  setSidebarOpen(true);
+                  setRequestedInspectorTab("runlog");
+                } else if (requestedInspectorTab === "runlog") {
                   setSidebarOpen(false);
                 } else {
-                  setSidebarOpen(true);
                   setRequestedInspectorTab("runlog");
                 }
               }}
-              aria-label={sidebarOpen ? "Close run log" : "Open run log"}
-              title={sidebarOpen ? "Close run log" : "Open run log"}
+              aria-label={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
+              title={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
               data-testid="claude-open-runlog"
             >
               <PersonStanding aria-hidden="true" className="h-3.5 w-3.5" />

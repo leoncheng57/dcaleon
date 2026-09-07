@@ -85,8 +85,8 @@ test.describe("experimental DSH workspace", () => {
     await createSession(page);
     await page.getByTestId("dsh-prompt").fill("stay running until cancelled");
     await page.getByTestId("dsh-send").click();
-    await expect(page.getByTestId("dsh-cancel")).toBeVisible();
-    await page.getByTestId("dsh-cancel").click();
+    await expect(page.getByTestId("dsh-stop")).toBeVisible();
+    await page.getByTestId("dsh-stop").click();
     await expect(page.getByText("Cancelled by user")).toBeVisible();
     await expect(page.getByTestId("dsh-prompt")).toBeEnabled();
   });
