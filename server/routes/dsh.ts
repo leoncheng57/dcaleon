@@ -1,4 +1,5 @@
 import { Router, type Response } from "express";
+import type { EventEmitter } from "node:events";
 import { realpath, stat } from "node:fs/promises";
 
 import type { DshConfig, DshPreset, DshWorkspace } from "../dsh/config.js";
@@ -6,6 +7,7 @@ import { DshBridgePool } from "../dsh/bridge.js";
 import { DshSessionStore } from "../dsh/store.js";
 import { DshTrajectoryStore } from "../dsh/trajectory.js";
 import { DshDurableReader } from "../dsh/durable.js";
+import { publishDshRunEvents } from "../dsh/notifications.js";
 
 const MAX_PROMPT = 40_000;
 
@@ -43,6 +45,7 @@ export function dshRoutes(
     // sha256-pinned cordis file to compose persistence at all.
     durable: new DshDurableReader(config.sessionRoot),
   }),
+  bus?: Pick<EventEmitter, "emit">,
 ): Router {
   const router = Router();
   let loadError: Error | null = null;
@@ -93,6 +96,11 @@ export function dshRoutes(
   });
   pool.on("diagnostic", (detail) => console.warn("[dsh]", detail));
   store.on("error", (detail) => console.warn("[dsh-ledger]", detail));
+  if (bus) store.on("finished", ({ session, outcome }) => {
+    const selectedWorkspace = workspace(session.workspaceId);
+    // Never guess a project identity after an operator removes a workspace.
+    if (selectedWorkspace) publishDshRunEvents(bus, session, selectedWorkspace.directory, outcome);
+  });
 
   router.use(async (_req, res, next) => {
     await ready;
