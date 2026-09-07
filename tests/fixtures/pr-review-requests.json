@@ -1,0 +1,5 @@
+[
+  { "scenarioId": "hub-projects" },
+  { "scenarioId": "planning-create" },
+  { "requestedRoute": "/settings?directory=/tmp/mock-project", "fullPage": true }
+]

@@ -1,0 +1,13 @@
+[
+  {
+    "id": "project-search-empty",
+    "title": "Project picker — no matching projects",
+    "route": "/opencode?directory=/tmp/mock-project",
+    "steps": [
+      { "testId": "opencode-project-picker-toggle", "action": "click" },
+      { "testId": "opencode-project-search", "action": "fill", "value": "no-such-fixture-project" },
+      { "testId": "opencode-projects-empty", "action": "text", "value": "No projects match" }
+    ],
+    "target": "opencode-project-picker"
+  }
+]
