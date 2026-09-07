@@ -44,6 +44,7 @@ function Bucket({ label, bucket }: { label: string; bucket: ClaudeUsageBucket })
 export function ClaudeUsageIndicator() {
   const [usage, setUsage] = useState<ClaudeUsage | null>(null);
   const [open, setOpen] = useState(false);
+  const [, setTick] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,7 +63,8 @@ export function ClaudeUsageIndicator() {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const countdown = setInterval(() => setTick((n) => n + 1), POLL_MS);
+    return () => { document.removeEventListener("mousedown", handler); clearInterval(countdown); };
   }, [open]);
 
   if (!usage || !usage.available) return null;

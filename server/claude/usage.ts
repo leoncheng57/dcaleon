@@ -21,20 +21,24 @@ export interface ClaudeUsageUnavailable {
 
 export type ClaudeUsage = ClaudeUsageResponse | ClaudeUsageUnavailable;
 
-const CACHE_TTL_MS = 30_000;
+export const CACHE_TTL_MS = 30_000;
 let cachedUsage: { data: ClaudeUsageResponse; fetchedAt: number } | null = null;
+
+export function clearCachedUsage(): void {
+  cachedUsage = null;
+}
 
 async function fetchUsageRaw(token: string, cliVersion: string): Promise<Response> {
   return fetch("https://api.anthropic.com/api/oauth/usage", {
     headers: {
       Authorization: `Bearer ${token}`,
       "anthropic-beta": "oauth-2025-04-20",
-      "User-Agent": `claude-code/${cliVersion}`,
+      "User-Agent": `dca-claude-usage/${cliVersion}`,
     },
   });
 }
 
-function parseBucket(raw: unknown): UsageBucket {
+export function parseBucket(raw: unknown): UsageBucket {
   const obj = raw as Record<string, unknown> | undefined;
   return {
     utilization: typeof obj?.utilization === "number" ? obj.utilization : 0,
@@ -42,7 +46,7 @@ function parseBucket(raw: unknown): UsageBucket {
   };
 }
 
-function parseResponse(body: Record<string, unknown>): ClaudeUsageResponse {
+export function parseResponse(body: Record<string, unknown>): ClaudeUsageResponse {
   const weeklyByModel: Record<string, UsageBucket> = {};
   const models = body.models ?? body.weekly_by_model;
   if (models && typeof models === "object") {
