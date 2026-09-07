@@ -15,6 +15,7 @@ import { HistoryStore } from "../server/notifications/history.js";
 import type { EventBus } from "../server/opencode/events.js";
 import { AutoPermissionService } from "../server/opencode/autoPermissions.js";
 import { notificationRoutes } from "../server/routes/notifications.js";
+import { matchesApplicationServerKey } from "../client/lib/webPush.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -929,5 +930,26 @@ describe("push subscription routes", () => {
       
       expect(await store.list()).toHaveLength(0);
     });
+  });
+});
+
+describe("VAPID key binding", () => {
+  it("only reuses a subscription that carries the server's current key", () => {
+    const current = webpush.generateVAPIDKeys().publicKey;
+    const superseded = webpush.generateVAPIDKeys().publicKey;
+    const subscription = (key: ArrayBuffer | null) =>
+      ({ options: { applicationServerKey: key } }) as unknown as Parameters<typeof matchesApplicationServerKey>[0];
+    const asBuffer = (value: string) => {
+      const bytes = Buffer.from(value, "base64url");
+      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    };
+
+    expect(matchesApplicationServerKey(subscription(asBuffer(current)), current)).toBe(true);
+    // Apple answers 403 BadJwtToken rather than 410, so a subscription minted
+    // under a superseded key is never retired by delivery failure alone.
+    expect(matchesApplicationServerKey(subscription(asBuffer(superseded)), current)).toBe(false);
+    // Unreportable keys count as mismatched: silently keeping one that cannot be
+    // proven current is the failure this guards.
+    expect(matchesApplicationServerKey(subscription(null), current)).toBe(false);
   });
 });
