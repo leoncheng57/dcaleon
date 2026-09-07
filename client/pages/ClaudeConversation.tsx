@@ -26,13 +26,14 @@ import {
   SESSION_UPDATE_WORKFLOW_ID,
   START_DCA_SESSION_WORKFLOW_ID,
 } from "../lib/workflows.js";
-import { collapseActionGroups, runningActivity } from "../lib/derive.js";
+import { collapseActionGroups, mergeEvents, runningActivity } from "../lib/derive.js";
 import type { InspectorTab } from "../lib/inspectorTabs.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
 import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
+import { useTranscriptWindow } from "../lib/useTranscriptWindow.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
 import { MAX_IMAGE_ATTACHMENTS, readImageAttachment, selectImageFiles, type ImageAttachment } from "../lib/attachments.js";
 
@@ -62,6 +63,8 @@ function downloadText(name: string, body: string, mime: string): void {
 }
 
 const POLL_MS = 3_000;
+const IDLE_POLL_MS = 30_000;
+const isHidden = () => document.visibilityState === "hidden";
 const INITIAL_DIFF_LINES = 400;
 /**
  * Workflows whose submit path is an OpenCode route (another session, a managed
@@ -267,8 +270,11 @@ export function ClaudeConversationPage() {
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
   const sessionScope = useRef(id);
+  const runningRef = useRef(false);
+  const lastRefresh = useRef(0);
 
   const load = async (targetId: string) => {
+    if (!PUBLIC_SIMULATOR && isHidden()) return;
     if (refreshInFlight.current) {
       refreshQueued.current = targetId;
       return;
@@ -276,13 +282,15 @@ export function ClaudeConversationPage() {
     refreshInFlight.current = true;
     try {
       const result = await api.claudeSession(targetId);
-      if (sessionScope.current !== targetId) return;
-      setSession(result.session);
-      setEvents(result.events);
+      if (sessionScope.current !== targetId || (!PUBLIC_SIMULATOR && isHidden())) return;
+      lastRefresh.current = Date.now();
+      runningRef.current = result.session.running;
+      setSession((previous) => JSON.stringify(previous) === JSON.stringify(result.session) ? previous : result.session);
+      setEvents((previous) => mergeEvents(previous, result.events));
       setSending(false);
       setError("");
     } catch (cause) {
-      if (sessionScope.current !== targetId) return;
+      if (sessionScope.current !== targetId || isHidden()) return;
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       refreshInFlight.current = false;
@@ -307,21 +315,28 @@ export function ClaudeConversationPage() {
     setActiveWorkflow(null);
     void refresh();
     if (PUBLIC_SIMULATOR) return;
-    // Durable truth is the poll; the stream is only a "something changed" nudge.
-    // Unlike the DSH page this keeps the interval, so a dropped SSE cannot leave
-    // the transcript stale — it degrades to poll latency instead.
+    // Retain durable fallback even if an apparently healthy SSE misses an update.
+    // Idle tabs reconcile at most every 30s; visible active runs keep 3s latency.
     const poll = setInterval(() => {
-      if (document.visibilityState !== "hidden") void refresh();
+      const interval = runningRef.current ? POLL_MS : IDLE_POLL_MS;
+      if (Date.now() - lastRefresh.current >= interval) void refresh();
     }, POLL_MS);
     const source = new EventSource(api.claudeEventsUrl(id));
     let timer: ReturnType<typeof setTimeout> | undefined;
     source.addEventListener("update", () => {
       clearTimeout(timer);
+      if (document.visibilityState === "hidden") return;
       timer = setTimeout(() => void refresh(), 250);
     });
     source.addEventListener("ready", () => void refresh());
     source.onerror = () => undefined; // EventSource owns bounded reconnect; the poll remains authoritative.
+    const onVisibility = () => {
+      clearTimeout(timer);
+      if (document.visibilityState !== "hidden") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       clearInterval(poll);
       clearTimeout(timer);
       source.close();
@@ -362,6 +377,7 @@ export function ClaudeConversationPage() {
   const follow = useTranscriptFollow(events, id);
 
   const items = useMemo(() => collapseActionGroups(events), [events]);
+  const transcriptWindow = useTranscriptWindow(items, id, follow);
   const activity = useMemo(() => runningActivity(events), [events]);
 
   // File references: collect paths the transcript mentions and validate them
@@ -369,10 +385,8 @@ export function ClaudeConversationPage() {
   // map is built locally (the opencode /workspace/references route is
   // directory-scoped and rejects the Claude worktree root), one bounded batch
   // per new candidate — a failing path is remembered, not retried each poll.
-  // Stabilise by content: events is a fresh array on every poll, so a plain
-  // memo over `events` would hand the effect a new candidate array each tick,
-  // re-run it, and abort the in-flight validation before it settles. Keying on
-  // the joined content keeps identity stable until the candidates truly change.
+  // Scan the full history, including rows outside the rendered window. Keep
+  // validation stable when an update changes prose but not its referenced paths.
   const candidateKey = useMemo(() => referenceCandidatesFromEvents(events, "").join("\n"), [events]);
   const candidates = useMemo(() => (candidateKey ? candidateKey.split("\n") : []), [candidateKey]);
   useEffect(() => {
@@ -402,7 +416,7 @@ export function ClaudeConversationPage() {
     setFilesOpen(true);
   }, []);
   const toggleGroup = useCallback((groupId: string) => {
-    setCollapsedGroups((previous) => ({ ...previous, [groupId]: !previous[groupId] }));
+    setCollapsedGroups((previous) => ({ ...previous, [groupId]: !(previous[groupId] ?? true) }));
   }, []);
   // A merged/discarded worktree session is finished: its cwd is gone.
   const worktreeClosed = session?.isolation === "worktree" && events.some((event) => event.kind === "status" && (event.label === "Merged into project" || event.label === "Worktree discarded"));
@@ -563,9 +577,10 @@ export function ClaudeConversationPage() {
         ),
       }}
       transcript={{
-        items,
+        items: transcriptWindow.items,
         wrap: true,
         collapsedGroups,
+        collapseCompletedByDefault: true,
         onToggleGroup: toggleGroup,
         referenceProvider: (children) => (
           <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>{children}</WorkspaceReferenceProvider>
@@ -583,9 +598,18 @@ export function ClaudeConversationPage() {
       scroll={{
         scrollerRef: follow.scrollerRef,
         contentRef: follow.contentRef,
-        onScroll: follow.onScroll,
+        onScroll: transcriptWindow.onScroll,
         showNewActivity: follow.newActivity,
-        onJumpToLatest: follow.jumpToLatest,
+        onJumpToLatest: transcriptWindow.jumpToLatest,
+        beforeTranscript: transcriptWindow.hiddenCount > 0 ? (
+          <div className="mb-5 flex flex-wrap gap-2">
+            <Button size="sm" className="min-h-11 sm:min-h-8" onClick={transcriptWindow.loadEarlier} data-testid="claude-load-earlier">Load earlier ({transcriptWindow.hiddenCount})</Button>
+            <Button size="sm" className="min-h-11 sm:min-h-8" onClick={() => {
+              setCollapsedGroups(Object.fromEntries(items.filter((item) => item.type === "actionGroup").map((item) => [item.id, false])));
+              transcriptWindow.showAll();
+            }} data-testid="claude-show-all">Show all for browser search</Button>
+          </div>
+        ) : undefined,
       }}
       composer={{
         draft,
