@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, FlaskConical, LockKeyhole } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { PresetPicker } from "../components/preset-picker.js";
 import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
@@ -70,12 +71,10 @@ export function DshPage() {
               <CardDescription>Preset and workspace choices are configured on the server; this browser cannot author model credentials or DSH policy.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-              <label className="grid gap-1.5 text-sm">
-                Model preset
-                <select className="h-11 rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3" value={presetId} onChange={(event) => { setPresetId(event.target.value); setConfirmedBuild(false); }} data-testid="dsh-preset">
-                  {config.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label} · {preset.mode} ({preset.provider}/{preset.model})</option>)}
-                </select>
-              </label>
+              <div className="grid gap-1.5 text-sm">
+                <span>Model preset</span>
+                <PresetPicker presets={config.presets} value={presetId} onChange={(id) => { setPresetId(id); setConfirmedBuild(false); }} testId="dsh-preset" />
+              </div>
               <label className="grid gap-1.5 text-sm">
                 Workspace
                 <select className="h-11 rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3" value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} data-testid="dsh-workspace">

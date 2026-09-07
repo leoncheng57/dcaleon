@@ -19,7 +19,8 @@ test.describe("experimental DSH workspace", () => {
 
   test("requires explicit confirmation before creating a Build session", async ({ page }) => {
     await page.goto("/dsh");
-    await page.getByTestId("dsh-preset").selectOption("e2e-build");
+    await page.getByTestId("dsh-preset").click();
+    await page.getByTestId("dsh-preset-panel").getByRole("option", { name: /E2E Build/u }).click();
     await expect(page.getByText("Build · may edit files", { exact: true })).toBeVisible();
     await expect(page.getByTestId("dsh-build-confirmation")).toContainText("Writes outside that workspace");
     await expect(page.getByTestId("dsh-create")).toBeDisabled();

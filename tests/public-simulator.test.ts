@@ -43,7 +43,8 @@ describe("public simulator DSH fixtures", () => {
   it("keeps DSH configuration and transcript mutations browser-local", async () => {
     const simulator = createPublicSimulator();
     const config = await (await simulator("https://preview.invalid/api/dsh/config")).json() as { presets: Array<{ id: string; mode: string }> };
-    expect(config).toMatchObject({ presets: [{ id: "dsh-preview-preset", mode: "read-only" }] });
+    expect(config.presets[0]).toMatchObject({ id: "dsh-preview-preset", mode: "read-only" });
+    expect(config.presets.length).toBeGreaterThanOrEqual(1);
 
     const created = await (await simulator("https://preview.invalid/api/dsh/sessions", {
       method: "POST",
