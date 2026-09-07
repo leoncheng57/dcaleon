@@ -10,6 +10,7 @@ interface IslandDef {
   id: "opencode" | "dsh" | "claude";
   label: string;
   description: string;
+  traits: string[];
   icon: LucideIcon;
   path: string;
   pathPrefix: string;
@@ -19,7 +20,14 @@ const ISLANDS: IslandDef[] = [
   {
     id: "opencode",
     label: "OpenCode",
-    description: "Local AI coding assistant powered by OpenCode. The core runtime — always available.",
+    description: "The core runtime. Proxies a long-lived OpenCode server with full API-key model access.",
+    traits: [
+      "Models: Any provider (Anthropic, OpenAI, Google, etc.)",
+      "Auth: API key — you control the key and billing",
+      "Features: Subagents, managed children, todos, live browser, full inspector",
+      "Sandbox: Docker container isolation",
+      "Best for: Multi-model workflows, full feature set, team API keys",
+    ],
     icon: Terminal,
     path: "/opencode",
     pathPrefix: "/opencode",
@@ -27,7 +35,14 @@ const ISLANDS: IslandDef[] = [
   {
     id: "dsh",
     label: "DSH",
-    description: "DeepSeek Harness — experimental runtime for DeepSeek models with sandbox confinement.",
+    description: "Experimental runtime for DeepSeek models with persistent bridge and sandbox confinement.",
+    traits: [
+      "Models: DeepSeek only (R1, Coder, Chat)",
+      "Auth: DeepSeek API key",
+      "Features: Trajectory viewer, native reasoning traces",
+      "Sandbox: Confined Build presets",
+      "Best for: DeepSeek-specific tasks, reasoning model experiments",
+    ],
     icon: FlaskConical,
     path: "/dsh",
     pathPrefix: "/dsh",
@@ -35,7 +50,14 @@ const ISLANDS: IslandDef[] = [
   {
     id: "claude",
     label: "Claude",
-    description: "Claude Code runtime — runs Anthropic's Claude CLI binary with Seatbelt sandboxing.",
+    description: "Drives the unmodified Claude CLI binary on your subscription seat — no API key needed.",
+    traits: [
+      "Models: Anthropic only (Opus, Sonnet, Haiku, Fable)",
+      "Auth: Claude subscription seat (Keychain sign-in, no API key)",
+      "Features: Worktree isolation, usage limits, playbooks, notifications",
+      "Sandbox: macOS Seatbelt (deny-default, workspace-confined writes)",
+      "Best for: Using your Claude Pro/Team subscription for coding tasks",
+    ],
     icon: Sparkles,
     path: "/claude",
     pathPrefix: "/claude",
@@ -103,7 +125,7 @@ export function IslandSelector(props: IslandSelectorProps) {
 
       {open && (
         <div
-          className="fixed inset-x-2 top-12 z-50 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-80"
+          className="fixed inset-x-2 top-12 z-50 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-96"
           role="dialog"
           aria-label="Switch runtime"
           data-testid="island-selector-panel"
@@ -138,6 +160,18 @@ export function IslandSelector(props: IslandSelectorProps) {
                       </Badge>
                     </div>
                     <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-muted)]">{island.description}</p>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {island.traits.map((trait) => {
+                        const colon = trait.indexOf(":");
+                        const key = colon > 0 ? trait.slice(0, colon) : undefined;
+                        const value = colon > 0 ? trait.slice(colon + 1).trim() : trait;
+                        return (
+                          <li key={trait} className="text-[10px] leading-relaxed text-[var(--color-text-muted)]">
+                            {key ? <><span className="font-medium text-[var(--color-text-default)]">{key}:</span> {value}</> : value}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
                 </Link>
               );
