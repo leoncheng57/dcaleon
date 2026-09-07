@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "prNumber": 440,
-  "sourceSha": "1e5bf91d80ffc58743dae3a42b90cda6c17239ec",
-  "capturedAt": "2026-09-07T19:11:54.919Z",
+  "sourceSha": "b991689db8e551b71ff89e03eb257e83b66b78e7",
+  "capturedAt": "2026-09-07T19:32:13.095Z",
   "screenshots": [
     {
       "requestedRoute": "/docs",
@@ -14,8 +14,8 @@
             "width": 1280,
             "height": 800
           },
-          "bytes": 107584,
-          "sha256": "4f118830b556daf83fca330adac01001e5cecc9d30b3eb42da551b5fad8a8d70"
+          "bytes": 107402,
+          "sha256": "881d84b37ea64f39bddf853bac402ae99deedea65ea666cd1894f3b29020a3f8"
         },
         "mobile": {
           "filename": "01-docs-060c2d47--mobile.png",
