@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "prNumber": 440,
-  "sourceSha": "e47c1e0b3c15af59320871e7ced34f0ac3085ae2",
-  "capturedAt": "2026-09-07T19:05:49.951Z",
+  "sourceSha": "1e5bf91d80ffc58743dae3a42b90cda6c17239ec",
+  "capturedAt": "2026-09-07T19:11:54.919Z",
   "screenshots": [
     {
       "requestedRoute": "/docs",
@@ -14,8 +14,8 @@
             "width": 1280,
             "height": 800
           },
-          "bytes": 107466,
-          "sha256": "0bebdd5ff5d2dada231c790413e663a0b58dd828cf0f0078405fffde63e5b4d2"
+          "bytes": 107584,
+          "sha256": "4f118830b556daf83fca330adac01001e5cecc9d30b3eb42da551b5fad8a8d70"
         },
         "mobile": {
           "filename": "01-docs-060c2d47--mobile.png",
@@ -23,8 +23,8 @@
             "width": 390,
             "height": 740
           },
-          "bytes": 50857,
-          "sha256": "424afaaee70b0f62a2d41593f56134eaa45e90caa49893da9ae98ac91c988031"
+          "bytes": 50853,
+          "sha256": "58f77115a34e9c27e511288bbc149a646de73e951a73b98f09b29bb0b713c435"
         }
       }
     }
