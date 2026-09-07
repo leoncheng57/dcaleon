@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from "react";
 import {
   ChevronLeft,
@@ -65,8 +66,12 @@ async function browserApi<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function RightToolsPanel({ sessionID, onClose }: { sessionID: string; onClose: () => void }) {
+interface BrowserNavigation { id: number; url: string }
+
+export function RightToolsPanel({ sessionID, onClose, navigation }: { sessionID: string; onClose: () => void; navigation?: BrowserNavigation }) {
   const [destination, setDestination] = useState<ToolDestination>("browser");
+  const handledNavigation = useRef<number | undefined>(undefined);
+  useEffect(() => { if (navigation) setDestination("browser"); }, [navigation]);
   const active = DESTINATIONS.find((option) => option.id === destination)!;
   return (
     <ResponsivePanel label={`${active.label} tools panel`} width={destination === "browser" ? "wide" : "standard"}
@@ -77,7 +82,7 @@ export function RightToolsPanel({ sessionID, onClose }: { sessionID: string; onC
           id, label, icon: <Icon aria-hidden="true" size={15} />, wip: !ready, testId: `opencode-right-tools-${id}`,
         }))} />}
     >
-      {destination === "browser" ? <LiveBrowserSurface key={sessionID} sessionID={sessionID} /> : <WorkInProgress destination={destination} />}
+      {destination === "browser" ? <LiveBrowserSurface key={sessionID} sessionID={sessionID} navigation={navigation} handledNavigation={handledNavigation} /> : <WorkInProgress destination={destination} />}
     </ResponsivePanel>
   );
 }
@@ -98,7 +103,9 @@ function WorkInProgress({ destination }: { destination: Exclude<ToolDestination,
     </a>} />;
 }
 
-function LiveBrowserSurface({ sessionID }: { sessionID: string }) {
+function LiveBrowserSurface({ sessionID, navigation, handledNavigation }: { sessionID: string; navigation?: BrowserNavigation; handledNavigation: RefObject<number | undefined> }) {
+  const navigationRef = useRef(navigation);
+  navigationRef.current = navigation;
   const [state, setState] = useState<PageState | null>(null);
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
@@ -106,6 +113,8 @@ function LiveBrowserSurface({ sessionID }: { sessionID: string }) {
   const [capacity, setCapacity] = useState<CapacitySlot[] | null>(null);
   const [streamKey, setStreamKey] = useState(0);
   const [streamReady, setStreamReady] = useState(false);
+  const [opening, setOpening] = useState(true);
+  const retryUrl = useRef<string | undefined>(undefined);
   const [popup, setPopup] = useState<string | null>(null);
   const [pageText, setPageText] = useState("");
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
@@ -137,32 +146,41 @@ function LiveBrowserSurface({ sessionID }: { sessionID: string }) {
     }
   }, [sessionID]);
 
-  const openBrowser = useCallback(async () => {
+  const openBrowser = useCallback(async (url?: string) => {
+    setOpening(true);
+    if (url) retryUrl.current = url;
+    const target = url ?? retryUrl.current;
     setStreamReady(false);
     setError("");
     setStreamError(false);
     setCapacity(null);
     try {
-      const next = await browserApi<PageState>(`${sessionID}/open`, { method: "POST", body: JSON.stringify({}) });
+      const next = await browserApi<PageState>(`${sessionID}/open`, { method: "POST", body: JSON.stringify(target ? { url: target } : {}) });
       setAddress(next.url === "about:blank" ? "" : next.url);
       addressEdited.current = false;
       await sendInput({ type: "viewport", ...viewportRef.current }).catch(() => undefined);
       setState(next);
       setStreamKey((key) => key + 1);
       setStreamReady(true);
+      retryUrl.current = undefined;
     } catch (cause) {
       const typed = cause as Error & { slots?: CapacitySlot[] };
       setError(typed.message);
       if (typed.slots) setCapacity(typed.slots);
+    } finally {
+      setOpening(false);
     }
   }, [sendInput, sessionID]);
 
   useEffect(() => {
     if (PUBLIC_SIMULATOR) return;
-    void openBrowser();
+    const requested = navigationRef.current;
+    const url = requested && requested.id !== handledNavigation.current ? requested.url : undefined;
+    if (requested) handledNavigation.current = requested.id;
+    void openBrowser(url);
     const timer = setInterval(() => void refreshState(), 2000);
     return () => clearInterval(timer);
-  }, [openBrowser, refreshState]);
+  }, [openBrowser, refreshState, handledNavigation]);
 
   useEffect(() => {
     const media = window.matchMedia("(pointer: coarse)");
@@ -204,6 +222,12 @@ function LiveBrowserSurface({ sessionID }: { sessionID: string }) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
+
+  useEffect(() => {
+    if (PUBLIC_SIMULATOR || opening || !navigation || navigation.id === handledNavigation.current) return;
+    handledNavigation.current = navigation.id;
+    void openBrowser(navigation.url);
+  }, [navigation, opening, handledNavigation, openBrowser]);
 
   const frameCoordinates = (event: ReactPointerEvent<HTMLImageElement> | React.MouseEvent<HTMLImageElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();

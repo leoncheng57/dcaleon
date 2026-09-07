@@ -35,6 +35,8 @@ const DEFAULT_VIEWPORT: BrowserViewport = {
   height: BROWSER_VIEWPORT.defaultHeight,
 };
 
+export const DEFAULT_BROWSER_URL = "https://leoncheng.dev";
+
 export function screencastOptions(profile: BrowserStreamProfile): {
   format: "jpeg";
   quality: number;
@@ -74,15 +76,19 @@ interface Managed {
 export class BrowserManager {
   private readonly config: LiveBrowserConfig;
   private readonly profileDir: string;
+  private readonly defaultUrl: string | null;
   private context: BrowserContext | null = null;
   private launching: Promise<BrowserContext> | null = null;
   private readonly pages = new Map<string, Managed>();
   private opening: Promise<unknown> = Promise.resolve();
   private readonly reaper: NodeJS.Timeout;
 
-  constructor(config: LiveBrowserConfig, profileDir: string) {
+  // Internal callers may disable the homepage for offline transport fixtures;
+  // browser requests cannot change this default or bypass navigation policy.
+  constructor(config: LiveBrowserConfig, profileDir: string, defaultUrl: string | null = DEFAULT_BROWSER_URL) {
     this.config = config;
     this.profileDir = profileDir;
+    this.defaultUrl = defaultUrl;
     this.reaper = setInterval(() => void this.reapIdle(), 60_000);
     this.reaper.unref();
   }
@@ -190,7 +196,8 @@ export class BrowserManager {
       this.pages.delete(sessionID);
     });
 
-    if (initialUrl) await this.navigate(sessionID, { action: "goto", url: initialUrl });
+    const destination = initialUrl ?? this.defaultUrl;
+    if (destination) await this.navigate(sessionID, { action: "goto", url: destination });
     await cdp.send("Page.setWebLifecycleState", { state: "frozen" });
     return this.state(sessionID);
   }

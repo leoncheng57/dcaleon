@@ -14,7 +14,8 @@ import { bindBrowserSessionLifecycle } from "../../server/browser/lifecycle.js";
 test("real Chromium preserves pages, enforces concurrent cap, detaches and relaunches its profile", async () => {
   const profile = await mkdtemp(path.join(tmpdir(), "dcaleon-browser-lifecycle-"));
   const config = { enabled: true, maxPages: 1, idleMinutes: 1 };
-  let manager = new BrowserManager(config, profile);
+  // Explicit internal override keeps transport fixtures offline; API opens use the homepage.
+  let manager = new BrowserManager(config, profile, null);
   const response = () => {
     const stream = new PassThrough();
     stream.resume();
@@ -68,7 +69,7 @@ test("real Chromium preserves pages, enforces concurrent cap, detaches and relau
     await expect.poll(() => manager.slots().length).toBe(0);
     unbind();
     await manager.shutdown();
-    manager = new BrowserManager(config, profile);
+    manager = new BrowserManager(config, profile, null);
     await expect(manager.open("ses_browser_restart")).resolves.toMatchObject({ url: "about:blank" });
   } finally {
     await manager.shutdown();
@@ -78,7 +79,7 @@ test("real Chromium preserves pages, enforces concurrent cap, detaches and relau
 
 test("a real image decoder displays the first static navigation without reopening", async ({ page: viewer }) => {
   const profile = await mkdtemp(path.join(tmpdir(), "dcaleon-browser-decode-"));
-  const manager = new BrowserManager({ enabled: true, maxPages: 1, idleMinutes: 1 }, profile);
+  const manager = new BrowserManager({ enabled: true, maxPages: 1, idleMinutes: 1 }, profile, null);
   const server = createServer((request, response) => {
     if (request.url === "/stream") {
       void manager.attachStream("ses_browser_decode", response as unknown as Response).catch(() => response.destroy());

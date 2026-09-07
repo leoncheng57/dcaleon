@@ -27,7 +27,10 @@ the same server and can be attached at the same time, watching the same sessions
 
 OpenCode, Claude, and DSH conversation pages share a Codex-inspired right tools panel,
 opened with the globe button in every island's session toolbar. Its live Browser drives
-a server-side Chromium page that persists per conversation; **Minichats** and **Terminal** are
+a server-side Chromium page that persists per conversation. New pages start at
+`https://leoncheng.dev`; reopening keeps the current page. Transcript web links carry a
+browser icon and open in this same panel (including pasted URLs in user messages).
+**Minichats** and **Terminal** are
 currently clearly marked work-in-progress destinations rather than simulated functionality.
 On desktop Browser replaces the Inspector in the layout, and on phones it becomes a
 safe-area-aware full-screen surface.

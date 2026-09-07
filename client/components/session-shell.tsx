@@ -1,9 +1,10 @@
-import { useState, type ClipboardEvent, type FocusEvent, type ReactNode, type RefObject, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useState, type ClipboardEvent, type FocusEvent, type ReactNode, type RefObject, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ArrowDown, Globe } from "lucide-react";
 
 import { Button } from "../ds/button.js";
 import { SessionActionBar } from "./session-action-bar.js";
 import { RightToolsPanel } from "./right-tools-panel.js";
+import { TranscriptBrowserContext } from "../lib/transcriptBrowser.js";
 import { RunningIndicator, Transcript } from "../components/transcript.js";
 import type { DisplayItem, RunningActivity } from "../lib/derive.js";
 import type { UserEvent, AgentEvent } from "../lib/transcript.js";
@@ -100,6 +101,11 @@ export interface SessionShellProps {
 
 export function SessionShell({ testIds, browserSessionID, header, banners, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [browserNavigation, setBrowserNavigation] = useState<{ id: number; url: string; sessionID: string }>();
+  const openTranscriptBrowser = useCallback((url: string) => {
+    setBrowserNavigation((previous) => ({ id: (previous?.id ?? 0) + 1, url, sessionID: browserSessionID }));
+    setToolsOpen(true);
+  }, [browserSessionID]);
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--color-background-base)]" data-testid={testIds.root}>
       <header className="flex shrink-0 flex-col gap-1.5 border-b border-[var(--color-border-default)] px-3 py-2 sm:px-4 sm:py-2.5">
@@ -145,7 +151,7 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
               ) : transcript.items.length === 0 ? (
                 transcript.emptyState
               ) : (
-                transcript.referenceProvider(
+                <TranscriptBrowserContext.Provider value={openTranscriptBrowser}>{transcript.referenceProvider(
                   <Transcript
                     items={transcript.items}
                     wrap={transcript.wrap}
@@ -156,7 +162,7 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
                     sessionId={transcript.sessionId}
                     onOpenWorkspaceChanges={transcript.onOpenWorkspaceChanges}
                   />
-                )
+                )}</TranscriptBrowserContext.Provider>
               )}
               {transcript.running && (
                 <div className="mt-5">
@@ -178,7 +184,7 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
           )}
         </div>
         <div className={toolsOpen ? "hidden" : "contents"}>{inspector?.desktop}</div>
-        {toolsOpen && browserSessionID && <RightToolsPanel key={browserSessionID} sessionID={browserSessionID} onClose={() => setToolsOpen(false)} />}
+        {toolsOpen && browserSessionID && <RightToolsPanel key={browserSessionID} sessionID={browserSessionID} navigation={browserNavigation?.sessionID === browserSessionID ? browserNavigation : undefined} onClose={() => { setToolsOpen(false); setBrowserNavigation(undefined); }} />}
       </div>
 
       <footer

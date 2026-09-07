@@ -8,7 +8,7 @@
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   assessTarget,
@@ -20,10 +20,39 @@ import {
 } from "../server/browser/policy.js";
 import { validSessionID } from "../server/browser/errors.js";
 import { parseLiveBrowserInput, parseStreamProfile } from "../server/browser/routes.js";
-import { screencastOptions, streamFrameInterval } from "../server/browser/manager.js";
+import { BrowserManager, DEFAULT_BROWSER_URL, screencastOptions, streamFrameInterval } from "../server/browser/manager.js";
 import { assertPrivateBrowserProfile, BrowserProfilePermissionError } from "../server/browser/profile.js";
 
 const temporaryProfiles: string[] = [];
+
+describe("new Browser homepage", () => {
+  it("uses leoncheng.dev only on creation and preserves existing pages unless explicitly navigated", async () => {
+    const manager = new BrowserManager({ enabled: true, maxPages: 2, idleMinutes: 1 }, "/unused-mocked-browser-profile");
+    let url = "about:blank";
+    const page = { on: vi.fn(), url: () => url, title: async () => "Fixture" };
+    const cdp = { send: vi.fn().mockResolvedValue({ currentIndex: 0, entries: [] }) };
+    vi.spyOn(manager as unknown as { contextOrLaunch(): Promise<unknown> }, "contextOrLaunch").mockResolvedValue({
+      newPage: async () => page, newCDPSession: async () => cdp,
+    });
+    const navigate = vi.spyOn(manager, "navigate").mockImplementation(async (sessionID, request) => {
+      if (request.action === "goto") url = request.url;
+      return manager.state(sessionID);
+    });
+    try {
+      expect(DEFAULT_BROWSER_URL).toBe("https://leoncheng.dev");
+      await expect(manager.open("ses_homepage")).resolves.toMatchObject({ url: DEFAULT_BROWSER_URL });
+      expect(navigate).toHaveBeenLastCalledWith("ses_homepage", { action: "goto", url: DEFAULT_BROWSER_URL });
+      await manager.navigate("ses_homepage", { action: "goto", url: "https://example.com/retained" });
+      navigate.mockClear();
+      await expect(manager.open("ses_homepage")).resolves.toMatchObject({ url: "https://example.com/retained" });
+      expect(navigate).not.toHaveBeenCalled();
+      await manager.open("ses_explicit", "https://example.com/linked");
+      expect(navigate).toHaveBeenLastCalledWith("ses_explicit", { action: "goto", url: "https://example.com/linked" });
+    } finally {
+      await manager.shutdown();
+    }
+  });
+});
 afterEach(() => {
   for (const profile of temporaryProfiles.splice(0)) rmSync(profile, { recursive: true, force: true });
 });

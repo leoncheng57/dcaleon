@@ -42,6 +42,14 @@ async function mockBrowser(page: Page, sessionID = "ses_mock_right_tools"): Prom
       await route.fulfill({ json: state() });
       return;
     }
+    if (pathname.endsWith("/open") && request.method() === "POST") {
+      const body = request.postDataJSON() as { url?: string };
+      if (body.url === "http://127.0.0.1/") {
+        await route.fulfill({ status: 422, json: { error: "Private network navigation refused" } });
+        return;
+      }
+      if (body.url) url = body.url;
+    }
     if (request.method() === "DELETE") {
       await route.fulfill({ status: 204 });
       return;
@@ -49,6 +57,63 @@ async function mockBrowser(page: Page, sessionID = "ses_mock_right_tools"): Prom
     await route.fulfill({ json: state() });
   });
   return fixture;
+}
+
+for (const runtime of ["opencode", "claude", "dsh"] as const) {
+  test(`${runtime} transcript web links open the shared Browser`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    let sessionID = "ses_mock_right_tools";
+    let sessionUrl = conversation;
+    const userText = "Visit https://leoncheng.dev/from-user.";
+    const agentText = "Read [the site](https://leoncheng.dev/from-agent). Also [refused](http://127.0.0.1/).";
+    if (runtime === "opencode") {
+      await page.route("**/api/sessions/ses_mock_right_tools/messages?*", (route) => route.fulfill({ json: {
+        messages: ["user", "assistant"].map((role, index) => ({
+          info: { id: `browser_link_${role}`, role, time: { created: 1788800000000 + index, completed: 1788800000002 } },
+          parts: [{ id: `browser_link_part_${role}`, messageID: `browser_link_${role}`, type: "text", text: index ? agentText : userText }],
+        })), hasMore: false,
+      } }));
+    } else {
+      await page.goto(`/${runtime}`);
+      await page.getByTestId(`${runtime}-create`).click();
+      await expect(page).toHaveURL(new RegExp(`/${runtime}/sessions/${runtime}-`));
+      sessionID = new URL(page.url()).pathname.split("/").at(-1)!;
+      sessionUrl = page.url();
+      await page.route(`**/api/${runtime}/sessions/${sessionID}`, async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        body.events = ["user", "agent"].map((kind, index) => ({
+          id: `browser_link_${kind}`, messageId: `browser_link_${kind}`, kind, timestamp: "2026-09-07T12:00:00Z",
+          text: index ? agentText : userText, reminders: [], workflows: [], attachments: [],
+        }));
+        await route.fulfill({ json: body });
+      });
+    }
+    const fixture = await mockBrowser(page, sessionID);
+    await page.goto(sessionUrl);
+    const userLink = page.getByRole("link", { name: "https://leoncheng.dev/from-user (open in session browser)", exact: true });
+    const agentLink = page.getByRole("link", { name: "the site (open in session browser)", exact: true });
+    await expect(userLink.locator("svg")).toBeVisible();
+    await agentLink.click();
+    await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://leoncheng.dev/from-agent");
+    await page.getByTestId("opencode-right-tools-selector").click();
+    await page.getByTestId("opencode-right-tools-minichats").click();
+    await userLink.click();
+    await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://leoncheng.dev/from-user");
+    await agentLink.press("Enter");
+    await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://leoncheng.dev/from-agent");
+    await page.getByRole("link", { name: "refused (open in session browser)", exact: true }).click();
+    await expect(page.getByText("Private network navigation refused", { exact: true })).toBeVisible();
+    await userLink.click();
+    await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://leoncheng.dev/from-user");
+    await agentLink.click();
+    await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://leoncheng.dev/from-agent");
+    await page.getByTestId("opencode-right-tools-close").click();
+    await page.getByTestId("opencode-live-browser-open").click();
+    await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://leoncheng.dev/from-agent");
+    expect(fixture.requests.some((request) => request.startsWith("DELETE"))).toBe(false);
+    await expect(page).toHaveURL(sessionUrl);
+  });
 }
 
 for (const runtime of ["claude", "dsh"] as const) {
