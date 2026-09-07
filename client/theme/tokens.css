@@ -70,7 +70,11 @@
   /* ── Source syntax
    * Code syntax is its own semantic family: these colors distinguish language
    * roles, not application statuses. Keep every foreground readable against
-   * the editor surface in both appearances. */
+   * the editor surface in both appearances.
+   *
+   * workspace-files.ui.spec.ts gates every rendered token at 4.5:1 against
+   * --color-background-surface, so darkening a surface can push the dimmest
+   * token (comment) under the bar — re-check the ratios when either moves. */
   --color-syntax-comment: #5f6b7a;
   --color-syntax-keyword: #6d28d9;
   --color-syntax-name: #0369a1;
@@ -157,7 +161,7 @@
   --color-text-warning: #fcd34d;
   --color-text-danger: #fca5a5;
 
-  --color-syntax-comment: #6b7280;
+  --color-syntax-comment: #7f858f;
   --color-syntax-keyword: #d8b4fe;
   --color-syntax-name: #7dd3fc;
   --color-syntax-string: #86efac;
