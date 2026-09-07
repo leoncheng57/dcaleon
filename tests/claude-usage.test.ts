@@ -20,6 +20,17 @@ describe("parseBucket", () => {
     });
   });
 
+  it("accepts percent as an alternative to utilization", () => {
+    expect(parseBucket({ percent: 70, resets_at: "2026-09-07T05:40:00Z" })).toEqual({
+      utilization: 70,
+      resetsAt: "2026-09-07T05:40:00Z",
+    });
+  });
+
+  it("prefers utilization over percent when both are present", () => {
+    expect(parseBucket({ utilization: 42, percent: 70 })).toEqual({ utilization: 42, resetsAt: null });
+  });
+
   it("defaults to 0 and null for missing or invalid fields", () => {
     expect(parseBucket(undefined)).toEqual({ utilization: 0, resetsAt: null });
     expect(parseBucket({})).toEqual({ utilization: 0, resetsAt: null });
@@ -28,37 +39,40 @@ describe("parseBucket", () => {
 });
 
 describe("parseResponse", () => {
-  it("parses a full usage response with session, weekly, and per-model buckets", () => {
+  it("parses the limits array with session, weekly_all, and weekly_scoped entries", () => {
     const body = {
-      session: { utilization: 15, resets_at: "2026-09-06T23:00:00Z" },
-      weekly: { utilization: 30, resets_at: "2026-09-10T00:00:00Z" },
-      models: {
-        "claude-opus-5": { utilization: 25, resets_at: "2026-09-10T00:00:00Z" },
-        "claude-sonnet-5": { utilization: 10, resets_at: null },
-      },
-      subscription_type: "team",
-      rate_limit_tier: "tier_3",
+      limits: [
+        { kind: "session", group: "session", percent: 70, resets_at: "2026-09-07T05:40:00Z", is_active: true },
+        { kind: "weekly_all", group: "weekly", percent: 19, resets_at: "2026-09-10T14:00:00Z" },
+        { kind: "weekly_scoped", group: "weekly", percent: 5, resets_at: null, scope: { model: { display_name: "Fable" } } },
+      ],
     };
     const result = parseResponse(body);
     expect(result.available).toBe(true);
-    expect(result.session.utilization).toBe(15);
-    expect(result.weekly.utilization).toBe(30);
-    expect(result.weeklyByModel["claude-opus-5"].utilization).toBe(25);
-    expect(result.weeklyByModel["claude-sonnet-5"].utilization).toBe(10);
-    expect(result.subscriptionType).toBe("team");
-    expect(result.rateLimitTier).toBe("tier_3");
+    expect(result.session).toEqual({ utilization: 70, resetsAt: "2026-09-07T05:40:00Z" });
+    expect(result.weekly).toEqual({ utilization: 19, resetsAt: "2026-09-10T14:00:00Z" });
+    expect(result.weeklyByModel).toEqual({ Fable: { utilization: 5, resetsAt: null } });
   });
 
-  it("handles the alternate field names (current_session, all_models, weekly_by_model)", () => {
+  it("falls back to five_hour / seven_day when limits array is absent", () => {
     const body = {
-      current_session: { utilization: 5 },
-      all_models: { utilization: 20 },
-      weekly_by_model: { "claude-opus-5": { utilization: 18 } },
+      five_hour: { utilization: 65, resets_at: "2026-09-07T06:00:00Z" },
+      seven_day: { utilization: 22, resets_at: "2026-09-10T14:00:00Z" },
     };
     const result = parseResponse(body);
-    expect(result.session.utilization).toBe(5);
-    expect(result.weekly.utilization).toBe(20);
-    expect(result.weeklyByModel["claude-opus-5"].utilization).toBe(18);
+    expect(result.session.utilization).toBe(65);
+    expect(result.weekly.utilization).toBe(22);
+  });
+
+  it("ignores weekly_scoped entries without a model display_name", () => {
+    const body = {
+      limits: [
+        { kind: "weekly_scoped", group: "weekly", percent: 10, scope: { model: {} } },
+        { kind: "weekly_scoped", group: "weekly", percent: 8, scope: {} },
+      ],
+    };
+    const result = parseResponse(body);
+    expect(Object.keys(result.weeklyByModel)).toHaveLength(0);
   });
 
   it("returns safe defaults for an empty body", () => {
@@ -72,14 +86,22 @@ describe("parseResponse", () => {
 });
 
 describe("fetchClaudeUsage", () => {
+  const REAL_BODY = {
+    five_hour: { utilization: 70, resets_at: "2026-09-07T05:40:00Z" },
+    seven_day: { utilization: 19, resets_at: "2026-09-10T14:00:00Z" },
+    limits: [
+      { kind: "session", group: "session", percent: 70, resets_at: "2026-09-07T05:40:00Z", is_active: true },
+      { kind: "weekly_all", group: "weekly", percent: 19, resets_at: "2026-09-10T14:00:00Z" },
+    ],
+  };
+
   it("fetches usage and caches the result", async () => {
-    const body = { session: { utilization: 10 }, weekly: { utilization: 20 } };
-    const fetchSpy = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify(REAL_BODY), { status: 200 }));
     vi.stubGlobal("fetch", fetchSpy);
 
     const first = await fetchClaudeUsage("2.1.259");
     expect(first.available).toBe(true);
-    if (first.available) expect(first.session.utilization).toBe(10);
+    if (first.available) expect(first.session.utilization).toBe(70);
 
     const second = await fetchClaudeUsage("2.1.259");
     expect(second.available).toBe(true);
@@ -87,8 +109,7 @@ describe("fetchClaudeUsage", () => {
   });
 
   it("re-fetches after the cache is cleared", async () => {
-    const body = { session: { utilization: 10 }, weekly: { utilization: 20 } };
-    const fetchSpy = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify(REAL_BODY), { status: 200 }));
     vi.stubGlobal("fetch", fetchSpy);
 
     await fetchClaudeUsage("2.1.259");
@@ -108,26 +129,24 @@ describe("fetchClaudeUsage", () => {
 
   it("retries once on 401 then returns the fresh data", async () => {
     const { getClaudeOAuthToken, clearCachedToken } = await import("../server/claude/auth.js");
-    const body = { session: { utilization: 50 }, weekly: { utilization: 60 } };
     let calls = 0;
     vi.stubGlobal("fetch", vi.fn(async () => {
       calls++;
       if (calls === 1) return new Response("Unauthorized", { status: 401 });
-      return new Response(JSON.stringify(body), { status: 200 });
+      return new Response(JSON.stringify(REAL_BODY), { status: 200 });
     }));
 
     const result = await fetchClaudeUsage("2.1.259");
     expect(result.available).toBe(true);
-    if (result.available) expect(result.session.utilization).toBe(50);
+    if (result.available) expect(result.session.utilization).toBe(70);
     expect(vi.mocked(clearCachedToken)).toHaveBeenCalled();
   });
 
   it("returns stale cache on 429", async () => {
-    const body = { session: { utilization: 10 }, weekly: { utilization: 20 } };
     let calls = 0;
     vi.stubGlobal("fetch", vi.fn(async () => {
       calls++;
-      if (calls === 1) return new Response(JSON.stringify(body), { status: 200 });
+      if (calls === 1) return new Response(JSON.stringify(REAL_BODY), { status: 200 });
       return new Response("Too Many Requests", { status: 429 });
     }));
 
@@ -145,8 +164,7 @@ describe("fetchClaudeUsage", () => {
   });
 
   it("sends an honest User-Agent, not claude-code", async () => {
-    const body = { session: { utilization: 10 }, weekly: { utilization: 20 } };
-    const fetchSpy = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify(REAL_BODY), { status: 200 }));
     vi.stubGlobal("fetch", fetchSpy);
 
     await fetchClaudeUsage("2.1.259");
