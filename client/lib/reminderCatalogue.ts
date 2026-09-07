@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Bird, BookOpen, FileText, GitFork, ListChecks, MessageCircleQuestion, Search, Send, Waves, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Bird, BookOpen, FileText, Footprints, GitFork, ListChecks, MessageCircleQuestion, Search, Send, Waves, type LucideIcon } from "lucide-react";
 
 import type { ReminderSummary } from "./api.js";
 
@@ -18,6 +18,11 @@ import type { ReminderSummary } from "./api.js";
  */
 export const REMINDER_GROUPS: ReadonlyArray<{ label: string; ids: readonly string[] }> = [
   { label: "Plan & Design", ids: ["grill-me", "build-waves"] },
+  // Its own group rather than a seat in "Research & Evidence": the four groups
+  // around it all end in an artifact — a plan, a citation, a delegated session,
+  // a document. This one ends in a person understanding something, and filing
+  // it under research would describe the agent's reading rather than the human's.
+  { label: "Learn & Understand", ids: ["brink-nudge-learning"] },
   { label: "Research & Evidence", ids: ["deep-research-subagents", "parallel-research-handoff", "cite-file-lines"] },
   { label: "Delegate & Parallelize", ids: ["background-subagent", "session-handoff", "native-worktree-subagents"] },
   { label: "Documentation & Delivery", ids: ["docs-and-diagram-tooling", "ascii-diagrams", "human-verification-steps"] },
@@ -27,6 +32,7 @@ export const REMINDER_GROUPS: ReadonlyArray<{ label: string; ids: readonly strin
 export const REMINDER_ICONS: Readonly<Record<string, LucideIcon>> = {
   "grill-me": MessageCircleQuestion,
   "build-waves": Waves,
+  "brink-nudge-learning": Footprints,
   "deep-research-subagents": Search,
   "parallel-research-handoff": Send,
   "cite-file-lines": FileText,

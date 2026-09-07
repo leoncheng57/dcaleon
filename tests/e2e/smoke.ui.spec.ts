@@ -1082,7 +1082,7 @@ test.describe("composer", () => {
     const picker = page.getByTestId("composer-reminder-select");
     await picker.click();
     const options = page.getByTestId("composer-reminder-option");
-    await expect(options).toHaveCount(12);
+    await expect(options).toHaveCount(13);
 
     // Tags come from the reminder's Playbook skill; "worktrees" is on exactly
     // native-worktree-subagents and parallel-research-handoff.
@@ -1095,7 +1095,7 @@ test.describe("composer", () => {
 
     // Toggling the same tag off restores the full catalogue.
     await worktrees.click();
-    await expect(options).toHaveCount(12);
+    await expect(options).toHaveCount(13);
 
     // Searching by id works even though no title contains the hyphenated form.
     await page.getByTestId("composer-reminder-search").fill("cite-file-lines");
@@ -1175,10 +1175,10 @@ test.describe("composer", () => {
     await expect(picker).toBeVisible();
     await picker.click();
     await expect(page.getByTestId("composer-reminder-search")).toBeFocused();
-    await expect(page.getByTestId("composer-reminder-group")).toHaveCount(6);
+    await expect(page.getByTestId("composer-reminder-group")).toHaveCount(7);
     await expect(page.getByTestId("composer-reminder-group").nth(0)).toHaveAccessibleName("Plan & Design");
-    await expect(page.getByTestId("composer-reminder-option")).toHaveCount(13);
-    await expect(page.getByTestId("composer-reminder-icon")).toHaveCount(13);
+    await expect(page.getByTestId("composer-reminder-option")).toHaveCount(14);
+    await expect(page.getByTestId("composer-reminder-icon")).toHaveCount(14);
     const humanVerification = page.locator('[data-testid="composer-reminder-option"][data-reminder-id="human-verification-steps"]');
     await expect(humanVerification).toHaveAccessibleName("Attach Write Human Verification Steps");
     // Every reminder links to its OWN page. The old join pointed a reminder at
