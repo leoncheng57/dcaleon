@@ -13,7 +13,6 @@ import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
 import { SessionInspector } from "../components/session-inspector.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
-import { AutoPermissionsControl } from "../components/auto-permissions-control.js";
 import { SessionShell } from "../components/session-shell.js";
 import { SessionOverflowMenu } from "../components/session-overflow-menu.js";
 import { ReminderPicker } from "../components/reminder-picker.js";
@@ -502,16 +501,19 @@ export function ClaudeConversationPage() {
             {session?.prUrl && (
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} aria-label="Open pull request status" title="Reviews" data-testid="claude-open-reviews"><GitPullRequest aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             )}
-            <AutoPermissionsControl
-              directory={id}
-              testId="claude-auto-permissions"
-              variant="pill"
-              trailing={
+            <div className="flex items-center gap-0.5 rounded-full border border-[var(--color-border-default)] px-1 opacity-50" title="Auto permissions always on — Claude runs non-interactively" data-testid="claude-auto-permissions-group">
+              <button type="button" role="switch" aria-checked={true} aria-label="Auto permissions (always on)" disabled className="flex min-h-9 min-w-[4.5rem] items-center justify-center rounded-full disabled:opacity-50" data-testid="claude-auto-permissions-toggle">
+                <span aria-hidden="true" className="relative h-7 w-16 rounded-full border border-current text-[var(--color-text-muted)]">
+                  <span className="absolute left-1 top-1 h-[1.125rem] w-[1.125rem] translate-x-9 rounded-full bg-current" />
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold">ON</span>
+                </span>
+              </button>
+              <div className="flex shrink-0">
                 <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="claude-auto-permissions-info">
                   <Info aria-hidden="true" className="h-3.5 w-3.5" />
                 </Button>
-              }
-            />
+              </div>
+            </div>
             <Button
               size="md"
               variant="ghost"
