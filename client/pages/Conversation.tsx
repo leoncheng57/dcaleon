@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Boxes, ChevronDown, FolderOpen, GitPullRequest, Globe, Info, MessageSquareText, OctagonX, Share2, Waves, WrapText } from "lucide-react";
+import { Boxes, ChevronDown, FolderOpen, GitPullRequest, Globe, Info, MessageSquareText, OctagonX, PersonStanding, Share2, WrapText } from "lucide-react";
 
 import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
@@ -639,7 +639,7 @@ export function ConversationPage() {
             title="Open run log"
             data-testid="opencode-mobile-runlog-open"
           >
-            <Waves aria-hidden="true" className="h-3.5 w-3.5" />
+            <PersonStanding aria-hidden="true" className="h-3.5 w-3.5" />
           </Button>
           <AutoPermissionsControl
             directory={directory}

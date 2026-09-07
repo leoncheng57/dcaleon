@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, Info, ListChecks, OctagonX, PersonStanding, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -9,8 +9,8 @@ import { cn } from "../ds/utils.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
-import { ClaudeInspector } from "../components/claude-inspector.js";
 import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
+import { SessionInspector } from "../components/session-inspector.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
 import { SessionShell } from "../components/session-shell.js";
@@ -27,6 +27,7 @@ import {
   START_DCA_SESSION_WORKFLOW_ID,
 } from "../lib/workflows.js";
 import { collapseActionGroups, runningActivity } from "../lib/derive.js";
+import type { InspectorTab } from "../lib/inspectorTabs.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
@@ -241,6 +242,10 @@ export function ClaudeConversationPage() {
   const [changesOpen, setChangesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [runlogOpen, setRunlogOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [requestedInspectorTab, setRequestedInspectorTab] = useState<InspectorTab | undefined>();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [autoSafetyOpen, setAutoSafetyOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [modelCatalogue, setModelCatalogue] = useState<ModelCatalogue | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | undefined>();
@@ -466,24 +471,69 @@ export function ClaudeConversationPage() {
         controlsRow: "claude-mode-toggle",
       }}
       header={{
-        backLink: <Link to="/claude" className="shrink-0 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" data-testid="claude-back">Claude lab</Link>,
+        backLink: <Link to="/claude" className="hidden shrink-0 text-sm underline sm:inline" data-testid="claude-back">← Claude lab</Link>,
         title: session?.title ?? "Conversation",
         badges: (
           <>
             <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
             {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
             {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
+            {session?.running && <Badge variant="info">running</Badge>}
+            {session?.running && (
+              <button
+                type="button"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--color-text-danger)] hover:bg-[var(--color-background-surface-danger-muted)]"
+                onClick={() => void cancel()}
+                aria-label="Stop running agent"
+                title="Stop running agent"
+                data-testid="claude-stop"
+              >
+                <OctagonX aria-hidden="true" className="h-4 w-4" />
+              </button>
+            )}
           </>
         ),
         stats: <ClaudeUsageIndicator tokenUsage={session?.tokenUsage} />,
         actions: (
           <>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setRunlogOpen(true)} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             {session?.prUrl && (
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} aria-label="Open pull request status" title="Reviews" data-testid="claude-open-reviews"><GitPullRequest aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             )}
+            <div className="flex items-center gap-0.5 rounded-full border border-[var(--color-border-default)] px-1 opacity-50" title="Auto permissions always on — Claude runs non-interactively" data-testid="claude-auto-permissions-group">
+              <button type="button" role="switch" aria-checked={true} aria-label="Auto permissions (always on)" disabled className="flex min-h-9 min-w-[4.5rem] items-center justify-center rounded-full disabled:opacity-50" data-testid="claude-auto-permissions-toggle">
+                <span aria-hidden="true" className="relative h-7 w-16 rounded-full border border-current text-[var(--color-text-muted)]">
+                  <span className="absolute left-1 top-1 h-[1.125rem] w-[1.125rem] translate-x-9 rounded-full bg-current" />
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold">ON</span>
+                </span>
+              </button>
+              <div className="flex shrink-0">
+                <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="claude-auto-permissions-info">
+                  <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <Button
+              size="md"
+              variant="ghost"
+              className={cn("min-h-11 min-w-12 px-0", !sidebarOpen && "text-[var(--color-text-muted)] opacity-50")}
+              onClick={() => {
+                if (!sidebarOpen) {
+                  setSidebarOpen(true);
+                  setRequestedInspectorTab("runlog");
+                } else if (requestedInspectorTab === "runlog") {
+                  setSidebarOpen(false);
+                } else {
+                  setRequestedInspectorTab("runlog");
+                }
+              }}
+              aria-label={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
+              title={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
+              data-testid="claude-open-runlog"
+            >
+              <PersonStanding aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
             <SessionOverflowMenu
               testIds={{ root: "claude-session-menu", trigger: "claude-session-menu-trigger", panel: "claude-session-menu-panel" }}
               items={[
@@ -576,13 +626,18 @@ export function ClaudeConversationPage() {
           <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button>
         ) : null,
       }}
-      inspector={{
+      inspector={sidebarOpen ? {
         desktop: (
-          <div className="hidden lg:flex">
-            <ClaudeInspector events={events} title={session?.title ?? "claude-session"} />
-          </div>
+          <SessionInspector
+            directory={id}
+            sessionID={id}
+            events={events}
+            requestedTab={requestedInspectorTab}
+            mobileOpen={inspectorOpen}
+            onMobileClose={() => setInspectorOpen(false)}
+          />
         ),
-      }}
+      } : undefined}
       overlays={(
         <>
           {activeWorkflow && (
@@ -612,6 +667,15 @@ export function ClaudeConversationPage() {
                 <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "json"), serializeSessionJson(session?.title ?? "Claude session", events), "application/json")} data-testid="claude-export-json">Download JSON</Button>
               </div>
             </section>
+          )}
+          {autoSafetyOpen && (
+            <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-start sm:p-4 sm:pt-[10vh]" data-testid="claude-auto-permissions-safety-sheet">
+              <button type="button" className="absolute inset-0 bg-[var(--color-background-overlay)]" aria-label="Close auto permissions safety" onClick={() => setAutoSafetyOpen(false)} data-testid="claude-auto-permissions-safety-scrim" />
+              <section className="relative w-full rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl sm:max-w-md sm:rounded-xl" role="dialog" aria-modal="true" aria-label="Auto permissions safety">
+                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">Auto permissions safety</h2><button type="button" className="ml-auto min-h-11 min-w-11 rounded text-sm" onClick={() => setAutoSafetyOpen(false)} aria-label="Close auto permissions safety" data-testid="claude-auto-permissions-safety-close">Close</button></div>
+                <p className="mt-3 text-sm text-[var(--color-text-muted)]">Auto permissions approves every asked permission once, including arbitrary shell commands, external-directory access, and repeated requests from a doom loop. This affects every session using this project directory and resets to off when the BFF restarts.</p>
+              </section>
+            </div>
           )}
         </>
       )}

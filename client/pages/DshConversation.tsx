@@ -1,45 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Eye, FlaskConical, ListTree, OctagonX, RefreshCw, Send, X } from "lucide-react";
+import { Eye, FlaskConical, ListTree, OctagonX, Send } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
-import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
-import { RunningIndicator, Transcript } from "../components/transcript.js";
+import { SessionShell } from "../components/session-shell.js";
+import { SessionInspector } from "../components/session-inspector.js";
+import { PreviewDrawer } from "../components/preview-drawer.js";
 import { DshTrajectoryInspector } from "../components/dsh-trajectory-inspector.js";
 import { api, type DshSessionSummary } from "../lib/api.js";
 import { collapseActionGroups } from "../lib/derive.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
+import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
-
-function PreviewDrawer({ onClose }: { onClose: () => void }) {
-  const [port, setPort] = useState("5173");
-  const [key, setKey] = useState(0);
-  return (
-    <section className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col border-l border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:left-auto sm:w-[42rem]" data-testid="dsh-preview">
-      <header className="flex items-center gap-2 border-b border-[var(--color-border-default)] p-2">
-        <strong className="text-sm">Bounded local preview</strong>
-        <Button className="ml-auto" size="sm" variant="ghost" onClick={onClose} data-testid="dsh-preview-close"><X aria-hidden="true" size={15} /> Close</Button>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col p-3">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-sm">Port <input value={port} onChange={(event) => setPort(event.target.value.replace(/\D/g, ""))} className="w-24 rounded-md border border-[var(--color-border-default)] bg-transparent p-2" data-testid="dsh-preview-port" /></label>
-          <Button variant="secondary" onClick={() => setKey((value) => value + 1)} data-testid="dsh-preview-reload"><RefreshCw aria-hidden="true" size={14} className="mr-1" /> Load / Reload</Button>
-        </div>
-        <iframe
-          key={key}
-          src={PUBLIC_SIMULATOR ? undefined : `/api/preview/${port}/`}
-          srcDoc={PUBLIC_SIMULATOR ? "<!doctype html><html><body><main><h1>Simulated DSH preview</h1><p>This public fixture never contacts localhost, DSH, or a model provider.</p><button type='button'>Fixture action</button></main></body></html>" : undefined}
-          title="Application preview"
-          sandbox="allow-forms allow-modals allow-popups allow-scripts"
-          className="min-h-0 flex-1 rounded border border-[var(--color-border-default)] bg-white"
-          data-testid="dsh-preview-frame"
-        />
-        <p className="mt-2 text-xs text-[var(--color-text-muted)]">{PUBLIC_SIMULATOR ? "Fixture frame only. Public previews never contact localhost or a DSH runtime." : "Read-only GET/HEAD proxy. The DSH runtime cannot select or widen allowed ports."}</p>
-      </div>
-    </section>
-  );
-}
+import type { InspectorTab } from "../lib/inspectorTabs.js";
 
 export function DshConversationPage() {
   const { id = "" } = useParams();
@@ -50,10 +24,14 @@ export function DshConversationPage() {
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState(false);
   const [trajectoryOpen, setTrajectoryOpen] = useState(false);
-  const bottom = useRef<HTMLDivElement | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [requestedInspectorTab, setRequestedInspectorTab] = useState<InspectorTab | undefined>();
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
   const sessionScope = useRef(id);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const follow = useTranscriptFollow(events);
 
   const load = async (targetId: string) => {
     if (refreshInFlight.current) {
@@ -88,8 +66,6 @@ export function DshConversationPage() {
     setSession(null);
     setEvents([]);
     void refresh();
-    // The public simulator owns API state through a fetch shim. EventSource
-    // bypasses that shim, so prompt/cancel refresh synchronously instead.
     if (PUBLIC_SIMULATOR) return;
     const source = new EventSource(api.dshEventsUrl(id));
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -98,19 +74,19 @@ export function DshConversationPage() {
       timer = setTimeout(() => void refresh(), 250);
     });
     source.addEventListener("ready", () => void refresh());
-    source.onerror = () => undefined; // EventSource owns bounded reconnect; fetch remains authoritative.
+    source.onerror = () => undefined;
     return () => {
       clearTimeout(timer);
       source.close();
     };
   }, [id]);
 
-  useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [events, session?.running]);
   const items = useMemo(() => collapseActionGroups(events), [events]);
+  const running = session?.running === true;
 
   const send = async () => {
     const text = draft.trim();
-    if (!text || sending || session?.running) return;
+    if (!text || sending || running) return;
     setSending(true);
     setDraft("");
     setError("");
@@ -139,35 +115,138 @@ export function DshConversationPage() {
   };
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-[var(--color-background-base)]" data-testid="dsh-conversation">
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-border-default)] px-3 py-2">
-        <Link to="/dsh" className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" data-testid="dsh-back">DSH lab</Link>
-        <span aria-hidden="true">/</span>
-        <strong className="min-w-0 truncate text-sm">{session?.title ?? "Conversation"}</strong>
-        <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
-        <Badge variant="neutral">{session?.presetId ?? "Loading"}</Badge>
-        <div className="ml-auto flex gap-1">
-          <Button size="sm" variant="secondary" onClick={() => setTrajectoryOpen(true)} data-testid="dsh-open-trajectory"><ListTree aria-hidden="true" className="mr-1" size={14} /> Trajectory</Button>
-          <Button size="sm" variant="secondary" onClick={() => setPreview(true)} data-testid="dsh-open-preview"><Eye aria-hidden="true" className="mr-1" size={14} /> Preview</Button>
-        </div>
-      </header>
-      {error && <div className="shrink-0 p-3"><Alert variant="danger">{error}</Alert></div>}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8" data-testid="dsh-transcript">
-        <div className="mx-auto max-w-4xl">
-          {events.length === 0 && !error && <div className="py-20 text-center"><FlaskConical aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">Ask DSH to inspect this allowlisted workspace. V1 cannot modify files.</p></div>}
-          <Transcript items={items} wrap collapsedGroups={{}} onToggleGroup={() => undefined} />
-          {session?.running && <div className="mt-5"><RunningIndicator activity={{ kind: "thinking", since: session.updatedAt }} /></div>}
-          <div ref={bottom} />
-        </div>
-      </div>
-      <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="dsh-composer">
-        <div className="mx-auto flex max-w-4xl items-end gap-2">
-          <textarea className="min-h-11 max-h-40 flex-1 resize-y rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-base)] px-3 py-2 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={keyDown} placeholder="Ask DSH to inspect the workspace..." disabled={!session || session.running} data-testid="dsh-prompt" />
-          {session?.running ? <Button type="button" variant="danger" onClick={() => void cancel()} data-testid="dsh-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button> : <Button type="submit" disabled={!draft.trim() || sending || !session} data-testid="dsh-send"><Send aria-hidden="true" size={15} className="mr-1" /> Send</Button>}
-        </div>
-      </form>
-      {preview && <PreviewDrawer onClose={() => setPreview(false)} />}
-      {trajectoryOpen && <DshTrajectoryInspector key={id} sessionId={id} open running={session?.running === true} onClose={() => setTrajectoryOpen(false)} />}
-    </main>
+    <>
+    <SessionShell
+      testIds={{
+        root: "dsh-conversation",
+        transcript: "dsh-transcript",
+        jumpToLatest: "dsh-jump-to-latest",
+        composerCard: "dsh-composer-card",
+        textarea: "dsh-prompt",
+        send: "dsh-send",
+        title: "dsh-session-title",
+      }}
+      header={{
+        backLink: (
+          <Link to="/dsh" className="hidden shrink-0 text-sm underline sm:inline" data-testid="dsh-back">
+            ← DSH lab
+          </Link>
+        ),
+        title: session?.title ?? "Conversation",
+        badges: (
+          <>
+            <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
+            <Badge variant="neutral">{session?.presetId ?? "Loading"}</Badge>
+            {running && <Badge variant="info">running</Badge>}
+            {running && (
+              <button
+                type="button"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--color-text-danger)] hover:bg-[var(--color-background-surface-danger-muted)]"
+                onClick={() => void cancel()}
+                aria-label="Stop running agent"
+                title="Stop running agent"
+                data-testid="dsh-stop"
+              >
+                <OctagonX aria-hidden="true" className="h-4 w-4" />
+              </button>
+            )}
+          </>
+        ),
+        actions: (
+          <>
+            <Button
+              size="md"
+              variant="ghost"
+              className="min-h-11 min-w-12 px-0"
+              onClick={() => { setRequestedInspectorTab("runlog"); setInspectorOpen(true); }}
+              aria-label="Open run log"
+              title="Open run log"
+              data-testid="dsh-open-runlog"
+            >
+              <ListTree aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="md"
+              variant="ghost"
+              className="min-h-11 min-w-12 px-0"
+              onClick={() => setTrajectoryOpen(true)}
+              aria-label="Open trajectory"
+              title="Open trajectory"
+              data-testid="dsh-open-trajectory"
+            >
+              <ListTree aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="md"
+              variant="ghost"
+              className="min-h-11 min-w-12 px-0"
+              onClick={() => setPreview(true)}
+              aria-label="Open preview"
+              title="Open preview"
+              data-testid="dsh-open-preview"
+            >
+              <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        ),
+      }}
+      banners={error ? <div className="shrink-0 p-3"><p className="text-sm text-[var(--color-text-danger)]" role="alert">{error}</p></div> : undefined}
+      transcript={{
+        items,
+        wrap: true,
+        collapsedGroups: {},
+        onToggleGroup: () => undefined,
+        referenceProvider: (children) => children,
+        loaded: true,
+        running,
+        activity: { kind: "thinking", since: session?.updatedAt ?? "" },
+        emptyState: !error ? (
+          <div className="py-20 text-center">
+            <FlaskConical aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" />
+            <p className="text-sm text-[var(--color-text-muted)]">Ask DSH to inspect this allowlisted workspace. V1 cannot modify files.</p>
+          </div>
+        ) : undefined,
+      }}
+      scroll={{
+        scrollerRef: follow.scrollerRef,
+        contentRef: follow.contentRef,
+        onScroll: follow.onScroll,
+        showNewActivity: follow.newActivity,
+        onJumpToLatest: follow.jumpToLatest,
+      }}
+      composer={{
+        draft,
+        onDraftChange: setDraft,
+        composerRef,
+        onKeyDown: keyDown,
+        placeholder: "Ask DSH to inspect the workspace...",
+        disabled: !session || running,
+        onSubmit: () => void send(),
+        submitLabel: sending ? "Sending…" : "Send",
+        submitDisabled: !draft.trim() || sending || !session,
+        modeControl: null,
+        modelPicker: null,
+      }}
+      inspector={{
+        desktop: (
+          <SessionInspector
+            directory=""
+            sessionID={id}
+            events={events}
+            trajectory={{ sessionId: id, running }}
+            requestedTab={requestedInspectorTab}
+            mobileOpen={inspectorOpen}
+            onMobileClose={() => setInspectorOpen(false)}
+          />
+        ),
+      }}
+      overlays={(
+        <>
+          {preview && <PreviewDrawer onClose={() => setPreview(false)} />}
+          {trajectoryOpen && <DshTrajectoryInspector key={id} sessionId={id} open running={running} onClose={() => setTrajectoryOpen(false)} />}
+        </>
+      )}
+    />
+    </>
   );
 }
