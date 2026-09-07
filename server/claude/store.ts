@@ -267,7 +267,7 @@ export class ClaudeSessionStore extends EventEmitter {
     } else if (frame.type === "error") {
       const id = `error-${randomUUID()}`;
       const message = frame.subtype === "version_mismatch"
-        ? `Claude CLI version mismatch: expected ${String(frame.expected)}, received ${String(frame.received) || "unknown"}`
+        ? `Claude CLI version mismatch: expected ${String(frame.expected)}, received ${String(frame.received) || "unknown"}. Update CLAUDE_CLI_VERSION in your .env file to ${String(frame.received) || "the installed version"}, then restart the server.`
         : "Claude run failed";
       session.events.push({ id, messageId: id, timestamp: now, kind: "error", message });
       this.finish(session, "failed");
