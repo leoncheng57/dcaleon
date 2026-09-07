@@ -38,6 +38,7 @@ Open **More → Design components** (`/design-components`) for the mobile-first 
 gallery. Shared panels, selectors, state views, and motion use the same primitives
 as the real tools panel. See the [component guide](docs/design-components/README.md)
 for composition and contribution rules. Examples use local state, not feature APIs.
+
 ## Playbooks
 
 The Runner's native **Playbooks** section at `/playbooks` catalogs the live **composer
