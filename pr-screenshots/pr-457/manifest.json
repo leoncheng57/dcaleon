@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 457,
+  "sourceSha": "e524e54f2985b50d986802be01d37809ab865a6c",
+  "capturedAt": "2026-09-07T21:54:36.927Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project",
+      "fullPage": false,
+      "captures": {
+        "desktop": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-f303650c--desktop.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 84489,
+          "sha256": "18d971dbf241a833757b9ecb572dfbb466f646e9637b35d14a72de442e33166a"
+        },
+        "mobile": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-c19a59d5--mobile.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 47394,
+          "sha256": "2bf9006af1eb5bac1c05ce49e4137d06eee73ebcfe3dc3a8a6833cfcc3e13fdb"
+        }
+      }
+    },
+    {
+      "requestedRoute": "/claude",
+      "fullPage": false,
+      "captures": {
+        "desktop": {
+          "filename": "02-claude-065edbf8--desktop.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 68647,
+          "sha256": "61c39464818b6487ef4b411cec0c4238ccdd8f6c2f5b807db2366565d9fa3bb4"
+        },
+        "mobile": {
+          "filename": "02-claude-9754c109--mobile.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 63297,
+          "sha256": "0e55977e7a59f148b814a88e6bec104fe8e497573c03c7b19038e57662a06052"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "reason": "Author override from the screenshots block (an empty block explicitly skips capture).",
+    "needsLocalReview": false
+  }
+}
