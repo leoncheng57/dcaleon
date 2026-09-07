@@ -744,7 +744,7 @@ function scoped(path: string, directory: string, extra: Record<string, string> =
 
 export const api = {
   health: () => fetch("/api/health").then((r) => json<HealthResponse>(r)),
-  appConfig: () => fetch("/api/app-config").then((r) => json<{ publicAppUrl: string | null; dshEnabled: boolean; claudeEnabled: boolean }>(r)),
+  appConfig: () => fetch("/api/app-config").then((r) => json<{ publicAppUrl: string | null; dshEnabled: boolean; dshConfigured: boolean; claudeEnabled: boolean; claudeConfigured: boolean }>(r)),
   projects: () => fetch("/api/projects").then((r) => json<{ root: string; projects: DiscoveredProject[] }>(r)),
   projectPins: () => fetch("/api/project-pins").then((r) => json<{ directories: string[] }>(r)),
   saveProjectPins: (directories: string[]) =>

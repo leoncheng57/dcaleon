@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FlaskConical, ListTodo, Moon, RefreshCw, Sparkles, Sun, Terminal } from "lucide-react";
+import { ListTodo, Moon, RefreshCw, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -20,6 +20,7 @@ import { refreshApp } from "../lib/appRefresh.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
 import { useNotifyWatcher } from "../lib/useNotifyWatcher.js";
 import { getDoc } from "../lib/docs.js";
+import { IslandSelector } from "./island-selector.js";
 import { NavOverflowMenu } from "./nav-overflow-menu.js";
 import { NotificationPopover } from "./notification-popover.js";
 import { PhoneTransferDialog } from "./phone-transfer-dialog.js";
@@ -61,7 +62,9 @@ export function AppShell() {
   const [paletteStatus, setPaletteStatus] = useState<string | undefined>();
   const [refreshing, setRefreshing] = useState(false);
   const [dshEnabled, setDshEnabled] = useState(false);
+  const [dshConfigured, setDshConfigured] = useState(false);
   const [claudeEnabled, setClaudeEnabled] = useState(false);
+  const [claudeConfigured, setClaudeConfigured] = useState(false);
   const paletteRequest = useRef(0);
 
   useEffect(() => {
@@ -73,7 +76,12 @@ export function AppShell() {
     directory ? `${path}?${new URLSearchParams({ directory })}` : path;
 
   useEffect(() => {
-    void api.appConfig().then((config) => { setDshEnabled(config.dshEnabled); setClaudeEnabled(config.claudeEnabled); }).catch(() => undefined);
+    void api.appConfig().then((config) => {
+      setDshEnabled(config.dshEnabled);
+      setDshConfigured(config.dshConfigured);
+      setClaudeEnabled(config.claudeEnabled);
+      setClaudeConfigured(config.claudeConfigured);
+    }).catch(() => undefined);
   }, []);
 
   const openPhoneTransfer = async () => {
@@ -152,8 +160,8 @@ export function AppShell() {
       { id: "settings", title: "Settings", to: scopedPath("/settings") },
       { id: "planning", title: "Planning", to: "/planning", keywords: ["issues", "pull requests", "roadmap", "github"] },
       { id: "observability", title: "Observability", to: "/observability", keywords: ["logs", "audit", "deployment", "health", "processes"] },
-      ...(dshEnabled ? [{ id: "dsh", title: "DSH lab", to: "/dsh", keywords: ["deepseek", "harness", "experiment"] }] : []),
-      ...(claudeEnabled ? [{ id: "claude", title: "Claude lab", to: "/claude", keywords: ["claude", "anthropic", "code", "binary"] }] : []),
+      { id: "dsh", title: "DSH lab", to: "/dsh", keywords: ["deepseek", "harness", "experiment"], ...(!dshEnabled || !dshConfigured ? { subtitle: "Not configured" } : {}) },
+      { id: "claude", title: "Claude lab", to: "/claude", keywords: ["claude", "anthropic", "code", "binary"], ...(!claudeEnabled || !claudeConfigured ? { subtitle: "Not configured" } : {}) },
       { id: "playbooks", title: "Playbooks", to: "/playbooks", keywords: ["workflows", "procedures"] },
     ],
     actions: [
@@ -200,12 +208,20 @@ export function AppShell() {
             DCA
           </NavLink>
           <span
-            className="invisible mr-auto w-0 truncate font-mono text-[10px] tabular-nums text-[var(--color-text-muted)] min-[480px]:visible min-[480px]:w-auto"
+            className="invisible w-0 truncate font-mono text-[10px] tabular-nums text-[var(--color-text-muted)] min-[480px]:visible min-[480px]:w-auto"
             data-testid="opencode-nav-version"
             title={`DCA ${BUILD_LABEL}`}
           >
             {BUILD_LABEL}
           </span>
+          <IslandSelector
+            dshEnabled={dshEnabled}
+            dshConfigured={dshConfigured}
+            claudeEnabled={claudeEnabled}
+            claudeConfigured={claudeConfigured}
+            scopedPath={scopedPath}
+          />
+          <div className="mr-auto" />
           <Button
             aria-label="Refresh app"
             className="size-8 shrink-0 p-0 pointer-coarse:size-11"
@@ -231,42 +247,6 @@ export function AppShell() {
           >
             {resolvedTheme === "dark" ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}
           </Button>
-          {/* Hidden at phone width, where one more icon overflows the 390px bar (the
-              same rule the build label follows); the More menu carries it there. */}
-          <NavLink
-            aria-label="OpenCode"
-            className={({ isActive }) => `hidden size-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold pointer-coarse:size-11 min-[480px]:inline-flex sm:w-auto sm:px-2 ${isActive ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-action-ghost)] hover:bg-[var(--color-background-action-ghost-hover)]"}`}
-            title="OpenCode"
-            to={scopedPath("/opencode")}
-            data-testid="opencode-nav-opencode"
-          >
-            <Terminal aria-hidden="true" size={16} />
-            <span className="hidden sm:inline">OpenCode</span>
-          </NavLink>
-          {dshEnabled && (
-            <NavLink
-              aria-label="DSH lab"
-              className={({ isActive }) => `inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold pointer-coarse:size-11 sm:w-auto sm:px-2 ${isActive ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-action-ghost)] hover:bg-[var(--color-background-action-ghost-hover)]"}`}
-              title="DSH lab"
-              to="/dsh"
-              data-testid="dsh-nav"
-            >
-              <FlaskConical aria-hidden="true" size={16} />
-              <span className="hidden sm:inline">DSH</span>
-            </NavLink>
-          )}
-          {claudeEnabled && (
-            <NavLink
-              aria-label="Claude lab"
-              className={({ isActive }) => `inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold pointer-coarse:size-11 sm:w-auto sm:px-2 ${isActive ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-action-ghost)] hover:bg-[var(--color-background-action-ghost-hover)]"}`}
-              title="Claude lab"
-              to="/claude"
-              data-testid="claude-nav"
-            >
-              <Sparkles aria-hidden="true" size={16} />
-              <span className="hidden sm:inline">Claude</span>
-            </NavLink>
-          )}
           <NavLink
             aria-label="Planning"
             className={({ isActive }) => `inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold pointer-coarse:size-11 sm:w-auto sm:px-2 ${isActive ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "text-[var(--color-text-action-ghost)] hover:bg-[var(--color-background-action-ghost-hover)]"}`}

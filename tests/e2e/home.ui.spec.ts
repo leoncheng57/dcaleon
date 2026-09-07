@@ -12,29 +12,26 @@ test.describe("landing page and runtime navigation", () => {
     await expect(page).toHaveTitle("DCA");
   });
 
-  test("OpenCode is a navbar runtime beside the others and opens the hub, keeping the directory scope", async ({ page }) => {
+  test("island selector opens and navigates to OpenCode, keeping the directory scope", async ({ page }) => {
     await page.goto(`/settings?directory=${encodeURIComponent(DIR)}`);
-    const opencode = page.getByTestId("opencode-nav-opencode");
-    await expect(opencode).toHaveAccessibleName("OpenCode");
-    // Order in the main nav: OpenCode precedes Planning (and any enabled lab).
-    const order = await page.locator("nav[aria-label='Main'] > *").evaluateAll((items) => items.map((item) => item.getAttribute("data-testid")));
-    expect(order.indexOf("opencode-nav-opencode")).toBeLessThan(order.indexOf("opencode-nav-planning"));
-    await opencode.click();
+    const trigger = page.getByTestId("island-selector-trigger");
+    await expect(trigger).toHaveAccessibleName("Switch runtime");
+    await trigger.click();
+    const panel = page.getByTestId("island-selector-panel");
+    await expect(panel).toBeVisible();
+    await page.getByTestId("island-selector-opencode").click();
     await expect(page).toHaveURL(`/opencode?directory=${encodeURIComponent(DIR)}`);
     await expect(page.getByTestId("opencode-hub")).toBeVisible();
-    // The hub keeps its established tab title; only its route moved.
     await expect(page).toHaveTitle("Sessions | DCA");
   });
 
-  test("at phone width OpenCode moves into More and the bar does not overflow", async ({ page }) => {
+  test("at phone width the island selector is still visible and the bar does not overflow", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 740 });
     await page.goto(`/settings?directory=${encodeURIComponent(DIR)}`);
-    // One more icon in the bar overflows a 390px phone (the same reason the
-    // build label hides here), so the bar entry yields and More carries it.
-    await expect(page.getByTestId("opencode-nav-opencode")).toBeHidden();
+    await expect(page.getByTestId("island-selector-trigger")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
-    await page.getByTestId("opencode-nav-more").click();
-    await page.getByTestId("opencode-nav-more-menu").getByTestId("opencode-nav-more-opencode").click();
+    await page.getByTestId("island-selector-trigger").click();
+    await page.getByTestId("island-selector-opencode").click();
     await expect(page).toHaveURL(`/opencode?directory=${encodeURIComponent(DIR)}`);
     await expect(page.getByTestId("opencode-hub")).toBeVisible();
   });

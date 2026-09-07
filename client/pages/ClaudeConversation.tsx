@@ -496,6 +496,7 @@ export function ClaudeConversationPage() {
                   testId="claude-composer-model"
                   label="Model"
                   disabled={session.running}
+                  midConversation={events.length > 0}
                 />
               </div>
           )}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, ChevronDown, Pin, Search, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Pin, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
 import { api } from "../lib/api.js";
@@ -22,6 +22,7 @@ export function ModelPicker({
   testId,
   label = "Model",
   disabled = false,
+  midConversation = false,
   portalLayer = "default",
 }: {
   catalogue: ModelCatalogue | null;
@@ -30,6 +31,8 @@ export function ModelPicker({
   testId: string;
   label?: string;
   disabled?: boolean;
+  /** Show a warning about cache invalidation when switching models mid-conversation. */
+  midConversation?: boolean;
   /** Nested dialogs render above their owning modal instead of behind it. */
   portalLayer?: "default" | "nested";
 }) {
@@ -197,6 +200,12 @@ export function ModelPicker({
             <span className="mr-1 text-xs font-medium text-[var(--color-text-muted)]">Variant</span>
             {["", ...details.variants].map((variant) => <button key={variant || "default"} type="button" className={`min-h-9 rounded-md px-3 text-xs font-semibold ${value?.variant === (variant || undefined) ? "bg-[var(--color-background-surface-info-muted)] text-[var(--color-text-info)]" : "bg-[var(--color-background-surface-neutral-muted)]"}`} onClick={() => { if (value) onChange({ ...value, variant: variant || undefined }); close(); }} data-testid={`${testId}-variant`} data-variant={variant}>{variant || "Default"}</button>)}
           </div>}
+          {midConversation && (
+            <div className="flex items-start gap-2 border-b border-[var(--color-border-default)] bg-[var(--color-background-surface-warning-muted)] px-3 py-2 text-xs text-[var(--color-text-warning)]" role="note">
+              <AlertTriangle aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Switching models mid-conversation may increase latency and reduce efficiency. The new model won't benefit from the prior conversation's prompt cache.</span>
+            </div>
+          )}
           <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-2" role="listbox">
             {visiblePinned.length > 0 && <section data-testid={`${testId}-pinned-group`}>
               <h2 className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Pinned</h2>

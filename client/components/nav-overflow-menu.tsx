@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Activity, BookOpen, LibraryBig, MoreHorizontal, Search, Settings, Smartphone, Terminal, Wrench } from "lucide-react";
+import { Activity, BookOpen, LibraryBig, MoreHorizontal, Search, Settings, Smartphone, Wrench } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { Button } from "../ds/button.js";
@@ -17,11 +17,6 @@ const LINKS = [
   { to: "/docs", label: "Docs", testId: "opencode-nav-docs", Icon: BookOpen },
   { to: "/tools", label: "MCPs", testId: "opencode-nav-tools", Icon: Wrench },
   { to: "/settings", label: "Settings", testId: "opencode-nav-settings", Icon: Settings },
-  // The bar hides its OpenCode entry below 480px (one more icon overflows a
-  // 390px phone), so the hub stays one tap away from here at every width. Last,
-  // so the established Tab walk (search, phone, Docs…) is unchanged; a distinct
-  // test id because the bar link and this one are both in the DOM at ≥480px.
-  { to: "/opencode", label: "OpenCode", testId: "opencode-nav-more-opencode", Icon: Terminal },
 ] as const;
 
 // Host-scoped, so unlike LINKS above it is never given a ?directory=.

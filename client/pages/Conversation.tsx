@@ -1028,6 +1028,7 @@ export function ConversationPage() {
               onChange={selectModel}
               testId="opencode-composer-model"
               label="Model"
+              midConversation={transcript.events.length > 0}
             />
             <button
               type="button"

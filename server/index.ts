@@ -116,7 +116,7 @@ app.use("/api", forgeRoutes());
 app.use("/api", planningRoutes());
 app.use("/api", reminderRoutes());
 app.use("/api", workflowRoutes());
-app.use("/api", appConfigRoutes(publicAppUrl, dsh.enabled, claude.enabled));
+app.use("/api", appConfigRoutes(publicAppUrl, dsh.enabled, dsh.configured, claude.enabled, claude.configured));
 app.use("/api", projectRoutes());
 app.use("/api", observabilityRoutes(opencode, PORT));
 app.use("/api", modelPinRoutes());
