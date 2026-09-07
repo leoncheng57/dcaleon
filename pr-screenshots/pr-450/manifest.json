@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 450,
+  "sourceSha": "cfcc1a6e51696ceebc7404154bde09b912eddd54",
+  "capturedAt": "2026-09-07T19:57:22.380Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/opencode?directory=/tmp/mock-project",
+      "fullPage": false,
+      "scenarioId": "hub-projects",
+      "captures": {
+        "desktop": {
+          "filename": "01-opencode-directory-tmp-mock-project-357a957d--desktop.png",
+          "dimensions": {
+            "width": 848,
+            "height": 281
+          },
+          "bytes": 18014,
+          "sha256": "b85bf570e6be2b476b297110bf918534c29239a2e1980fadcd229043d4efbe26"
+        },
+        "mobile": {
+          "filename": "01-opencode-directory-tmp-mock-project-c65e4a9d--mobile.png",
+          "dimensions": {
+            "width": 358,
+            "height": 269
+          },
+          "bytes": 16538,
+          "sha256": "027c020e507378011d628166895e163f67cfe41fee44cd708f150628230168c1"
+        }
+      }
+    },
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project&panel=todo",
+      "fullPage": false,
+      "scenarioId": "session-todo",
+      "captures": {
+        "desktop": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-37b8f494--desktop.png",
+          "dimensions": {
+            "width": 287,
+            "height": 278
+          },
+          "bytes": 4356,
+          "sha256": "7601cff2fed246480a68968e222748c51db0cec1fb840b0f024cb20ae26cd26e"
+        },
+        "mobile": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-26dcd2b5--mobile.png",
+          "dimensions": {
+            "width": 358,
+            "height": 278
+          },
+          "bytes": 15566,
+          "sha256": "51ff3fa3aa123c19aa17c6f6528e344d4e00dcdce263b5694c262ffbba0156ff"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "ids": [
+      "hub-projects",
+      "session-todo"
+    ],
+    "needsLocalReview": true,
+    "reason": "Baseline coverage includes shared or unmapped changes. A local agent must review the diff and add relevant states; CI has no AI keys."
+  }
+}
