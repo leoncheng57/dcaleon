@@ -36,14 +36,33 @@ describe("Claude session store", () => {
       { type: "tool_result", tool_use_id: "tu_1", is_error: false, content: "file body" },
     ] } });
     instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "text", text: "done" }] } });
-    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.02 });
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.02, usage: { input_tokens: 12, output_tokens: 4, cache_read_input_tokens: 8 } });
 
     const kinds = session.events.map((event) => event.kind);
     expect(kinds).toEqual(["user", "thought", "tool", "agent"]);
     const tool = session.events.find((event) => event.kind === "tool");
     expect(tool).toMatchObject({ kind: "tool", name: "Read", status: "completed", output: "file body" });
+    expect(session.events.find((event) => event.kind === "agent")).toMatchObject({
+      metricsStatus: "final", costStatus: "final", cumulativeCostStatus: "final",
+      messageCost: 0.02, cumulativeCost: 0.02, inputTokens: 12, outputTokens: 4, cacheReadTokens: 8,
+    });
     expect(session.running).toBe(false);
     expect(session.started).toBe(true);
+  });
+
+  it("accumulates authoritative per-turn cost without recomputing earlier rows", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "one");
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "text", text: "first" }] } });
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.001 });
+    instance.startRun(session, "two");
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "text", text: "second" }] } });
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.002 });
+    expect(session.events.filter((event) => event.kind === "agent")).toMatchObject([
+      { messageCost: 0.001, cumulativeCost: 0.001 },
+      { messageCost: 0.002, cumulativeCost: 0.003 },
+    ]);
   });
 
   it("keeps attached playbooks as chips on the user row and announces every way a turn ends", async () => {
@@ -197,6 +216,7 @@ describe("Claude session store", () => {
     expect(reloaded?.title).toBe("done one");
     expect(reloaded?.started).toBe(true);
     expect(reloaded?.events.map((event) => event.kind)).toEqual(["user", "agent"]);
+    expect(reloaded?.events.at(-1)).toMatchObject({ metricsStatus: "final", costStatus: "unavailable" });
     const interrupted = second.get(midTurn.id);
     // No process survives a restart, so a running session must not spin forever.
     expect(interrupted?.running).toBe(false);

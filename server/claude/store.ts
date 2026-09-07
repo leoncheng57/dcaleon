@@ -17,7 +17,7 @@ export interface PromptTag { name: string; body: string }
 
 export type ClaudeTranscriptEvent =
   | { id: string; messageId: string; timestamp: string; kind: "user"; text: string; reminders: PromptTag[]; workflows: PromptTag[]; attachments: []; mode?: "plan" | "build" }
-  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string; mode?: "plan" | "build" }
+  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string; mode?: "plan" | "build"; metricsStatus?: "pending" | "final"; costStatus?: "pending" | "final" | "unavailable"; cumulativeCostStatus?: "pending" | "final" | "unavailable"; durationStatus?: "pending" | "final" | "unavailable"; messageCost?: number; cumulativeCost?: number; messageDurationMs?: number; inputTokens?: number; outputTokens?: number; reasoningTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
   | { id: string; messageId: string; timestamp: string; kind: "thought"; text: string }
   | { id: string; messageId: string; timestamp: string; kind: "tool"; status: "pending" | "running" | "completed" | "error"; name: string; detail?: string; commandText?: string; output?: string; error?: string; attachments: [] }
   | { id: string; messageId: string; timestamp: string; kind: "patch"; files: string[]; fileCount: number; filesTruncated: boolean }
@@ -239,8 +239,10 @@ export class ClaudeSessionStore extends EventEmitter {
     if (frame.type === "assistant") {
       for (const block of blocksOf(frame)) {
         if (block.type === "text" && typeof block.text === "string" && block.text) {
-          const id = `agent-${randomUUID()}`;
-          session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: block.text, ...(turnMode ? { mode: turnMode } : {}) });
+          const id = `agent-${session.activeRunId}`;
+          const existing = session.events.find((item) => item.id === id);
+          if (existing?.kind === "agent") existing.text += `\n\n${block.text}`;
+          else session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: block.text, metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending", ...(turnMode ? { mode: turnMode } : {}) });
         } else if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
           const id = `thought-${randomUUID()}`;
           session.events.push({ id, messageId: id, timestamp: now, kind: "thought", text: block.thinking });
@@ -305,6 +307,27 @@ export class ClaudeSessionStore extends EventEmitter {
         contextWindow: typeof modelEntry?.contextWindow === "number" ? modelEntry.contextWindow : prev.contextWindow,
         costUsd: prev.costUsd + cost,
       };
+      const prose = [...session.events].reverse().find((item) => item.kind === "agent" && item.id === `agent-${session.activeRunId}`);
+      if (prose?.kind === "agent") {
+        const endedAt = Date.now();
+        prose.metricsStatus = "final";
+        prose.durationStatus = session.runStartedAt === undefined ? "unavailable" : "final";
+        if (session.runStartedAt !== undefined) prose.messageDurationMs = Math.max(0, endedAt - session.runStartedAt);
+        prose.costStatus = typeof frame.total_cost_usd === "number" ? "final" : "unavailable";
+        prose.cumulativeCostStatus = typeof frame.total_cost_usd === "number" ? "final" : "unavailable";
+        if (typeof frame.total_cost_usd === "number") {
+          prose.messageCost = frame.total_cost_usd;
+          prose.cumulativeCost = session.tokenUsage.costUsd;
+        }
+        if (usage) {
+          prose.inputTokens = typeof usage.input_tokens === "number" ? usage.input_tokens : undefined;
+          prose.outputTokens = typeof usage.output_tokens === "number" ? usage.output_tokens : undefined;
+          prose.cacheReadTokens = typeof usage.cache_read_input_tokens === "number" ? usage.cache_read_input_tokens : undefined;
+          prose.cacheWriteTokens = typeof usage.cache_creation_input_tokens === "number" ? usage.cache_creation_input_tokens : undefined;
+          const details = usage.output_tokens_details as Record<string, unknown> | undefined;
+          prose.reasoningTokens = typeof details?.thinking_tokens === "number" ? details.thinking_tokens : undefined;
+        }
+      }
       this.finish(session, frame.is_error === true ? "failed" : "completed", { costUsd: cost });
     }
 
@@ -353,6 +376,14 @@ export class ClaudeSessionStore extends EventEmitter {
   }
 
   private finish(session: ClaudeSession, outcome: ClaudeRunRecord["outcome"], options: { costUsd?: number; humanIntervention?: boolean } = {}): void {
+    const prose = [...session.events].reverse().find((item) => item.kind === "agent" && item.id === `agent-${session.activeRunId}`);
+    if (prose?.kind === "agent" && prose.metricsStatus !== "final") {
+      prose.metricsStatus = "final";
+      prose.durationStatus = session.runStartedAt === undefined ? "unavailable" : "final";
+      if (session.runStartedAt !== undefined) prose.messageDurationMs = Math.max(0, Date.now() - session.runStartedAt);
+      prose.costStatus = "unavailable";
+      prose.cumulativeCostStatus = "unavailable";
+    }
     session.running = false;
     session.started = true;
     session.runStartedAt = undefined;
