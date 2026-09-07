@@ -1,179 +1,136 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import type { TranscriptEvent } from "../../client/lib/transcript.js";
+import { fixture, metrics, open, prose } from "./claude-performance-fixture.js";
 
-// All state is owned by this page's routes, never by a shared BFF fixture.
-const ID = "claude-performance";
-const prose = (index: number): TranscriptEvent => ({
-  id: `row-${index}`, messageId: `message-${index}`, timestamp: "2026-09-07T12:00:00Z",
-  kind: "agent", text: `Activity ${index}\n\n${"Long transcript content. ".repeat(25)}`,
+test.use({ channel: process.env.CLAUDE_PERF_CHROME ? "chrome" : undefined });
+
+test("real API bounds initial data and unchanged refreshes perform no transcript commit", async ({ page }) => {
+  const server = await fixture();
+  try {
+    const session = server.create(true);
+    const payloads = await open(page, server, session.id);
+    await page.waitForTimeout(500);
+    const before = await metrics(page);
+    server.store.emit("update", session.id);
+    await expect.poll(() => payloads.length).toBeGreaterThan(1);
+    await page.waitForTimeout(400);
+    expect((await metrics(page)).commits).toBe(before.commits);
+    expect(payloads.at(-1)).toMatchObject({ count: 0, delta: true });
+    expect(payloads.at(-1)!.bytes).toBeLessThan(2_000);
+    expect(payloads[0].count).toBe(50);
+    expect(payloads[0].bytes).toBeLessThan(150_000);
+    session.events.push(prose(260)); server.store.emit("update", session.id);
+    await expect(page.locator('[data-transcript-item="row-260"]')).toBeInViewport();
+    expect(payloads.at(-1)).toMatchObject({ count: 1, delta: true });
+    expect((await metrics(page)).rows).toBeLessThan(30);
+  } finally { await page.close(); await server.close(); }
 });
 
-async function fixture(page: Page, running = false) {
-  let events: TranscriptEvent[] = Array.from({ length: 232 }, (_, i) => prose(i));
-  let requests = 0;
-  await page.addInitScript(() => {
-    const sources: EventTarget[] = [];
-    const NativeEventSource = window.EventSource;
-    window.EventSource = class extends EventTarget {
-      constructor(url: string | URL) {
-        super();
-        if (!String(url).includes("/api/claude/events")) return new NativeEventSource(url);
-        sources.push(this);
+test("loading and evicting history preserves the visible anchor and supports forward navigation", async ({ page }) => {
+  const server = await fixture();
+  try {
+    const session = server.create(); await open(page, server, session.id);
+    const scroller = page.getByTestId("claude-transcript");
+    for (let i = 0; i < 4; i++) {
+      await scroller.evaluate((element) => { element.scrollTop = 0; });
+      await page.waitForTimeout(150);
+      const anchor = await page.locator("[data-transcript-item]").evaluateAll((elements) => {
+        const container = document.querySelector('[data-testid="claude-transcript"]')!.getBoundingClientRect();
+        const row = elements.find((element) => element.getBoundingClientRect().bottom > container.top)!;
+        return { id: row.getAttribute("data-transcript-item"), top: row.getBoundingClientRect().top };
+      });
+      await page.getByTestId("claude-load-earlier").click();
+      await expect(page.getByTestId("claude-load-earlier")).toBeEnabled();
+      await expect.poll(async () => Math.abs((await page.locator(`[data-transcript-item="${anchor.id}"]`).boundingBox())!.y - anchor.top)).toBeLessThan(4);
+      expect((await metrics(page)).resident).toBeLessThanOrEqual(150);
+      expect((await metrics(page)).rows).toBeLessThan(30);
+    }
+    await scroller.evaluate((element) => { element.scrollTop = 0; });
+    await page.getByTestId("claude-load-newer").click();
+    await page.getByTestId("claude-jump-to-latest").click();
+    await expect(page.getByTestId("claude-history-controls")).toHaveAttribute("data-resident-events", "50");
+    await expect(page.locator('[data-transcript-item="row-259"]')).toBeInViewport();
+  } finally { await page.close(); await server.close(); }
+});
+
+test("hidden tabs close transcript SSE and issue no fetches until one bounded catch-up", async ({ page }) => {
+  const server = await fixture();
+  try {
+    const session = server.create(true); const payloads = await open(page, server, session.id);
+    await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
+    await expect.poll(() => server.store.listenerCount("update")).toBe(0);
+    const before = payloads.length;
+    session.events.push(prose(260)); server.store.emit("update", session.id);
+    await page.waitForTimeout(3_500);
+    expect(payloads).toHaveLength(before);
+    await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: false }); document.dispatchEvent(new Event("visibilitychange")); });
+    await expect(page.locator('[data-transcript-item="row-260"]')).toBeInViewport();
+    expect(payloads).toHaveLength(before + 1);
+    expect(payloads.at(-1)).toMatchObject({ count: 1, delta: true });
+  } finally { await page.close(); await server.close(); }
+});
+
+test("search, references, run log and export reach history outside resident pages", async ({ page }) => {
+  const server = await fixture();
+  try {
+    const session = server.create(); await open(page, server, session.id);
+    await page.getByTestId("claude-transcript").evaluate((element) => { element.scrollTop = 0; });
+    await page.getByTestId("claude-search-history").click();
+    await page.getByTestId("claude-history-query").fill("Ancient reference");
+    await page.getByTestId("claude-history-search").click();
+    await expect(page.getByTestId("claude-history-results")).toContainText("Ancient reference");
+    await expect(page.getByTestId("claude-history-results").getByRole("button", { name: /src\/old.ts/ })).toBeVisible();
+    await page.getByTestId("claude-history-close").click();
+    await page.getByTestId("claude-open-runlog").click();
+    await page.getByTestId("claude-history-query").fill("Historical command 2");
+    await page.getByTestId("claude-history-search").click();
+    await expect(page.getByTestId("claude-history-results")).toContainText("Historical command 2");
+    await page.getByTestId("claude-history-close").click();
+    await page.getByTestId("claude-session-menu-trigger").click();
+    await page.getByTestId("claude-open-export").click();
+    const downloading = page.waitForEvent("download"); await page.getByTestId("claude-export-json").click();
+    const body = await readFile((await (await downloading).path())!, "utf8");
+    expect(body).toContain("Ancient reference"); expect(body).not.toContain("echo historical");
+    expect(JSON.parse(body).entries.length).toBeGreaterThan(200);
+    expect((await metrics(page)).resident).toBe(50);
+  } finally { await page.close(); await server.close(); }
+});
+
+test("two simultaneous pages stay responsive during active updates (measured soak)", async ({ browser }) => {
+  const duration = Number(process.env.CLAUDE_PERF_SOAK_MS || 15_000);
+  test.setTimeout(duration + 90_000);
+  const server = await fixture();
+  const context = await browser.newContext();
+  const pages = await Promise.all([context.newPage(), context.newPage()]);
+  const latencies: number[] = [];
+  try {
+    const sessions = [server.create(true), server.create()];
+    const payloads = await Promise.all(pages.map((page, i) => open(page, server, sessions[i].id)));
+    await Promise.all(pages.map((page) => page.evaluate(() => { (window as any).longTasks = []; })));
+    const started = Date.now();
+    let sequence = 260;
+    while (Date.now() - started < duration) {
+      sessions[0].events.push(prose(sequence++)); server.store.emit("update", sessions[0].id);
+      for (const page of pages) {
+        const begin = Date.now();
+        await page.bringToFront();
+        await page.getByTestId("claude-prompt").fill(`Responsiveness probe ${sequence}`, { timeout: 1_000 });
+        await expect(page.getByTestId("claude-prompt")).toHaveValue(`Responsiveness probe ${sequence}`, { timeout: 1_000 });
+        latencies.push(Date.now() - begin);
+        const sample = await metrics(page);
+        expect(sample.resident).toBeLessThanOrEqual(150);
+        expect(sample.pages).toBeLessThanOrEqual(3);
+        expect(sample.rows).toBeLessThan(30);
+        expect(sample.reconcileMs).toBeLessThan(50);
       }
-      close() {}
-    } as typeof EventSource;
-    Object.assign(window, {
-      performanceNudge: () => sources.forEach((source) => source.dispatchEvent(new Event("update"))),
-      performanceVisibility: (hidden: boolean) => {
-        Object.defineProperty(document, "visibilityState", { configurable: true, value: hidden ? "hidden" : "visible" });
-        document.dispatchEvent(new Event("visibilitychange"));
-      },
-    });
-    // Observe React's actual memo boundary, not just DOM mutations (React can
-    // spend time rerendering unchanged markdown without mutating any DOM).
-    let previous: unknown;
-    Object.assign(window, { transcriptCommits: 0, transcriptIdentityChanges: 0 });
-    Object.assign(window, { __REACT_DEVTOOLS_GLOBAL_HOOK__: {
-      supportsFiber: true, inject: () => 1,
-      onCommitFiberRoot: (_id: number, root: any) => {
-        const walk = (fiber: any) => {
-          if (!fiber) return;
-          if (fiber.memoizedProps?.collapseCompletedByDefault && Array.isArray(fiber.memoizedProps?.items)) {
-            const state = window as any;
-            if (fiber.flags & 1) state.transcriptCommits++;
-            if (previous !== fiber.memoizedProps.items) state.transcriptIdentityChanges++;
-            previous = fiber.memoizedProps.items;
-          }
-          walk(fiber.child); walk(fiber.sibling);
-        };
-        walk(root.current);
-      },
-      onCommitFiberUnmount: () => {},
-    } });
-  });
-  await page.route(`**/api/claude/sessions/${ID}`, (route) => {
-    requests++;
-    return route.fulfill({ json: { session: {
-      id: ID, title: "Long conversation", mode: "plan", presetId: "e2e-plan", workspaceId: "e2e",
-      createdAt: "2026-09-07T12:00:00Z", updatedAt: "2026-09-07T12:00:00Z", running,
-    }, events } });
-  });
-  await page.goto(`/claude/sessions/${ID}`);
-  await expect(page.locator("[data-transcript-item]")).toHaveCount(50);
-  return {
-    requests: () => requests,
-    append: () => { events = [...events, prose(events.length)]; },
-    replace: (next: TranscriptEvent[]) => { events = next; },
-  };
-}
-
-const nudge = (page: Page) => page.evaluate(() => (window as any).performanceNudge());
-const visibility = (page: Page, hidden: boolean) => page.evaluate((value) => (window as any).performanceVisibility(value), hidden);
-
-test("unchanged active polls and SSE preserve the transcript render boundary", async ({ page }) => {
-  const state = await fixture(page, true);
-  await expect(page.locator('[data-transcript-item="row-231"]')).toBeVisible();
-  const before = await page.evaluate(() => ({ commits: (window as any).transcriptCommits, identities: (window as any).transcriptIdentityChanges }));
-  expect(before.identities).toBeGreaterThan(0);
-  const requests = state.requests();
-  await nudge(page);
-  await expect.poll(state.requests).toBeGreaterThan(requests);
-  await expect.poll(state.requests, { timeout: 10_000 }).toBeGreaterThan(requests + 1);
-  expect(await page.evaluate(() => ({ commits: (window as any).transcriptCommits, identities: (window as any).transcriptIdentityChanges }))).toEqual(before);
-});
-
-test("loads history with a stable anchor and retains it when new activity arrives", async ({ page }) => {
-  const state = await fixture(page);
-  const scroller = page.getByTestId("claude-transcript");
-  await scroller.evaluate((element) => { element.scrollTop = 0; element.dispatchEvent(new Event("scroll", { bubbles: true })); });
-  await test.info().attach("claude-transcript-window", { body: await page.screenshot(), contentType: "image/png" });
-  const anchor = page.locator('[data-transcript-item="row-182"]');
-  const top = (await anchor.boundingBox())!.y;
-  await page.getByTestId("claude-load-earlier").click();
-  await expect(page.locator("[data-transcript-item]")).toHaveCount(100);
-  await expect.poll(async () => Math.abs((await anchor.boundingBox())!.y - top)).toBeLessThan(3);
-  state.append();
-  await nudge(page);
-  await expect(page.locator("[data-transcript-item]")).toHaveCount(101);
-  await expect.poll(async () => Math.abs((await anchor.boundingBox())!.y - top)).toBeLessThan(3);
-  await page.getByTestId("claude-jump-to-latest").click();
-  await expect(page.locator("[data-transcript-item]")).toHaveCount(50);
-  await expect(page.locator('[data-transcript-item="row-232"]')).toBeInViewport();
-  await scroller.evaluate((element) => { element.scrollTop = 0; });
-  await page.getByTestId("claude-show-all").click();
-  await expect(page.locator("[data-transcript-item]")).toHaveCount(233);
-  await expect(page.locator('[data-transcript-item="row-0"]')).toBeAttached();
-});
-
-test("hidden tabs ignore SSE and polls and catch up once visible", async ({ page }) => {
-  const state = await fixture(page, true);
-  await visibility(page, true);
-  const before = state.requests();
-  state.append();
-  await nudge(page);
-  await page.waitForTimeout(3_500);
-  expect(state.requests()).toBe(before);
-  await expect(page.locator('[data-transcript-item="row-232"]')).toHaveCount(0);
-  await visibility(page, false);
-  await expect(page.locator('[data-transcript-item="row-232"]')).toBeAttached();
-  expect(state.requests()).toBe(before + 1);
-});
-
-test("completed groups collapse while running and failed tools stay visible", async ({ page }) => {
-  const state = await fixture(page);
-  const tool = (id: string, status: "completed" | "running" | "error"): TranscriptEvent => ({
-    id, messageId: id, timestamp: "2026-09-07T12:00:00Z", kind: "tool", name: "bash", status,
-    title: id, attachments: [], output: "finished", error: status === "error" ? "Tool failed" : undefined,
-  });
-  state.replace([prose(0), tool("done-1", "completed"), tool("done-2", "completed"), tool("active", "running"), tool("failed", "error")]);
-  await nudge(page);
-  const toggle = page.getByTestId("opencode-action-group-toggle");
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByTestId("opencode-tool")).toHaveCount(2);
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByTestId("opencode-tool")).toHaveCount(4);
-});
-
-test("idle polling slows down but retains a durable fallback", async ({ page }) => {
-  const state = await fixture(page);
-  await page.clock.install();
-  const before = state.requests();
-  await page.clock.runFor(6_000);
-  expect(state.requests()).toBe(before);
-  state.append();
-  await page.clock.runFor(30_000);
-  await expect(page.locator('[data-transcript-item="row-232"]')).toBeAttached();
-  await expect(page.locator("[data-transcript-item]")).toHaveCount(50);
-});
-
-test("export, reference discovery and run log include history outside the window", async ({ page }) => {
-  const state = await fixture(page);
-  let paths: string[] = [];
-  await page.route(`**/api/claude/sessions/${ID}/references`, (route) => {
-    paths = route.request().postDataJSON().paths;
-    return route.fulfill({ json: { references: [] } });
-  });
-  state.replace([
-    { ...prose(0), text: "Review `src/old.ts:12`" },
-    { id: "old-tool", messageId: "old-tool", timestamp: "2026-09-07T12:00:00Z", kind: "tool", name: "bash", status: "completed", title: "Historical command", commandText: "echo historical", attachments: [] },
-    ...Array.from({ length: 232 }, (_, i) => prose(i + 1)),
-  ]);
-  await nudge(page);
-  await expect.poll(() => paths).toContain("src/old.ts");
-  await expect(page.locator('[data-transcript-item="row-0"]')).toHaveCount(0);
-  await page.getByTestId("claude-open-runlog").click();
-  await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("Historical command");
-  await page.getByTestId("claude-session-menu-trigger").click();
-  await page.getByTestId("claude-open-export").click();
-  const downloading = page.waitForEvent("download");
-  await page.getByTestId("claude-export-json").click();
-  const download = await downloading;
-  const exported = await readFile((await download.path())!, "utf8");
-  expect(exported).toContain("src/old.ts:12");
-  expect(JSON.parse(exported).entries).toHaveLength(234);
-  expect(JSON.parse(exported).entries).toContainEqual(expect.objectContaining({ type: "tool", label: "bash", status: "completed" }));
-  expect(exported).not.toContain("echo historical");
-  expect(exported).toContain("Activity 232");
+      await pages[0].waitForTimeout(2_000);
+    }
+    const samples = await Promise.all(pages.map(metrics));
+    const evidence = { browser: browser.version(), durationMs: Date.now() - started, samples: latencies.length, maxInteractionMs: Math.max(...latencies), maxLongTaskMs: Math.max(0, ...samples.flatMap((sample) => sample.longTasks)), maxPayloadBytes: Math.max(...payloads.flat().map((payload) => payload.bytes)), maxDeltaBytes: Math.max(...payloads.flat().filter((payload) => payload.delta).map((payload) => payload.bytes)), final: samples };
+    await test.info().attach("claude-two-tab-performance.json", { body: JSON.stringify(evidence, null, 2), contentType: "application/json" });
+    expect(evidence.maxInteractionMs).toBeLessThan(500);
+    expect(evidence.maxLongTaskMs).toBeLessThan(200);
+    expect(evidence.maxPayloadBytes).toBeLessThan(150_000);
+    expect(evidence.maxDeltaBytes).toBeLessThan(16_000);
+  } finally { await context.close(); await server.close(); }
 });

@@ -37,7 +37,16 @@ emit({
   tools: ["Read", "Bash"],
 });
 
-if (prompt.includes("The user attached the following images")) {
+if (prompt.includes("performance gallery")) {
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "Historical reference: see `README.md#L1` for the original request." }] } });
+  for (let index = 0; index < 230; index++) {
+    emit({ type: "assistant", message: { content: [{ type: "text", text: `Step ${index + 1}: **Reviewing the implementation**\n\nThe bounded transcript keeps this conversation responsive.\n\n- Inspect the affected code\n- Verify the behavior with focused tests` }] } });
+  }
+  emit({ type: "assistant", message: { content: [{ type: "tool_use", id: "perf-tool", name: "Bash", input: { command: "npm test" } }] } });
+  emit({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "perf-tool", content: "All tests passed." }] } });
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "Performance fixture complete. Earlier messages remain available through history and search." }] } });
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.0123 });
+} else if (prompt.includes("The user attached the following images")) {
   const match = prompt.match(/^- (".*")$/m);
   const imagePath = match ? JSON.parse(match[1]) : "";
   const bytes = readFileSync(imagePath);

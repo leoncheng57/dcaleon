@@ -13,6 +13,7 @@ import type {
 } from "../lib/api.js";
 import type { RawMessage } from "../lib/events.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
+import { extractCommands } from "../lib/derive.js";
 
 export const SIMULATOR_DIRECTORY = "/tmp/mock-project";
 const SECOND_DIRECTORY = "/tmp/mock-second-project";
@@ -130,6 +131,39 @@ interface ClaudeFixtureSession extends ClaudeSessionSummary {
 
 function claudeSummary(session: ClaudeFixtureSession): ClaudeSessionSummary {
   return { id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: "Preview workspace", mode: session.mode, isolation: session.isolation, ...(session.branch ? { branch: session.branch } : {}), ...((session as { prUrl?: string }).prUrl ? { prUrl: (session as { prUrl?: string }).prUrl } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running };
+}
+
+/** The static fixture uses count cursors because its simulated turns only append. */
+function claudePage(session: ClaudeFixtureSession, query: URLSearchParams) {
+  let source = session.events;
+  const search = query.get("q")?.toLowerCase();
+  if (search) source = source.filter((event) => JSON.stringify(event).toLowerCase().includes(search));
+  if (query.get("actions") === "true") {
+    const category = query.get("category");
+    const ids = new Set(extractCommands(source).filter((command) => !category || (category === "failure" ? command.status === "error" : command.category === category)).map((command) => command.id));
+    source = source.filter((event) => ids.has(event.id));
+  }
+  const cursor = (value: number) => btoa(`${session.id}:${value}`);
+  const decode = (value: string | null) => {
+    try { const decoded = atob(value ?? ""); return decoded.startsWith(`${session.id}:`) ? Number(decoded.slice(session.id.length + 1)) : NaN; }
+    catch { return NaN; }
+  };
+  const since = decode(query.get("since"));
+  const before = decode(query.get("before"));
+  const after = decode(query.get("after"));
+  const delta = Number.isInteger(since) && session.events.length - since <= 50;
+  const end = Number.isInteger(before) ? before : source.length;
+  const start = Number.isInteger(after) ? after + 1 : Math.max(0, end - 50);
+  const events = delta ? session.events.slice(since) : source.slice(start, Number.isInteger(after) ? start + 50 : end);
+  const first = events[0] ? source.indexOf(events[0]) : -1;
+  const last = events.at(-1) ? source.indexOf(events.at(-1)!) : -1;
+  return { events, page: {
+    total: source.length, limit: 50, delta, reset: false, cursor: cursor(session.events.length),
+    before: first > 0 ? cursor(first) : null, after: last >= 0 && last < source.length - 1 ? cursor(last) : null,
+    first: first >= 0 ? cursor(first) : null, last: last >= 0 ? cursor(last) : null,
+    boundaries: Object.fromEntries(events.map((event) => [event.id, cursor(source.indexOf(event))])),
+    order: Object.fromEntries(events.map((event) => [event.id, session.events.indexOf(event)])),
+  } };
 }
 
 interface DshFixtureSession extends DshSessionSummary {
@@ -693,7 +727,8 @@ export function createPublicSimulator(): typeof fetch {
         return response({ discarded: true });
       }
 
-      if (!claudeRest) return response({ session: claudeSummary(claudeSession), events: claudeSession.events });
+      if (claudeRest === "/export") return response({ events: claudeSession.events });
+      if (!claudeRest) return response({ session: { ...claudeSummary(claudeSession), worktreeClosed: claudeSession.events.some((event) => event.kind === "status" && ["Merged into project", "Worktree discarded"].includes(event.label)) }, ...claudePage(claudeSession, url.searchParams) });
     }
 
     if (path === "/api/claude/events") return response({ error: "Claude events SSE is not available in the public simulator. Poll GET /api/claude/sessions/:id instead." }, 501);

@@ -144,13 +144,13 @@ test.describe("Claude Code runtime", () => {
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote claude-e2e.txt");
     await page.getByTestId("claude-open-runlog").click();
-    await expect(page.getByTestId("opencode-command-list")).toBeVisible();
-    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("claude-e2e.txt");
+    await expect(page.getByTestId("claude-history")).toBeVisible();
+    await expect(page.getByTestId("claude-history-results")).toContainText("claude-e2e.txt");
     // Filtering to edits keeps the file write; reads filter it out.
-    await page.getByTestId("opencode-runlog-filter-edit").click();
-    await expect(page.getByTestId("opencode-runlog-timeline")).toContainText("claude-e2e.txt");
-    await page.getByTestId("opencode-runlog-filter-read").click();
-    await expect(page.getByTestId("opencode-runlog-empty")).toBeVisible();
+    await page.getByTestId("claude-runlog-filter-edit").click();
+    await expect(page.getByTestId("claude-history-results")).toContainText("claude-e2e.txt");
+    await page.getByTestId("claude-runlog-filter-read").click();
+    await expect(page.getByTestId("claude-history-results")).toContainText("No matching events");
   });
 
   test("offers Markdown and JSON export of the transcript", async ({ page }) => {

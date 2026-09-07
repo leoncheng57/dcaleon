@@ -9,7 +9,6 @@ import { cn } from "../ds/utils.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
-import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
 import { SessionInspector } from "../components/session-inspector.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
@@ -26,15 +25,15 @@ import {
   SESSION_UPDATE_WORKFLOW_ID,
   START_DCA_SESSION_WORKFLOW_ID,
 } from "../lib/workflows.js";
-import { collapseActionGroups, mergeEvents, runningActivity } from "../lib/derive.js";
+import { collapseActionGroups, runningActivity } from "../lib/derive.js";
 import type { InspectorTab } from "../lib/inspectorTabs.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
-import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
+
 import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
-import { useTranscriptWindow } from "../lib/useTranscriptWindow.js";
-import type { TranscriptEvent } from "../lib/transcript.js";
+import { useClaudeTranscript } from "../lib/useClaudeTranscript.js";
+import { ClaudeHistoryDrawer } from "../components/claude-history-drawer.js";
 import { MAX_IMAGE_ATTACHMENTS, readImageAttachment, selectImageFiles, type ImageAttachment } from "../lib/attachments.js";
 
 function claudeModelCatalogue(modelIds: string[]): ModelCatalogue {
@@ -62,9 +61,6 @@ function downloadText(name: string, body: string, mime: string): void {
   URL.revokeObjectURL(url);
 }
 
-const POLL_MS = 3_000;
-const IDLE_POLL_MS = 30_000;
-const isHidden = () => document.visibilityState === "hidden";
 const INITIAL_DIFF_LINES = 400;
 /**
  * Workflows whose submit path is an OpenCode route (another session, a managed
@@ -238,10 +234,12 @@ function ChangesDrawer({ session, onClose, onMutated }: { session: ClaudeSession
 
 export function ClaudeConversationPage() {
   const { id = "" } = useParams();
-  const [session, setSession] = useState<ClaudeSessionSummary | null>(null);
-  const [events, setEvents] = useState<TranscriptEvent[]>([]);
+  const transcript = useClaudeTranscript(id);
+  const { session, events, error, setError } = transcript;
+  const refresh = () => transcript.refresh();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [draft, setDraft] = useState("");
-  const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
@@ -267,45 +265,7 @@ export function ClaudeConversationPage() {
   const [queued, setQueued] = useState<{ text: string; attachments: ImageAttachment[] } | null>(null);
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const refreshInFlight = useRef(false);
-  const refreshQueued = useRef<string | null>(null);
-  const sessionScope = useRef(id);
-  const runningRef = useRef(false);
-  const lastRefresh = useRef(0);
-
-  const load = async (targetId: string) => {
-    if (!PUBLIC_SIMULATOR && isHidden()) return;
-    if (refreshInFlight.current) {
-      refreshQueued.current = targetId;
-      return;
-    }
-    refreshInFlight.current = true;
-    try {
-      const result = await api.claudeSession(targetId);
-      if (sessionScope.current !== targetId || (!PUBLIC_SIMULATOR && isHidden())) return;
-      lastRefresh.current = Date.now();
-      runningRef.current = result.session.running;
-      setSession((previous) => JSON.stringify(previous) === JSON.stringify(result.session) ? previous : result.session);
-      setEvents((previous) => mergeEvents(previous, result.events));
-      setSending(false);
-      setError("");
-    } catch (cause) {
-      if (sessionScope.current !== targetId || isHidden()) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      refreshInFlight.current = false;
-      const queued = refreshQueued.current;
-      refreshQueued.current = null;
-      if (queued) void load(queued);
-    }
-  };
-  const refresh = () => load(id);
-
   useEffect(() => {
-    sessionScope.current = id;
-    refreshQueued.current = null;
-    setSession(null);
-    setEvents([]);
     setFileTarget(null);
     setCollapsedGroups({});
     setResolved(new Map());
@@ -313,35 +273,11 @@ export function ClaudeConversationPage() {
     setSelectedReminder("");
     setSelectedWorkflow("");
     setActiveWorkflow(null);
-    void refresh();
-    if (PUBLIC_SIMULATOR) return;
-    // Retain durable fallback even if an apparently healthy SSE misses an update.
-    // Idle tabs reconcile at most every 30s; visible active runs keep 3s latency.
-    const poll = setInterval(() => {
-      const interval = runningRef.current ? POLL_MS : IDLE_POLL_MS;
-      if (Date.now() - lastRefresh.current >= interval) void refresh();
-    }, POLL_MS);
-    const source = new EventSource(api.claudeEventsUrl(id));
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    source.addEventListener("update", () => {
-      clearTimeout(timer);
-      if (document.visibilityState === "hidden") return;
-      timer = setTimeout(() => void refresh(), 250);
-    });
-    source.addEventListener("ready", () => void refresh());
-    source.onerror = () => undefined; // EventSource owns bounded reconnect; the poll remains authoritative.
-    const onVisibility = () => {
-      clearTimeout(timer);
-      if (document.visibilityState !== "hidden") void refresh();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      clearInterval(poll);
-      clearTimeout(timer);
-      source.close();
-    };
+    setHistoryOpen(false);
+    setRunlogOpen(false);
+    setExportOpen(false);
   }, [id]);
+  useEffect(() => { if (session) setSending(false); }, [session]);
 
   // The configured models, so a turn can be sent on a different one without
   // changing the session's mode/permission (fixed at creation).
@@ -377,7 +313,7 @@ export function ClaudeConversationPage() {
   const follow = useTranscriptFollow(events, id);
 
   const items = useMemo(() => collapseActionGroups(events), [events]);
-  const transcriptWindow = useTranscriptWindow(items, id, follow);
+
   const activity = useMemo(() => runningActivity(events), [events]);
 
   // File references: collect paths the transcript mentions and validate them
@@ -385,19 +321,22 @@ export function ClaudeConversationPage() {
   // map is built locally (the opencode /workspace/references route is
   // directory-scoped and rejects the Claude worktree root), one bounded batch
   // per new candidate — a failing path is remembered, not retried each poll.
-  // Scan the full history, including rows outside the rendered window. Keep
+  // Validate resident pages as they are read. Older pages are validated on demand. Keep
   // validation stable when an update changes prose but not its referenced paths.
   const candidateKey = useMemo(() => referenceCandidatesFromEvents(events, "").join("\n"), [events]);
   const candidates = useMemo(() => (candidateKey ? candidateKey.split("\n") : []), [candidateKey]);
   useEffect(() => {
     let cancelled = false;
+    const resident = new Set(candidates);
+    askedRefs.current = new Set([...askedRefs.current].filter((path) => resident.has(path)));
+    setResolved((previous) => [...previous.keys()].every((path) => resident.has(path)) ? previous : new Map([...previous].filter(([path]) => resident.has(path))));
     const pending = candidates.filter((path) => !askedRefs.current.has(path));
     if (pending.length === 0) return;
-    for (const path of pending) askedRefs.current.add(path);
     // Not aborted on re-run: a completed validation is worth keeping even if a
     // later batch supersedes it. `cancelled` only blocks a stale setState.
     void api.claudeReferences(id, pending).then((result) => {
       if (cancelled) return;
+      for (const path of pending) askedRefs.current.add(path);
       setResolved((previous) => {
         const next = new Map(previous);
         for (const reference of result.references) {
@@ -411,6 +350,10 @@ export function ClaudeConversationPage() {
     });
     return () => { cancelled = true; };
   }, [candidates, id]);
+  useEffect(() => {
+    const resident = new Set(items.map((item) => item.id));
+    setCollapsedGroups((previous) => Object.keys(previous).every((key) => resident.has(key)) ? previous : Object.fromEntries(Object.entries(previous).filter(([key]) => resident.has(key))));
+  }, [items]);
   const openTarget = useCallback((target: WorkspaceTarget) => {
     setFileTarget(target);
     setFilesOpen(true);
@@ -419,7 +362,7 @@ export function ClaudeConversationPage() {
     setCollapsedGroups((previous) => ({ ...previous, [groupId]: !(previous[groupId] ?? true) }));
   }, []);
   // A merged/discarded worktree session is finished: its cwd is gone.
-  const worktreeClosed = session?.isolation === "worktree" && events.some((event) => event.kind === "status" && (event.label === "Merged into project" || event.label === "Worktree discarded"));
+  const worktreeClosed = !!session?.worktreeClosed;
 
   const addAttachments = (files: Iterable<File>) => {
     const selection = selectImageFiles(files, attachments.length);
@@ -489,6 +432,16 @@ export function ClaudeConversationPage() {
     }
   }, [session?.running, sending, queued]);
 
+  const exportTranscript = async (format: "md" | "json") => {
+    setExporting(true);
+    try {
+      const complete = await api.claudeExport(id);
+      const title = session?.title ?? "Claude session";
+      downloadText(shareFilename(title, format), format === "md" ? serializeShareMarkdown(title, complete.events, { kind: "session" }) : serializeSessionJson(title, complete.events), format === "md" ? "text/markdown" : "application/json");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setExporting(false); }
+  };
+
   return (
     <SessionShell
       browserSessionID={id}
@@ -551,14 +504,7 @@ export function ClaudeConversationPage() {
               variant="ghost"
               className={cn("min-h-11 min-w-12 px-0", !sidebarOpen && "text-[var(--color-text-muted)] opacity-50")}
               onClick={() => {
-                if (!sidebarOpen) {
-                  setSidebarOpen(true);
-                  setRequestedInspectorTab("runlog");
-                } else if (requestedInspectorTab === "runlog") {
-                  setSidebarOpen(false);
-                } else {
-                  setRequestedInspectorTab("runlog");
-                }
+                setRunlogOpen(true);
               }}
               aria-label={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
               title={sidebarOpen && requestedInspectorTab === "runlog" ? "Close run log" : "Open run log"}
@@ -577,7 +523,8 @@ export function ClaudeConversationPage() {
         ),
       }}
       transcript={{
-        items: transcriptWindow.items,
+        items,
+        virtualized: true,
         wrap: true,
         collapsedGroups,
         collapseCompletedByDefault: true,
@@ -598,18 +545,27 @@ export function ClaudeConversationPage() {
       scroll={{
         scrollerRef: follow.scrollerRef,
         contentRef: follow.contentRef,
-        onScroll: transcriptWindow.onScroll,
-        showNewActivity: follow.newActivity,
-        onJumpToLatest: transcriptWindow.jumpToLatest,
-        beforeTranscript: transcriptWindow.hiddenCount > 0 ? (
-          <div className="mb-5 flex flex-wrap gap-2">
-            <Button size="sm" className="min-h-11 sm:min-h-8" onClick={transcriptWindow.loadEarlier} data-testid="claude-load-earlier">Load earlier ({transcriptWindow.hiddenCount})</Button>
-            <Button size="sm" className="min-h-11 sm:min-h-8" onClick={() => {
-              setCollapsedGroups(Object.fromEntries(items.filter((item) => item.type === "actionGroup").map((item) => [item.id, false])));
-              transcriptWindow.showAll();
-            }} data-testid="claude-show-all">Show all for browser search</Button>
+        onScroll: () => {
+          follow.onScroll();
+          const scroller = follow.scrollerRef.current;
+          if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 96) transcript.pin();
+        },
+        showNewActivity: follow.newActivity || !!transcript.after,
+        onJumpToLatest: () => { void transcript.refresh("latest").then(() => follow.jumpToLatest()); },
+        beforeTranscript: (
+          <div className="mb-5 flex flex-wrap items-center gap-2" data-testid="claude-history-controls"
+            data-total-events={transcript.total} data-resident-events={events.length}
+            data-resident-pages={Math.max(Math.ceil(events.length / 50), Math.ceil(transcript.residentBytes / (128 * 1024)))}
+            data-resident-bytes={transcript.residentBytes}
+            data-refresh-bytes={transcript.diagnostics.current.payloadBytes}
+            data-reconcile-ms={transcript.diagnostics.current.reconcileMs}
+            data-refresh-count={transcript.diagnostics.current.requests}>
+            {transcript.before && <Button size="sm" className="min-h-11 sm:min-h-8" disabled={transcript.loadingHistory} onClick={() => void transcript.refresh("before")} data-testid="claude-load-earlier">Load earlier</Button>}
+            {transcript.after && <Button size="sm" className="min-h-11 sm:min-h-8" disabled={transcript.loadingHistory} onClick={() => void transcript.refresh("after")} data-testid="claude-load-newer">Load newer</Button>}
+            <Button size="sm" className="min-h-11 sm:min-h-8" onClick={() => setHistoryOpen(true)} data-testid="claude-search-history">Search history</Button>
+            <span className="text-xs text-[var(--color-text-muted)]">{events.length} of {transcript.total} events loaded</span>
           </div>
-        ) : undefined,
+        ),
       }}
       composer={{
         draft,
@@ -687,6 +643,7 @@ export function ClaudeConversationPage() {
             directory={id}
             sessionID={id}
             events={events}
+            runLogOverride={<Button onClick={() => setRunlogOpen(true)} data-testid="claude-inspector-runlog">Open complete run log</Button>}
             requestedTab={requestedInspectorTab}
             mobileOpen={inspectorOpen}
             onMobileClose={() => setInspectorOpen(false)}
@@ -709,7 +666,8 @@ export function ClaudeConversationPage() {
           )}
           {changesOpen && session && <ChangesDrawer session={session} onClose={() => setChangesOpen(false)} onMutated={() => void refresh()} />}
           {filesOpen && <ClaudeFilesDrawer sessionId={id} target={fileTarget} onClose={() => { setFilesOpen(false); setFileTarget(null); }} />}
-          {runlogOpen && <ClaudeRunLogDrawer events={events} title={session?.title ?? "claude-session"} onClose={() => setRunlogOpen(false)} />}
+          {runlogOpen && <ClaudeHistoryDrawer key={`actions-${id}`} sessionId={id} actions onClose={() => setRunlogOpen(false)} />}
+          {historyOpen && <ClaudeHistoryDrawer key={`search-${id}`} sessionId={id} onClose={() => setHistoryOpen(false)} />}
           {exportOpen && (
             <section className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col border-l border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:left-auto sm:w-[28rem]" role="dialog" aria-modal="true" aria-label="Export transcript" data-testid="claude-export">
               <header className="flex items-center gap-2 border-b border-[var(--color-border-default)] p-2">
@@ -717,9 +675,9 @@ export function ClaudeConversationPage() {
                 <Button className="ml-auto" size="sm" variant="ghost" onClick={() => setExportOpen(false)} data-testid="claude-export-close"><X aria-hidden="true" size={15} /> Close</Button>
               </header>
               <div className="grid gap-2 p-4 text-sm">
-                <p className="text-[var(--color-text-muted)]">Download this conversation. Runs entirely in your browser — nothing is published.</p>
-                <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "md"), serializeShareMarkdown(session?.title ?? "Claude session", events, { kind: "session" }), "text/markdown")} data-testid="claude-export-md">Download Markdown</Button>
-                <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "json"), serializeSessionJson(session?.title ?? "Claude session", events), "application/json")} data-testid="claude-export-json">Download JSON</Button>
+                <p className="text-[var(--color-text-muted)]">Download the complete retained conversation from the server. Nothing is published.</p>
+                <Button variant="secondary" disabled={exporting} onClick={() => void exportTranscript("md")} data-testid="claude-export-md">Download Markdown</Button>
+                <Button variant="secondary" disabled={exporting} onClick={() => void exportTranscript("json")} data-testid="claude-export-json">Download JSON</Button>
               </div>
             </section>
           )}

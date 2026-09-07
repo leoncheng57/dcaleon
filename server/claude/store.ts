@@ -6,6 +6,7 @@ import { EventEmitter } from "node:events";
 import type { ClaudePresetMode } from "./config.js";
 import type { ClaudeFrame } from "./supervisor.js";
 import type { ClaudeWorktree } from "./worktree.js";
+import { ClaudeTranscriptIndex } from "./transcript.js";
 
 /** Placeholder title until the first prompt (or an explicit title) replaces it. */
 const DEFAULT_CLAUDE_TITLE = "New Claude conversation";
@@ -98,6 +99,7 @@ function stringField(input: unknown, key: string): string | undefined {
 
 export class ClaudeSessionStore extends EventEmitter {
   private readonly sessions = new Map<string, ClaudeSession>();
+  private readonly transcripts = new Map<string, ClaudeTranscriptIndex>();
   private readonly toolIndex = new Map<string, Map<string, string>>();
   private readonly editedFiles = new Map<string, Set<string>>();
   private readonly runModes = new Map<string, "plan" | "build">();
@@ -178,9 +180,20 @@ export class ClaudeSessionStore extends EventEmitter {
     return this.sessions.get(id);
   }
 
+  transcript(session: ClaudeSession): ClaudeTranscriptIndex {
+    let index = this.transcripts.get(session.id);
+    if (!index) {
+      index = new ClaudeTranscriptIndex();
+      this.transcripts.set(session.id, index);
+    }
+    index.sync(session.events);
+    return index;
+  }
+
   remove(id: string): boolean {
     const removed = this.sessions.delete(id);
     if (removed) {
+      this.transcripts.delete(id);
       this.toolIndex.delete(id);
       this.editedFiles.delete(id);
       this.runModes.delete(id);
@@ -267,10 +280,12 @@ export class ClaudeSessionStore extends EventEmitter {
         const event = eventId ? session.events.find((item) => item.id === eventId) : undefined;
         if (event?.kind === "tool") {
           const isError = block.is_error === true;
-          event.status = isError ? "error" : "completed";
           const text = typeof block.content === "string" ? block.content
             : Array.isArray(block.content) ? block.content.map((part) => (part as Record<string, unknown>).text).filter((value) => typeof value === "string").join("") : "";
-          if (text) { if (isError) event.error = text; else event.output = text; }
+          session.events[session.events.indexOf(event)] = {
+            ...event, status: isError ? "error" : "completed",
+            ...(text ? isError ? { error: text } : { output: text } : {}),
+          };
         }
       }
     } else if (frame.type === "system" && frame.subtype === "permission_denied") {

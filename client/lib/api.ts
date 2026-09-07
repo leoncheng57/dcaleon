@@ -191,7 +191,20 @@ export interface ClaudeTokenUsage {
   contextWindow: number;
   costUsd: number;
 }
+export interface ClaudeTranscriptPage {
+  total: number; limit: number; delta: boolean; reset: boolean; cursor: string;
+  before: string | null; after: string | null; first: string | null; last: string | null;
+  boundaries: Record<string, string>;
+  order: Record<string, number>;
+}
+export interface ClaudeTranscriptResponse {
+  session: ClaudeSessionSummary;
+  events: import("./transcript.js").TranscriptEvent[];
+  page?: ClaudeTranscriptPage;
+}
+
 export interface ClaudeSessionSummary {
+  worktreeClosed?: boolean;
   id: string;
   title: string;
   presetId: string;
@@ -826,8 +839,11 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
-  claudeSession: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}`).then((r) =>
-    json<{ session: ClaudeSessionSummary; events: import("./transcript.js").TranscriptEvent[] }>(r)),
+  claudeSession: (id: string, query: { before?: string; after?: string; since?: string; q?: string; actions?: string; category?: string } = {}, signal?: AbortSignal) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}${Object.keys(query).length ? `?${new URLSearchParams(query)}` : ""}`, { signal }).then((r) =>
+      json<ClaudeTranscriptResponse>(r)),
+  claudeExport: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/export`).then((r) =>
+    json<{ events: import("./transcript.js").TranscriptEvent[] }>(r)),
   promptClaude: (id: string, text: string, options: { modelOverride?: string; plan?: boolean; reminder?: string; workflow?: string; images?: Array<{ filename: string; mime: string; url: string }> } = {}) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

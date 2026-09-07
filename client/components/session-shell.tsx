@@ -6,6 +6,7 @@ import { SessionActionBar } from "./session-action-bar.js";
 import { RightToolsPanel } from "./right-tools-panel.js";
 import { TranscriptBrowserContext } from "../lib/transcriptBrowser.js";
 import { RunningIndicator, Transcript } from "../components/transcript.js";
+import { VirtualTranscript } from "./virtual-transcript.js";
 import type { DisplayItem, RunningActivity } from "../lib/derive.js";
 import type { UserEvent, AgentEvent } from "../lib/transcript.js";
 
@@ -38,6 +39,7 @@ export interface SessionShellProps {
   banners?: ReactNode;
 
   transcript: {
+    virtualized?: boolean;
     items: DisplayItem[];
     wrap: boolean;
     collapsedGroups: Record<string, boolean>;
@@ -101,6 +103,7 @@ export interface SessionShellProps {
 }
 
 export function SessionShell({ testIds, browserSessionID, header, banners, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
+  const TranscriptView = transcript.virtualized ? VirtualTranscript : Transcript;
   const [toolsOpen, setToolsOpen] = useState(false);
   const [browserNavigation, setBrowserNavigation] = useState<{ id: number; url: string; sessionID: string }>();
   const openTranscriptBrowser = useCallback((url: string) => {
@@ -153,7 +156,8 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
                 transcript.emptyState
               ) : (
                 <TranscriptBrowserContext.Provider value={openTranscriptBrowser}>{transcript.referenceProvider(
-                  <Transcript
+                  <TranscriptView
+                    scrollerRef={scroll.scrollerRef}
                     items={transcript.items}
                     wrap={transcript.wrap}
                     collapsedGroups={transcript.collapsedGroups}

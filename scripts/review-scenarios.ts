@@ -15,6 +15,32 @@ export interface ReviewScenario {
 
 export const REVIEW_SCENARIOS: readonly ReviewScenario[] = [
   {
+    id: "claude-bounded-history", title: "Claude — bounded transcript and history navigation", route: "/claude",
+    steps: [
+      { testId: "claude-create", action: "click" },
+      { testId: "claude-prompt", action: "fill", value: "Show the performance gallery" },
+      { testId: "claude-send", action: "click" },
+      { testId: "claude-transcript", action: "text", value: "Performance fixture complete" },
+      { testId: "claude-search-history", action: "click" },
+      { testId: "claude-history-close", action: "click" },
+      { testId: "claude-history-controls", action: "text", value: "50 of 234 events loaded" },
+    ],
+  },
+  {
+    id: "claude-history-search", title: "Claude — search finds a file reference outside loaded history", route: "/claude",
+    steps: [
+      { testId: "claude-create", action: "click" },
+      { testId: "claude-prompt", action: "fill", value: "Show the performance gallery" },
+      { testId: "claude-send", action: "click" },
+      { testId: "claude-transcript", action: "text", value: "Performance fixture complete" },
+      { testId: "claude-search-history", action: "click" },
+      { testId: "claude-history-query", action: "fill", value: "Historical reference" },
+      { testId: "claude-history-search", action: "click" },
+      { testId: "claude-history-results", action: "text", value: "Historical reference" },
+    ],
+    target: "claude-history",
+  },
+  {
     id: "design-gallery", title: "Design library — mobile-first foundations", route: "/design-components",
     steps: [{ testId: "opencode-design-components", action: "text", value: "Small screens. Shared details." }],
   },
