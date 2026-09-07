@@ -188,7 +188,9 @@ jobs:
             const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
             const lines = [marker, '## PR screenshots', ''];
             if (manifest.screenshots.length === 0) {
-              lines.push('No screenshots requested. Add this to the PR description:', '', '```md', '```screenshots', '/?directory=/tmp/mock-project', 'full:/sessions/ses_mock_done?directory=/tmp/mock-project', '```', '```');
+              // Four backticks outside, three inside: a ```md wrapper is closed by the
+              // inner block's own fence, which left a stray ``` in the rendered comment.
+              lines.push('No screenshots requested. Add this to the PR description:', '', '````md', '```screenshots', '/?directory=/tmp/mock-project', 'full:/sessions/ses_mock_done?directory=/tmp/mock-project', '```', '````');
             } else {
               lines.push('| Route | Desktop (dark) | Mobile (dark) |', '| --- | --- | --- |');
               for (const shot of manifest.screenshots) {

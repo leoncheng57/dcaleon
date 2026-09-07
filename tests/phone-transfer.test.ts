@@ -54,6 +54,10 @@ describe("notification links", () => {
 
   it("falls back to the configured origin and ignores unrelated events", () => {
     expect(eventClickUrl("https://ide.example.test", { type: "session.idle", properties: {} })).toBe("https://ide.example.test");
+    // A Claude runtime session has its own surface and carries no directory scope.
+    expect(conversationUrl("https://ide.example.test", "claude-0f3c", "/tmp/project")).toBe("https://ide.example.test/claude/sessions/claude-0f3c");
+    expect(eventClickUrl("https://ide.example.test", { type: "session.idle", directory: "/tmp/p", properties: { sessionID: "claude-0f3c" } }))
+      .toBe("https://ide.example.test/claude/sessions/claude-0f3c");
     expect(eventClickUrl("https://ide.example.test", { type: "message.updated", properties: {} })).toBeUndefined();
   });
 });

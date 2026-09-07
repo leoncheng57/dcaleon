@@ -13,7 +13,9 @@ jobs:
     permissions:
       contents: read
     env:
-      PREVIEW_BASE_PATH: /dcaleon/pr-previews/pr-${{ github.event.pull_request.number }}/
+      # Derived from the repository name so a rename cannot leave Pages serving
+      # one path while this workflow builds and polls another (#341 hit exactly that).
+      PREVIEW_BASE_PATH: /${{ github.event.repository.name }}/pr-previews/pr-${{ github.event.pull_request.number }}/
     steps:
       - name: Check out pull request
         uses: actions/checkout@v4
@@ -68,7 +70,7 @@ jobs:
       group: pr-screenshot-publication
       cancel-in-progress: false
     env:
-      PREVIEW_URL: https://leoncheng.dev/dcaleon/pr-previews/pr-${{ github.event.pull_request.number }}/
+      PREVIEW_URL: https://leoncheng.dev/${{ github.event.repository.name }}/pr-previews/pr-${{ github.event.pull_request.number }}/
     steps:
       - name: Check out trusted base for the Pages writer
         uses: actions/checkout@v4
@@ -85,13 +87,14 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           node <<'NODE'
           const crypto = require('node:crypto');
           const fs = require('node:fs');
           const path = require('node:path');
           const manifest = JSON.parse(fs.readFileSync('bundle/manifest.json', 'utf8'));
-          const expectedBase = `/dcaleon/pr-previews/pr-${process.env.PR_NUMBER}/`;
+          const expectedBase = `/${process.env.REPO_NAME}/pr-previews/pr-${process.env.PR_NUMBER}/`;
           if (manifest.version !== 1 || String(manifest.prNumber) !== process.env.PR_NUMBER || manifest.sha !== process.env.HEAD_SHA || manifest.basePath !== expectedBase) {
             throw new Error('artifact identity does not match this PR commit');
           }

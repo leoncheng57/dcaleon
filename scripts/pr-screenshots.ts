@@ -16,6 +16,50 @@ export const VIEWPORTS = {
 export type ScreenshotViewport = keyof typeof VIEWPORTS;
 export const SCREENSHOT_VIEWPORTS = Object.keys(VIEWPORTS) as ScreenshotViewport[];
 
+/**
+ * Every capturable UI route, paired with the testid that proves its page rendered.
+ *
+ * This is deliberately ONE table. It was two — an allowlist here and a ternary
+ * chain in the capture spec — and the pair drifted twice: `/dsh` was allowlisted
+ * while the spec still fell through to `opencode-hub` (#253), and the same gap
+ * reappeared for `/claude`. Both directions of that drift fail badly. A route
+ * with no map entry passes validation and then burns a full Playwright timeout
+ * waiting on a testid its page never renders, which reads like a flaky capture
+ * rather than a missing line here; a map entry with no allowlist pattern is
+ * simply unreachable. Pairing them means a route cannot be added half-way.
+ *
+ * Patterns are anchored and mutually exclusive, so the first match is the only
+ * match and ordering is presentation. `tests/pr-screenshots.test.ts` asserts
+ * both properties, since an accidentally overlapping pattern would silently
+ * shadow a later route's stable root.
+ */
+export const SCREENSHOT_ROUTES: ReadonlyArray<{ readonly pattern: RegExp; readonly stableRoot: string }> = [
+  { pattern: /^\/$/, stableRoot: "opencode-home" },
+  { pattern: /^\/opencode$/, stableRoot: "opencode-hub" },
+  { pattern: /^\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "opencode-conversation" },
+  { pattern: /^\/settings$/, stableRoot: "opencode-settings" },
+  { pattern: /^\/settings\/notifications$/, stableRoot: "opencode-notifications" },
+  { pattern: /^\/tools$/, stableRoot: "opencode-tools" },
+  { pattern: /^\/docs$/, stableRoot: "opencode-docs" },
+  { pattern: /^\/docs\/[A-Za-z0-9_-]+$/, stableRoot: "opencode-doc" },
+  { pattern: /^\/planning$/, stableRoot: "opencode-planning" },
+  { pattern: /^\/observability$/, stableRoot: "opencode-observability" },
+  { pattern: /^\/playbooks(?:\/(?:workflows|reminders)(?:\/[A-Za-z0-9_-]+)?)?$/, stableRoot: "opencode-playbooks" },
+  { pattern: /^\/dsh$/, stableRoot: "dsh-home" },
+  { pattern: /^\/dsh\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "dsh-conversation" },
+  { pattern: /^\/claude$/, stableRoot: "claude-home" },
+  { pattern: /^\/claude\/sessions\/[A-Za-z0-9_-]+$/, stableRoot: "claude-conversation" },
+];
+
+/**
+ * The testid that proves `pathname` finished rendering, or `null` when the route
+ * is not capturable. Returning `null` rather than a default is the point: the
+ * old `: "opencode-hub"` fallback turned an unmapped route into a wrong wait.
+ */
+export function screenshotStableRoot(pathname: string): string | null {
+  return SCREENSHOT_ROUTES.find((route) => route.pattern.test(pathname))?.stableRoot ?? null;
+}
+
 export type ScreenshotRequest = {
   requestedRoute: string;
   fullPage: boolean;
@@ -100,7 +144,7 @@ function validateRoute(route: string): void {
 
   const url = new URL(route, "http://screenshot.invalid");
   if (url.origin !== "http://screenshot.invalid") throw new Error(`route ${JSON.stringify(route)} may not specify a scheme or host`);
-  if (![/^\/$/, /^\/settings$/, /^\/settings\/notifications$/, /^\/tools$/, /^\/planning$/, /^\/observability$/, /^\/docs(?:\/[A-Za-z0-9_-]+)?$/, /^\/playbooks(?:\/workflows(?:\/[A-Za-z0-9_-]+)?)?$/, /^\/sessions\/[A-Za-z0-9_-]+$/, /^\/dsh(?:\/sessions\/[A-Za-z0-9_-]+)?$/].some((pattern) => pattern.test(url.pathname))) {
+  if (screenshotStableRoot(url.pathname) === null) {
     throw new Error(`route ${JSON.stringify(route)} is not a known UI route`);
   }
 }
