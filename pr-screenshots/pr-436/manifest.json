@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "prNumber": 436,
   "sourceSha": "ada08ec78ce5c95241f01d66de0c3e049893a995",
-  "capturedAt": "2026-09-07T19:03:49.036Z",
+  "capturedAt": "2026-09-07T19:07:28.321Z",
   "screenshots": [
     {
       "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project",
@@ -14,8 +14,8 @@
             "width": 1280,
             "height": 800
           },
-          "bytes": 65114,
-          "sha256": "63d74bfc2b7f49283679f0d6d325c2960e354e1e7e9c4c5911e022d601ead1a0"
+          "bytes": 65038,
+          "sha256": "193dc8690d8b1b854de1c5506330534b225c56b45d8077116678814493792309"
         },
         "mobile": {
           "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-c19a59d5--mobile.png",
@@ -23,8 +23,8 @@
             "width": 390,
             "height": 740
           },
-          "bytes": 46047,
-          "sha256": "ef31c2f23cdf62382a57db26b927af489dccefe6c13e1f41e4fe6a83d1151a3d"
+          "bytes": 46070,
+          "sha256": "50a372dd94fd2526c7db933fab7801e88bf04ecd9fc44b585fbc2e2a0ed59432"
         }
       }
     }
