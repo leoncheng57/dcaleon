@@ -1223,6 +1223,21 @@ several decisions below.
     is constrained to avoid non-proxied UDP. The dated design snapshot is **Live Browser and
     Right Tools Panel — 2026-09-07**; it supersedes rather than edits the 2026-08-27 proposal.
 
+## Claude transcript performance
+
+- Reconcile polling/SSE snapshots with `mergeEvents` so unchanged events keep their
+  array and row identities. Session summaries also retain identity when unchanged.
+- Claude renders the newest 50 display items by default. Loading history pins the
+  first item and restores a visible DOM anchor; new activity must not evict a reader's
+  older rows. Jump to latest restores the bounded tail. Show all also expands completed
+  action groups for browser search. Export, references and run log use the full history.
+- Completed groups default to collapsed only in Claude; the shared renderer's other
+  callers keep their existing default. Running and failed calls are not grouped.
+- Visible active runs keep a 3s durable fallback; idle sessions use 30s. SSE still nudges
+  visible tabs immediately. Hidden tabs skip refresh/reconciliation, including results
+  from requests already in flight, and catch up on visibility restoration. The static
+  public simulator still performs its one initial load even when opened in a hidden tab.
+
 ## Client conventions (inherited from the OpenHands runner, still enforced)
 
 - **Design components are mobile-first.** Begin at 320–390px with reachable 44px

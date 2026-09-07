@@ -41,6 +41,7 @@ export interface SessionShellProps {
     items: DisplayItem[];
     wrap: boolean;
     collapsedGroups: Record<string, boolean>;
+    collapseCompletedByDefault?: boolean;
     onToggleGroup: (id: string) => void;
     onExport?: (event: UserEvent | AgentEvent) => void;
     directory?: string;
@@ -156,6 +157,7 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
                     items={transcript.items}
                     wrap={transcript.wrap}
                     collapsedGroups={transcript.collapsedGroups}
+                    collapseCompletedByDefault={transcript.collapseCompletedByDefault}
                     onToggleGroup={transcript.onToggleGroup}
                     onExport={transcript.onExport}
                     directory={transcript.directory}

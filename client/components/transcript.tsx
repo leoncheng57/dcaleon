@@ -764,6 +764,7 @@ export const Transcript = memo(function Transcript({
   items,
   wrap,
   collapsedGroups,
+  collapseCompletedByDefault = false,
   onToggleGroup,
   onExport,
   directory,
@@ -773,6 +774,7 @@ export const Transcript = memo(function Transcript({
   items: DisplayItem[];
   wrap: boolean;
   collapsedGroups: Record<string, boolean>;
+  collapseCompletedByDefault?: boolean;
   onToggleGroup: (id: string) => void;
   onExport?: (event: UserEvent | AgentEvent) => void;
   /** Project scope, required to build links to delegated child sessions. */
@@ -787,6 +789,7 @@ export const Transcript = memo(function Transcript({
       {items.map((item, index) => (
         <div
           key={item.id}
+          data-transcript-item={item.id}
           data-event-id={item.type === "actionGroup" ? undefined : item.id}
           tabIndex={item.type === "actionGroup" ? undefined : -1}
           className={rowSpacing(items[index - 1], item)}
@@ -795,7 +798,7 @@ export const Transcript = memo(function Transcript({
             <ActionGroupRow
               calls={item.calls}
               wrap={wrap}
-              expanded={collapsedGroups[item.id] !== true}
+              expanded={!(collapsedGroups[item.id] ?? collapseCompletedByDefault)}
               onToggle={() => onToggleGroup(item.id)}
               directory={directory}
             />
