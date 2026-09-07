@@ -90,6 +90,23 @@ for (const runtime of ["claude", "dsh"] as const) {
 
 test.describe("desktop right tools panel", () => {
   test.use({ viewport: { width: 1440, height: 900 }, hasTouch: false });
+  test("attaches one initial stream only after viewport setup finishes", async ({ page }) => {
+    const fixture = await mockBrowser(page);
+    let releaseViewport!: () => void;
+    const viewportReady = new Promise<void>((resolve) => { releaseViewport = resolve; });
+    await page.route("**/api/browser/ses_mock_right_tools/input", async (route) => {
+      await viewportReady;
+      await route.fulfill({ status: 204 });
+    });
+    await page.goto(conversation);
+    await page.getByTestId("opencode-live-browser-open").click();
+    await expect(page.getByTestId("opencode-live-browser-starting")).toBeVisible();
+    await expect(page.getByTestId("opencode-live-browser-frame")).toHaveCount(0);
+    expect(fixture.requests.filter((request) => request.endsWith("/stream"))).toHaveLength(0);
+    releaseViewport();
+    await expect(page.getByTestId("opencode-live-browser-frame")).toBeVisible();
+    expect(fixture.requests.filter((request) => request.endsWith("/stream"))).toHaveLength(1);
+  });
   test("keeps the panel usable beside tall permission and question banners", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await mockBrowser(page);

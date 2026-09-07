@@ -105,6 +105,7 @@ function LiveBrowserSurface({ sessionID }: { sessionID: string }) {
   const [streamError, setStreamError] = useState(false);
   const [capacity, setCapacity] = useState<CapacitySlot[] | null>(null);
   const [streamKey, setStreamKey] = useState(0);
+  const [streamReady, setStreamReady] = useState(false);
   const [popup, setPopup] = useState<string | null>(null);
   const [pageText, setPageText] = useState("");
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
@@ -137,16 +138,18 @@ function LiveBrowserSurface({ sessionID }: { sessionID: string }) {
   }, [sessionID]);
 
   const openBrowser = useCallback(async () => {
+    setStreamReady(false);
     setError("");
     setStreamError(false);
     setCapacity(null);
     try {
       const next = await browserApi<PageState>(`${sessionID}/open`, { method: "POST", body: JSON.stringify({}) });
-      setState(next);
       setAddress(next.url === "about:blank" ? "" : next.url);
       addressEdited.current = false;
       await sendInput({ type: "viewport", ...viewportRef.current }).catch(() => undefined);
+      setState(next);
       setStreamKey((key) => key + 1);
+      setStreamReady(true);
     } catch (cause) {
       const typed = cause as Error & { slots?: CapacitySlot[] };
       setError(typed.message);
@@ -289,13 +292,13 @@ function LiveBrowserSurface({ sessionID }: { sessionID: string }) {
             <h2 className="mt-3 text-sm font-semibold">Live browser unavailable in the simulator</h2>
             <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">The installed app drives server-side Chromium. This preview keeps the same panel navigation without starting a browser.</p>
           </div>
-        ) : !state && !error ? (
+        ) : !streamReady && !error ? (
           <div className="text-center" role="status" aria-live="polite" data-testid="opencode-live-browser-starting">
             <RefreshCw aria-hidden="true" className="mx-auto animate-spin text-[var(--color-text-muted)] motion-reduce:animate-none" size={22} />
             <p className="mt-3 text-sm font-medium">Starting browser…</p>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">The first launch can take a moment.</p>
           </div>
-        ) : state ? (
+        ) : streamReady && state ? (
           <>
             {/* The page is a pixel stream. Pointer and keyboard input are forwarded to Chromium. */}
             {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}

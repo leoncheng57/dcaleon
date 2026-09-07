@@ -1210,8 +1210,10 @@ several decisions below.
     Hiding Browser unmounts only its MJPEG response, so `Page.stopScreencast` freezes the
     server-owned page while its URL, history and shared-profile login survive. The client may
     request bounded viewport/touch input and either the default or coarse stream profile; the
-    server owns the bounds and actual CDP parameters. The persistent profile is refused when
-    its root grants group/other access, service workers and speculative network
+    server owns the bounds and actual CDP parameters. Screencast delivery uses a first-frame-immediate,
+    latest-frame time throttle (50ms desktop, 150ms coarse), never CDP frame-count skipping:
+    a static page may paint only once, so its trailing frame must always be delivered. The profile
+    is refused when its root grants group/other access, service workers and speculative network
     activity are disabled, WebSockets pass the same private-host policy as HTTP(S), and WebRTC
     is constrained to avoid non-proxied UDP. The dated design snapshot is **Live Browser and
     Right Tools Panel — 2026-09-07**; it supersedes rather than edits the 2026-08-27 proposal.

@@ -20,7 +20,7 @@ import {
 } from "../server/browser/policy.js";
 import { validSessionID } from "../server/browser/errors.js";
 import { parseLiveBrowserInput, parseStreamProfile } from "../server/browser/routes.js";
-import { screencastOptions } from "../server/browser/manager.js";
+import { screencastOptions, streamFrameInterval } from "../server/browser/manager.js";
 import { assertPrivateBrowserProfile, BrowserProfilePermissionError } from "../server/browser/profile.js";
 
 const temporaryProfiles: string[] = [];
@@ -185,7 +185,9 @@ describe("live browser input parsing", () => {
     expect(parseStreamProfile("coarse")).toBe("coarse");
     expect(parseStreamProfile("anything-else")).toBe("default");
     expect(screencastOptions("coarse").quality).toBeLessThan(screencastOptions("default").quality);
-    expect(screencastOptions("coarse").everyNthFrame).toBeGreaterThan(screencastOptions("default").everyNthFrame);
+    expect(screencastOptions("coarse").everyNthFrame).toBe(1);
+    expect(screencastOptions("default").everyNthFrame).toBe(1);
+    expect(streamFrameInterval("coarse")).toBeGreaterThan(streamFrameInterval("default"));
   });
 });
 

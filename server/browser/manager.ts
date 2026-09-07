@@ -43,9 +43,11 @@ export function screencastOptions(profile: BrowserStreamProfile): {
   everyNthFrame: number;
 } {
   return profile === "coarse"
-    ? { format: "jpeg", quality: 42, maxWidth: BROWSER_VIEWPORT.maxWidth, maxHeight: BROWSER_VIEWPORT.maxHeight, everyNthFrame: 4 }
-    : { format: "jpeg", quality: 68, maxWidth: BROWSER_VIEWPORT.maxWidth, maxHeight: BROWSER_VIEWPORT.maxHeight, everyNthFrame: 2 };
+    ? { format: "jpeg", quality: 42, maxWidth: BROWSER_VIEWPORT.maxWidth, maxHeight: BROWSER_VIEWPORT.maxHeight, everyNthFrame: 1 }
+    : { format: "jpeg", quality: 68, maxWidth: BROWSER_VIEWPORT.maxWidth, maxHeight: BROWSER_VIEWPORT.maxHeight, everyNthFrame: 1 };
 }
+
+export const streamFrameInterval = (profile: BrowserStreamProfile): number => profile === "coarse" ? 150 : 50;
 
 export interface PageState {
   sessionID: string;
@@ -65,6 +67,7 @@ interface Managed {
   loading: boolean;
   pendingPopup: string | null;
   viewport: BrowserViewport;
+  streamOperation: Promise<void>;
   stream: { res: NodeJS.WritableStream & { destroyed?: boolean }; boundary: string } | null;
 }
 
@@ -163,6 +166,7 @@ export class BrowserManager {
       loading: false,
       pendingPopup: null,
       viewport: { ...DEFAULT_VIEWPORT },
+      streamOperation: Promise.resolve(),
       stream: null,
     };
     this.pages.set(sessionID, managed);
@@ -301,28 +305,58 @@ export class BrowserManager {
       Connection: "close",
     });
     managed.stream = { res, boundary };
+    res.write(`--${boundary}\r\nContent-Type: image/jpeg\r\n\r\n`);
 
+    let pendingFrame: string | null = null;
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastFrameAt = 0;
+    const flushFrame = () => {
+      flushTimer = undefined;
+      if (managed.stream?.res !== res || res.destroyed || pendingFrame === null) return;
+      const image = Buffer.from(pendingFrame, "base64");
+      pendingFrame = null;
+      res.write(image);
+      // Complete the next part's headers now: native image decoders can wait
+      // for them before painting, otherwise static pages stay one frame behind.
+      res.write(`\r\n--${boundary}\r\nContent-Type: image/jpeg\r\n\r\n`);
+      lastFrameAt = managed.lastUsedAt = Date.now();
+    };
     const onFrame = (frame: { data: string; sessionId: number }) => {
       if (managed.stream?.res !== res || res.destroyed) return;
-      const image = Buffer.from(frame.data, "base64");
-      res.write(`--${boundary}\r\nContent-Type: image/jpeg\r\nContent-Length: ${image.byteLength}\r\n\r\n`);
-      res.write(image);
-      res.write("\r\n");
-      managed.lastUsedAt = Date.now();
       void managed.cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => undefined);
+      // Count-based CDP skipping loses the only repaint of a static page. Keep
+      // one latest frame and always flush the trailing repaint instead.
+      pendingFrame = frame.data;
+      if (flushTimer) return;
+      const delay = Math.max(0, streamFrameInterval(profile) - (Date.now() - lastFrameAt));
+      if (delay === 0) flushFrame();
+      else flushTimer = setTimeout(flushFrame, delay);
     };
     managed.cdp.on("Page.screencastFrame", onFrame);
     res.on("close", () => {
       managed.cdp.off("Page.screencastFrame", onFrame);
+      clearTimeout(flushTimer);
+      pendingFrame = null;
       if (managed.stream?.res !== res) return;
       managed.stream = null;
-      void managed.cdp.send("Page.stopScreencast").catch(() => undefined);
-      // Panel hidden: halt timers so the renderer can be reclaimed.
-      void managed.cdp.send("Page.setWebLifecycleState", { state: "frozen" }).catch(() => undefined);
+      managed.streamOperation = managed.streamOperation.catch(() => undefined).then(async () => {
+        if (managed.stream) return;
+        await managed.cdp.send("Page.stopScreencast");
+        // A replacement may arrive during stop; it must not be frozen afterward.
+        if (!managed.stream) await managed.cdp.send("Page.setWebLifecycleState", { state: "frozen" });
+      }).catch(() => undefined);
     });
-    await managed.cdp.send("Page.setWebLifecycleState", { state: "active" });
-    if (managed.stream?.res !== res || res.destroyed) return;
-    await managed.cdp.send("Page.startScreencast", screencastOptions(profile));
+    const startup = managed.streamOperation.catch(() => undefined).then(async () => {
+      if (managed.stream?.res !== res || res.destroyed) return;
+      // Starting an already-running CDP screencast may not emit a fresh frame.
+      await managed.cdp.send("Page.stopScreencast");
+      if (managed.stream?.res !== res || res.destroyed) return;
+      await managed.cdp.send("Page.setWebLifecycleState", { state: "active" });
+      if (managed.stream?.res !== res || res.destroyed) return;
+      await managed.cdp.send("Page.startScreencast", screencastOptions(profile));
+    });
+    managed.streamOperation = startup.catch(() => undefined);
+    await startup;
   }
 
   async close(sessionID: string): Promise<void> {
