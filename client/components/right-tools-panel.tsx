@@ -28,9 +28,9 @@ const VIEWPORT_BOUNDS = { minWidth: 320, maxWidth: 1600, minHeight: 320, maxHeig
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
 
 const DESTINATIONS = [
-  { id: "browser", label: "Browser", Icon: Globe2, ready: true },
-  { id: "minichats", label: "Minichats", Icon: MessageSquareText, ready: false },
-  { id: "terminal", label: "Terminal", Icon: TerminalSquare, ready: false },
+  { id: "browser", label: "Browser", Icon: Globe2, ready: true, beta: true },
+  { id: "minichats", label: "Minichats", Icon: MessageSquareText, ready: false, beta: false },
+  { id: "terminal", label: "Terminal", Icon: TerminalSquare, ready: false, beta: false },
 ] as const;
 
 interface PageState {
@@ -78,8 +78,8 @@ export function RightToolsPanel({ sessionID, onClose, navigation }: { sessionID:
       onClose={onClose} testId="opencode-right-tools-panel" closeTestId="opencode-right-tools-close" destination={destination}
       subtitle={destination === "browser" ? "Session browser" : "Coming soon"}
       header={<PanelSelector value={destination} onChange={setDestination} testId="opencode-right-tools-selector"
-        menuTestId="opencode-right-tools-menu" options={DESTINATIONS.map(({ id, label, Icon, ready }) => ({
-          id, label, icon: <Icon aria-hidden="true" size={15} />, wip: !ready, testId: `opencode-right-tools-${id}`,
+        menuTestId="opencode-right-tools-menu" options={DESTINATIONS.map(({ id, label, Icon, ready, beta }) => ({
+          id, label, icon: <Icon aria-hidden="true" size={15} />, beta, wip: !ready, testId: `opencode-right-tools-${id}`,
         }))} />}
     >
       {destination === "browser" ? <LiveBrowserSurface key={sessionID} sessionID={sessionID} navigation={navigation} handledNavigation={handledNavigation} /> : <WorkInProgress destination={destination} />}
