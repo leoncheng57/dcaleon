@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, Info, ListChecks, OctagonX, PersonStanding, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -13,6 +13,7 @@ import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
 import { SessionInspector } from "../components/session-inspector.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
+import { AutoPermissionsControl } from "../components/auto-permissions-control.js";
 import { SessionShell } from "../components/session-shell.js";
 import { SessionOverflowMenu } from "../components/session-overflow-menu.js";
 import { ReminderPicker } from "../components/reminder-picker.js";
@@ -244,6 +245,8 @@ export function ClaudeConversationPage() {
   const [runlogOpen, setRunlogOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [requestedInspectorTab, setRequestedInspectorTab] = useState<InspectorTab | undefined>();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [autoSafetyOpen, setAutoSafetyOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [modelCatalogue, setModelCatalogue] = useState<ModelCatalogue | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | undefined>();
@@ -495,11 +498,38 @@ export function ClaudeConversationPage() {
         actions: (
           <>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => { setRequestedInspectorTab("runlog"); setInspectorOpen(true); }} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             {session?.prUrl && (
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} aria-label="Open pull request status" title="Reviews" data-testid="claude-open-reviews"><GitPullRequest aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             )}
+            <AutoPermissionsControl
+              directory={id}
+              testId="claude-auto-permissions"
+              variant="pill"
+              trailing={
+                <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="claude-auto-permissions-info">
+                  <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                </Button>
+              }
+            />
+            <Button
+              size="md"
+              variant="ghost"
+              className={cn("min-h-11 min-w-12 px-0", !sidebarOpen && "text-[var(--color-text-muted)] opacity-50")}
+              onClick={() => {
+                if (sidebarOpen) {
+                  setSidebarOpen(false);
+                } else {
+                  setSidebarOpen(true);
+                  setRequestedInspectorTab("runlog");
+                }
+              }}
+              aria-label={sidebarOpen ? "Close run log" : "Open run log"}
+              title={sidebarOpen ? "Close run log" : "Open run log"}
+              data-testid="claude-open-runlog"
+            >
+              <PersonStanding aria-hidden="true" className="h-3.5 w-3.5" />
+            </Button>
             <SessionOverflowMenu
               testIds={{ root: "claude-session-menu", trigger: "claude-session-menu-trigger", panel: "claude-session-menu-panel" }}
               items={[
@@ -592,7 +622,7 @@ export function ClaudeConversationPage() {
           <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button>
         ) : null,
       }}
-      inspector={{
+      inspector={sidebarOpen ? {
         desktop: (
           <SessionInspector
             directory={id}
@@ -603,7 +633,7 @@ export function ClaudeConversationPage() {
             onMobileClose={() => setInspectorOpen(false)}
           />
         ),
-      }}
+      } : undefined}
       overlays={(
         <>
           {activeWorkflow && (
@@ -633,6 +663,15 @@ export function ClaudeConversationPage() {
                 <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "json"), serializeSessionJson(session?.title ?? "Claude session", events), "application/json")} data-testid="claude-export-json">Download JSON</Button>
               </div>
             </section>
+          )}
+          {autoSafetyOpen && (
+            <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-start sm:p-4 sm:pt-[10vh]" data-testid="claude-auto-permissions-safety-sheet">
+              <button type="button" className="absolute inset-0 bg-[var(--color-background-overlay)]" aria-label="Close auto permissions safety" onClick={() => setAutoSafetyOpen(false)} data-testid="claude-auto-permissions-safety-scrim" />
+              <section className="relative w-full rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl sm:max-w-md sm:rounded-xl" role="dialog" aria-modal="true" aria-label="Auto permissions safety">
+                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">Auto permissions safety</h2><button type="button" className="ml-auto min-h-11 min-w-11 rounded text-sm" onClick={() => setAutoSafetyOpen(false)} aria-label="Close auto permissions safety" data-testid="claude-auto-permissions-safety-close">Close</button></div>
+                <p className="mt-3 text-sm text-[var(--color-text-muted)]">Auto permissions approves every asked permission once, including arbitrary shell commands, external-directory access, and repeated requests from a doom loop. This affects every session using this project directory and resets to off when the BFF restarts.</p>
+              </section>
+            </div>
           )}
         </>
       )}
