@@ -42,6 +42,7 @@ export const SCREENSHOT_ROUTES: ReadonlyArray<{ readonly pattern: RegExp; readon
   { pattern: /^\/settings\/notifications$/, stableRoot: "opencode-notifications" },
   { pattern: /^\/tools$/, stableRoot: "opencode-tools" },
   { pattern: /^\/docs$/, stableRoot: "opencode-docs" },
+  { pattern: /^\/design-components$/, stableRoot: "opencode-design-components" },
   { pattern: /^\/docs\/[A-Za-z0-9_-]+$/, stableRoot: "opencode-doc" },
   { pattern: /^\/planning$/, stableRoot: "opencode-planning" },
   { pattern: /^\/observability$/, stableRoot: "opencode-observability" },

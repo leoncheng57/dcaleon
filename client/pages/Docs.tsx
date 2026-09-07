@@ -120,6 +120,10 @@ export function DocsPage() {
         </section>
 
         <section aria-labelledby="library-heading">
+          <Link to="/design-components" data-testid="opencode-docs-design-components" className="mb-6 block rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-5 hover:border-[var(--color-border-focus)]">
+            <h2 className="text-xl font-semibold">Design components</h2>
+            <p className="mt-2 text-sm text-[var(--color-text-muted)]">Explore the mobile-first component library: shared panels, selectors, states, and motion.</p>
+          </Link>
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-success)]">02 / Reading library</span>
           <h2 id="library-heading" className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Follow the evidence trail</h2>
           <div className="mt-7 space-y-9">

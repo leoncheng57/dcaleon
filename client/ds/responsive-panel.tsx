@@ -69,7 +69,7 @@ export const ResponsivePanel = forwardRef<HTMLElement, ResponsivePanelProps>(fun
       <header className="flex min-h-12 shrink-0 items-center gap-2 border-b border-[var(--color-border-default)] px-2 pt-[env(safe-area-inset-top)] lg:pt-0">
         {header}
         <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text-muted)]">{subtitle}</span>
-        <Button size="sm" variant="ghost" type="button" className="min-w-11 px-0" aria-label="Close tools panel"
+        <Button size="sm" variant="ghost" type="button" className="min-h-11 min-w-11 px-0" aria-label="Close tools panel"
           onClick={onClose} data-testid={closeTestId ?? `${testId}-close`}><X aria-hidden="true" size={16} /></Button>
       </header>
       <div className="flex min-h-0 flex-1 flex-col pb-[env(safe-area-inset-bottom)] lg:pb-0">{children}</div>

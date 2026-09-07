@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Activity, BookOpen, LibraryBig, MoreHorizontal, Search, Settings, Smartphone, Wrench } from "lucide-react";
+import { Activity, BookOpen, LibraryBig, MoreHorizontal, Search, Settings, Smartphone, Wrench, PanelsTopLeft } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { Button } from "../ds/button.js";
@@ -21,6 +21,7 @@ const LINKS = [
 
 // Host-scoped, so unlike LINKS above it is never given a ?directory=.
 const UNSCOPED_LINKS = [
+  { to: "/design-components", label: "Design components", testId: "opencode-nav-design-components", Icon: PanelsTopLeft },
   { to: "/playbooks", label: "Playbooks", testId: "opencode-nav-playbooks", Icon: LibraryBig },
   { to: "/observability", label: "Observability", testId: "opencode-nav-observability", Icon: Activity },
 ] as const;

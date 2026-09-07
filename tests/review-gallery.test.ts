@@ -25,6 +25,8 @@ describe("review coverage", () => {
   it("skips docs, covers page changes and flags shared components for local judgment", () => {
     expect(selectReviewScenarios(["README.md", "tests/foo.test.ts"]).ids).toEqual([]);
     expect(selectReviewScenarios(["client/pages/Planning.tsx"]).ids).toEqual(["planning-page", "planning-create"]);
+    expect(selectReviewScenarios(["client/pages/DesignComponents.tsx"]).ids).toEqual(["design-gallery", "design-panel"]);
+    expect(validateScenarios([reviewScenario("design-gallery"), reviewScenario("design-panel")])).toHaveLength(2);
     expect(selectReviewScenarios(["client/ds/button.tsx"])).toMatchObject({ ids: ["hub-projects", "session-todo"], needsLocalReview: true });
     expect(selectReviewScenarios(["server/new-feature.ts"]).needsLocalReview).toBe(true);
   });

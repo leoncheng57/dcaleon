@@ -15,6 +15,20 @@ export interface ReviewScenario {
 
 export const REVIEW_SCENARIOS: readonly ReviewScenario[] = [
   {
+    id: "design-gallery", title: "Design library — mobile-first foundations", route: "/design-components",
+    steps: [{ testId: "opencode-design-components", action: "text", value: "Small screens. Shared details." }],
+  },
+  {
+    id: "design-panel", title: "Design library — shared Minichats placeholder", route: "/design-components",
+    steps: [
+      { testId: "design-panel-open", action: "click" },
+      { testId: "design-panel-selector", action: "click" },
+      { testId: "design-panel-selector-minichats", action: "click" },
+      { testId: "design-panel", action: "text", value: "Minichats is a work-in-progress destination." },
+    ],
+    target: "design-panel",
+  },
+  {
     id: "hub-projects", title: "Hub — expanded project picker", route: "/opencode?directory=/tmp/mock-project",
     steps: [{ testId: "opencode-project-picker-toggle", action: "click" }, { testId: "opencode-project-list", action: "text", value: "mock-project" }],
     target: "opencode-project-picker",
@@ -51,7 +65,8 @@ export function selectReviewScenarios(files: string[]): { ids: string[]; reason:
   const ids = new Set<string>();
   let unknown = false;
   for (const file of visual) {
-    if (/Planning|planning/i.test(file)) { ids.add("planning-page"); ids.add("planning-create"); }
+    if (/DesignComponents|design-components|client\/ds\/(?:responsive-panel|panel-selector|panel-state)|client\/theme\/motion/i.test(file)) { ids.add("design-gallery"); ids.add("design-panel"); }
+    else if (/Planning|planning/i.test(file)) { ids.add("planning-page"); ids.add("planning-create"); }
     else if (/Settings|settings/i.test(file)) ids.add("settings-page");
     else if (/Hub|projects/i.test(file)) ids.add("hub-projects");
     else if (/session-inspector|inspectorTabs|todos/i.test(file)) ids.add("session-todo");
