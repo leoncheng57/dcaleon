@@ -10,6 +10,7 @@ import { RunningIndicator, Transcript } from "../components/transcript.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
+import { ClaudeInspector } from "../components/claude-inspector.js";
 import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
@@ -491,37 +492,42 @@ export function ClaudeConversationPage() {
         <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
         {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
         {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
-        <div className="ml-auto flex flex-wrap items-center gap-1">
+        <div className="ml-auto flex items-center gap-1" aria-label="Session actions">
           <ClaudeUsageIndicator tokenUsage={session?.tokenUsage} />
-          <Button size="sm" variant="secondary" onClick={() => setFilesOpen(true)} data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="mr-1" size={14} /> Files</Button>
-          <Button size="sm" variant="secondary" onClick={() => setRunlogOpen(true)} data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="mr-1" size={14} /> Run log</Button>
-          <Button size="sm" variant="secondary" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="mr-1" size={14} /> Changes</Button>
-          <Button size="sm" variant="secondary" onClick={() => setExportOpen(true)} disabled={events.length === 0} data-testid="claude-open-export"><Download aria-hidden="true" className="mr-1" size={14} /> Export</Button>
-          <Button size="sm" variant="ghost" disabled title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="mr-1" size={14} /> Preview <span className="ml-1 rounded bg-[var(--color-background-surface-neutral-muted)] px-1 text-[10px] uppercase">Beta</span></Button>
+          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setRunlogOpen(true)} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setExportOpen(true)} disabled={events.length === 0} aria-label="Export transcript" title="Export" data-testid="claude-open-export"><Download aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" disabled aria-label="Live preview coming soon" title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="h-3.5 w-3.5" /></Button>
         </div>
       </header>
-      <div className="relative min-h-0 flex-1">
-        <div ref={scrollerRef} onScroll={updateFollow} className="h-full overflow-y-auto px-4 py-5 sm:px-8" data-testid="claude-transcript">
-          <div className="mx-auto max-w-4xl">
-            {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p></div>}
-            <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>
-              <Transcript items={items} wrap collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
-            </WorkspaceReferenceProvider>
-            {session?.running && <div className="mt-5"><RunningIndicator activity={activity} /></div>}
-            <div ref={bottom} />
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <div ref={scrollerRef} onScroll={updateFollow} className="h-full overflow-y-auto px-4 py-5 sm:px-8" data-testid="claude-transcript">
+            <div className="mx-auto max-w-4xl">
+              {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p></div>}
+              <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>
+                <Transcript items={items} wrap collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
+              </WorkspaceReferenceProvider>
+              {session?.running && <div className="mt-5"><RunningIndicator activity={activity} /></div>}
+              <div ref={bottom} />
+            </div>
           </div>
+          {newActivity && (
+            <button
+              type="button"
+              className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-[var(--color-background-surface-neutral-muted)]"
+              onClick={jumpToLatest}
+              data-testid="claude-jump-to-latest"
+            >
+              <ArrowDown aria-hidden="true" size={13} />
+              New activity
+            </button>
+          )}
         </div>
-        {newActivity && (
-          <button
-            type="button"
-            className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-[var(--color-background-surface-neutral-muted)]"
-            onClick={jumpToLatest}
-            data-testid="claude-jump-to-latest"
-          >
-            <ArrowDown aria-hidden="true" size={13} />
-            New activity
-          </button>
-        )}
+        <div className="hidden lg:flex">
+          <ClaudeInspector events={events} title={session?.title ?? "claude-session"} />
+        </div>
       </div>
       <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="claude-composer">
         <div className="mx-auto max-w-3xl">
