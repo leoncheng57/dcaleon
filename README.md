@@ -86,7 +86,8 @@ npm run service:install             # dedicated port 3210
 npm run service:status
 ```
 
-See [`deploy/README.md`](deploy/README.md) for logs, uninstall, Tailscale Serve,
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the short reproducible update and restart
+runbook, and [`deploy/README.md`](deploy/README.md) for logs, uninstall, Tailscale Serve,
 paths containing spaces, and the optional OpenCode unit. The BFF installer never
 starts a second OpenCode server; it uses `OPENCODE_URL` from `.env`.
 The baseline OpenCode 1.18.21 compatibility check is recorded in
