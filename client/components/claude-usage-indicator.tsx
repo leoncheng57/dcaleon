@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Activity } from "lucide-react";
-import { api, type ClaudeUsage, type ClaudeUsageBucket } from "../lib/api.js";
+import { api, type ClaudeTokenUsage, type ClaudeUsage, type ClaudeUsageBucket } from "../lib/api.js";
 import { cn } from "../ds/utils.js";
 
 const POLL_MS = 60_000;
@@ -41,7 +41,18 @@ function Bucket({ label, bucket }: { label: string; bucket: ClaudeUsageBucket })
   );
 }
 
-export function ClaudeUsageIndicator() {
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function formatCost(usd: number): string {
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+export function ClaudeUsageIndicator({ tokenUsage }: { tokenUsage?: ClaudeTokenUsage }) {
   const [usage, setUsage] = useState<ClaudeUsage | null>(null);
   const [open, setOpen] = useState(false);
   const [, setTick] = useState(0);
@@ -108,6 +119,37 @@ export function ClaudeUsageIndicator() {
               <Bucket key={model} label={`Weekly — ${model}`} bucket={bucket} />
             ))}
           </div>
+          {tokenUsage && tokenUsage.contextWindow > 0 && (() => {
+            const totalInput = tokenUsage.inputTokens + tokenUsage.cacheReadTokens + tokenUsage.cacheWriteTokens;
+            const totalTokens = totalInput + tokenUsage.outputTokens;
+            const contextPct = Math.min(100, Math.round((totalInput / tokenUsage.contextWindow) * 100));
+            return (
+              <div className="mt-2.5 space-y-2 border-t border-[var(--color-border-default)] pt-2">
+                <div className="text-xs font-medium">Session tokens</div>
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span>Context window</span>
+                    <span className="tabular-nums">{formatTokens(totalInput)} / {formatTokens(tokenUsage.contextWindow)}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-[var(--color-background-surface-neutral-muted)]">
+                    <div className={cn("h-full rounded-full transition-all", barColor(contextPct))} style={{ width: `${contextPct}%` }} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-[var(--color-text-muted)]">
+                  <span>Input</span><span className="text-right tabular-nums">{formatTokens(tokenUsage.inputTokens)}</span>
+                  <span>Output</span><span className="text-right tabular-nums">{formatTokens(tokenUsage.outputTokens)}</span>
+                  {tokenUsage.cacheReadTokens > 0 && <><span>Cache read</span><span className="text-right tabular-nums">{formatTokens(tokenUsage.cacheReadTokens)}</span></>}
+                  {tokenUsage.cacheWriteTokens > 0 && <><span>Cache write</span><span className="text-right tabular-nums">{formatTokens(tokenUsage.cacheWriteTokens)}</span></>}
+                  {tokenUsage.thinkingTokens > 0 && <><span>Thinking</span><span className="text-right tabular-nums">{formatTokens(tokenUsage.thinkingTokens)}</span></>}
+                  <span>Total</span><span className="text-right tabular-nums">{formatTokens(totalTokens)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span>Estimated cost</span>
+                  <span className="tabular-nums font-medium">{formatCost(tokenUsage.costUsd)}</span>
+                </div>
+              </div>
+            );
+          })()}
           {usage.subscriptionType && (
             <div className="mt-2.5 border-t border-[var(--color-border-default)] pt-2 text-[10px] text-[var(--color-text-muted)]">
               Plan: {usage.subscriptionType}{usage.rateLimitTier ? ` · ${usage.rateLimitTier}` : ""}

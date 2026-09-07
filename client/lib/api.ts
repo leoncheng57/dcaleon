@@ -180,6 +180,15 @@ export interface ClaudeConfigResponse {
   workspaces: ClaudeWorkspaceSummary[];
   models: string[];
 }
+export interface ClaudeTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  thinkingTokens: number;
+  contextWindow: number;
+  costUsd: number;
+}
 export interface ClaudeSessionSummary {
   id: string;
   title: string;
@@ -193,6 +202,7 @@ export interface ClaudeSessionSummary {
   createdAt: string;
   updatedAt: string;
   running: boolean;
+  tokenUsage?: ClaudeTokenUsage;
 }
 export interface ClaudeUsageBucket { utilization: number; resetsAt: string | null }
 export type ClaudeUsage =

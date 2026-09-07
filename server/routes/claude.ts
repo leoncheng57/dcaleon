@@ -29,9 +29,9 @@ function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
   return {
     id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: session.workspaceLabel,
     mode: session.mode, isolation: session.isolation, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running,
-    // Branch is safe to show; the worktree PATH is a host path and stays server-side.
     ...(session.worktree ? { branch: session.worktree.branch } : {}),
     ...(session.prUrl ? { prUrl: session.prUrl } : {}),
+    ...(session.tokenUsage ? { tokenUsage: session.tokenUsage } : {}),
   };
 }
 

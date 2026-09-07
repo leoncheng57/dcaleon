@@ -26,6 +26,16 @@ export type ClaudeTranscriptEvent =
 
 export type ClaudeIsolation = "direct" | "worktree";
 
+export interface ClaudeTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  thinkingTokens: number;
+  contextWindow: number;
+  costUsd: number;
+}
+
 export interface ClaudeSession {
   id: string;
   sessionUuid: string;
@@ -49,6 +59,7 @@ export interface ClaudeSession {
   runStartedAt?: number;
   activeRunId?: string;
   sawResult?: boolean;
+  tokenUsage?: ClaudeTokenUsage;
 }
 
 export interface ClaudeRunRecord {
@@ -275,14 +286,25 @@ export class ClaudeSessionStore extends EventEmitter {
       this.finish(session, "failed");
     } else if (frame.type === "result") {
       session.sawResult = true;
-      // One patch row per turn naming what the agent edited, so the transcript
-      // shows the footprint without opening the Changes drawer.
       if (edited.size) {
         const files = [...edited].sort();
         const id = `patch-${randomUUID()}`;
         session.events.push({ id, messageId: id, timestamp: now, kind: "patch", files: files.slice(0, MAX_PATCH_FILES), fileCount: files.length, filesTruncated: files.length > MAX_PATCH_FILES });
       }
       const cost = typeof frame.total_cost_usd === "number" ? frame.total_cost_usd : 0;
+      const usage = frame.usage as Record<string, unknown> | undefined;
+      const modelUsage = frame.modelUsage as Record<string, Record<string, unknown>> | undefined;
+      const modelEntry = modelUsage ? Object.values(modelUsage)[0] : undefined;
+      const prev = session.tokenUsage ?? { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, thinkingTokens: 0, contextWindow: 0, costUsd: 0 };
+      session.tokenUsage = {
+        inputTokens: prev.inputTokens + (typeof usage?.input_tokens === "number" ? usage.input_tokens : 0),
+        outputTokens: prev.outputTokens + (typeof usage?.output_tokens === "number" ? usage.output_tokens : 0),
+        cacheReadTokens: prev.cacheReadTokens + (typeof usage?.cache_read_input_tokens === "number" ? usage.cache_read_input_tokens : 0),
+        cacheWriteTokens: prev.cacheWriteTokens + (typeof usage?.cache_creation_input_tokens === "number" ? usage.cache_creation_input_tokens : 0),
+        thinkingTokens: prev.thinkingTokens + (typeof (usage?.output_tokens_details as Record<string, unknown>)?.thinking_tokens === "number" ? (usage!.output_tokens_details as Record<string, unknown>).thinking_tokens as number : 0),
+        contextWindow: typeof modelEntry?.contextWindow === "number" ? modelEntry.contextWindow : prev.contextWindow,
+        costUsd: prev.costUsd + cost,
+      };
       this.finish(session, frame.is_error === true ? "failed" : "completed", { costUsd: cost });
     }
 

@@ -492,7 +492,7 @@ export function ClaudeConversationPage() {
         {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
         {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
         <div className="ml-auto flex flex-wrap items-center gap-1">
-          <ClaudeUsageIndicator />
+          <ClaudeUsageIndicator tokenUsage={session?.tokenUsage} />
           <Button size="sm" variant="secondary" onClick={() => setFilesOpen(true)} data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="mr-1" size={14} /> Files</Button>
           <Button size="sm" variant="secondary" onClick={() => setRunlogOpen(true)} data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="mr-1" size={14} /> Run log</Button>
           <Button size="sm" variant="secondary" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="mr-1" size={14} /> Changes</Button>
