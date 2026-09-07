@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 451,
+  "sourceSha": "edcd064ea40c2afe5bdabdf4ac2c62b805a4a04b",
+  "capturedAt": "2026-09-07T20:01:38.374Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/opencode?directory=/tmp/mock-project",
+      "fullPage": false,
+      "scenarioId": "hub-projects",
+      "captures": {
+        "desktop": {
+          "filename": "01-opencode-directory-tmp-mock-project-357a957d--desktop.png",
+          "dimensions": {
+            "width": 848,
+            "height": 281
+          },
+          "bytes": 18008,
+          "sha256": "97b65ac0059d60f1f87ba3f6a85567125c045b81e1382fccf5efe228544fbd3d"
+        },
+        "mobile": {
+          "filename": "01-opencode-directory-tmp-mock-project-c65e4a9d--mobile.png",
+          "dimensions": {
+            "width": 358,
+            "height": 269
+          },
+          "bytes": 16533,
+          "sha256": "04166e8578c7f359d04bc16870d1ea55ef19d650b5209ea74b752af0b837c787"
+        }
+      }
+    },
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project&panel=todo",
+      "fullPage": false,
+      "scenarioId": "session-todo",
+      "captures": {
+        "desktop": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-37b8f494--desktop.png",
+          "dimensions": {
+            "width": 287,
+            "height": 278
+          },
+          "bytes": 17498,
+          "sha256": "08c925999f152708ebd64d652c2b735f0d7ec7a60b41ac75f1c242fb4815f70d"
+        },
+        "mobile": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-26dcd2b5--mobile.png",
+          "dimensions": {
+            "width": 358,
+            "height": 278
+          },
+          "bytes": 15566,
+          "sha256": "51ff3fa3aa123c19aa17c6f6528e344d4e00dcdce263b5694c262ffbba0156ff"
+        }
+      }
+    },
+    {
+      "requestedRoute": "/design-components",
+      "fullPage": true,
+      "scenarioId": "design-gallery",
+      "captures": {
+        "desktop": {
+          "filename": "03-design-components-c2019b5c--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 90109,
+          "sha256": "cd271e259bd5bbc3a26fab9c05c836a9fb64da3452c1379ebdda61df6e82b767"
+        },
+        "mobile": {
+          "filename": "03-design-components-7f161263--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 52801,
+          "sha256": "049936a2da69747460a098831775d433be27b45fcfe1cac584af28eb96f939bd"
+        }
+      }
+    },
+    {
+      "requestedRoute": "/design-components",
+      "fullPage": false,
+      "scenarioId": "design-panel",
+      "captures": {
+        "desktop": {
+          "filename": "04-design-components-ebf8e595--desktop.png",
+          "dimensions": {
+            "width": 448,
+            "height": 510
+          },
+          "bytes": 15741,
+          "sha256": "b71554e7e898dbea7f69f4b9d78920bec18ef0e1634b2d6f97eb41dcc7a03c32"
+        },
+        "mobile": {
+          "filename": "04-design-components-78437384--mobile.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 16528,
+          "sha256": "305b13f064ece72b362df404955243a9edb54b4ac7c8d3ddb5cbd17476aadfb6"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "ids": [
+      "hub-projects",
+      "session-todo",
+      "design-gallery",
+      "design-panel"
+    ],
+    "needsLocalReview": true,
+    "reason": "Baseline coverage includes shared or unmapped changes. A local agent must review the diff and add relevant states; CI has no AI keys."
+  }
+}
