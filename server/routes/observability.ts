@@ -4,6 +4,7 @@ import type { OpencodeConfig } from "../opencode/client.js";
 import { getDeploymentSnapshot } from "../deployment.js";
 import { getLogSnapshot, isLogSource, LOG_SOURCES } from "../logs.js";
 import { ProjectPinStore } from "../projects.js";
+import { ResourceMonitor } from "../resources.js";
 
 /**
  * Log contents carry directory paths and inspected exception objects, so they
@@ -27,6 +28,12 @@ function privateRead(res: Response): void {
  */
 export function observabilityRoutes(config: OpencodeConfig, port: number, store = new ProjectPinStore()): Router {
   const router = Router();
+  const resources = new ResourceMonitor(config.baseUrl);
+
+  router.get("/observability/resources", (_req, res) => {
+    privateRead(res);
+    void resources.read().then((snapshot) => res.json(snapshot)).catch(() => res.status(503).json({ error: "Resource monitor unavailable" }));
+  });
 
   router.get("/observability/logs", (req, res) => {
     privateRead(res);

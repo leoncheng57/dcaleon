@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { registerResourceProcess } from "../resource-processes.js";
 import { EventEmitter } from "node:events";
 import type { Readable } from "node:stream";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -220,6 +221,7 @@ export class ClaudeSupervisor extends EventEmitter {
       }
       const sessionId = input.session.id;
       this.children.set(sessionId, child);
+      registerResourceProcess(child, "Claude");
       this.buffers.set(sessionId, Buffer.alloc(0));
       child.once("spawn", () => resolve());
       child.once("error", (cause) => {

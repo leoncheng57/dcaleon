@@ -1238,6 +1238,28 @@ several decisions below.
   from requests already in flight, and catch up on visibility restoration. The static
   public simulator still performs its one initial load even when opened in a hidden tab.
 
+## Resource monitor
+
+- The session header's Resources indicator measures the **DCA server host**, across
+  all projects/islands, not the viewing browser or the selected session. It includes
+  the BFF descendant tree and local OpenCode listeners identified by executable name
+  at the configured loopback port. Remote or undetected OpenCode is reported as missing.
+  Claude/DSH launchers register their live child PIDs for reliable role labels even when
+  a binary is named only by its version; exit/error events remove those entries.
+- `server/resources.ts` samples fixed `ps` columns on macOS/Linux; it never reads command
+  arguments. Only fixed role labels, PIDs, CPU and RSS cross the private/no-store route.
+  Linux needs `ps` (`procps`); `lsof` enables local OpenCode discovery. Missing tools
+  degrade explicitly. The test-only Docker image includes both.
+- CPU uses cumulative process-time deltas and PID + start-time identity; 100% process
+  CPU is one logical core. Host CPU is normalized across all cores. First/new samples
+  and gaps over 30s warm up rather than claim zero. Exited children cannot be measured.
+- A five-second single-flight server cache is shared across tabs; there is no background
+  sampling timer. The indicator owns its state independently of the transcript, stops
+  polling while hidden, times out requests and resamples on visibility restoration.
+- RSS totals can double-count shared pages, and total-minus-free host memory includes
+  caches. Neither is labelled memory pressure. Process rows are capped at 128, while
+  totals include every tracked process. No history, credentials or command paths are persisted.
+
 ## Client conventions (inherited from the OpenHands runner, still enforced)
 
 - **Design components are mobile-first.** Begin at 320–390px with reachable 44px
