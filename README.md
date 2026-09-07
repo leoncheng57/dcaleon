@@ -25,7 +25,8 @@ a web frontend for an agent server you already run.
 It is deliberately **not** a replacement for the `opencode` CLI. Both are clients of
 the same server and can be attached at the same time, watching the same sessions.
 
-Conversation pages also provide a Codex-inspired right tools panel. Its live Browser drives
+OpenCode, Claude, and DSH conversation pages share a Codex-inspired right tools panel,
+opened with the globe button in every island's session toolbar. Its live Browser drives
 a server-side Chromium page that persists per conversation; **Minichats** and **Terminal** are
 currently clearly marked work-in-progress destinations rather than simulated functionality.
 On desktop Browser replaces the Inspector in the layout, and on phones it becomes a

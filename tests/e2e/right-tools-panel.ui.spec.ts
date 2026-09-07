@@ -11,11 +11,11 @@ interface BrowserFixture {
   requests: string[];
 }
 
-async function mockBrowser(page: Page): Promise<BrowserFixture> {
+async function mockBrowser(page: Page, sessionID = "ses_mock_right_tools"): Promise<BrowserFixture> {
   const fixture: BrowserFixture = { inputs: [], requests: [] };
   let url = "https://example.com/";
   const state = () => ({
-    sessionID: "ses_mock_right_tools",
+    sessionID,
     url,
     title: "Example Domain",
     canGoBack: false,
@@ -49,6 +49,43 @@ async function mockBrowser(page: Page): Promise<BrowserFixture> {
     await route.fulfill({ json: state() });
   });
   return fixture;
+}
+
+for (const runtime of ["claude", "dsh"] as const) {
+  for (const phone of [false, true]) {
+    test(`${runtime} shares Browser, Minichats and Terminal on ${phone ? "phone" : "desktop"}`, async ({ page }) => {
+      await page.setViewportSize({ width: phone ? 390 : 1440, height: 800 });
+      await page.goto(`/${runtime}`);
+      await page.getByTestId(`${runtime}-create`).click();
+      await expect(page).toHaveURL(new RegExp(`/${runtime}/sessions/${runtime}-`));
+      const sessionID = new URL(page.url()).pathname.split("/").at(-1)!;
+      const fixture = await mockBrowser(page, sessionID);
+      const opener = page.getByTestId("opencode-live-browser-open");
+      const inspector = page.getByTestId("opencode-session-inspector");
+      if (!phone) await expect(inspector).toBeVisible();
+      await opener.click();
+      const panel = page.getByTestId("opencode-right-tools-panel");
+      await expect(panel).toHaveAttribute("role", phone ? "dialog" : "complementary");
+      await expect(page.getByTestId("opencode-live-browser-frame")).toBeVisible();
+      await expect(inspector).toBeHidden();
+      expect(fixture.requests).toContain(`POST /api/browser/${sessionID}/open`);
+      await page.getByTestId("opencode-live-browser-address").fill("https://example.com/retained");
+      await page.getByTestId("opencode-live-browser-address").press("Enter");
+      await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://example.com/retained");
+      for (const destination of ["minichats", "terminal"]) {
+        await page.getByTestId("opencode-right-tools-selector").click();
+        await page.getByTestId(`opencode-right-tools-${destination}`).click();
+        await expect(page.getByTestId(`opencode-${destination}-wip`)).toBeVisible();
+        await expect(page.getByTestId("opencode-live-browser-frame")).toHaveCount(0);
+      }
+      await page.getByTestId("opencode-right-tools-selector").click();
+      await page.getByTestId("opencode-right-tools-browser").click();
+      await expect(page.getByTestId("opencode-live-browser-address")).toHaveValue("https://example.com/retained");
+      await page.getByTestId("opencode-right-tools-close").click();
+      await expect(opener).toBeFocused();
+      if (!phone) await expect(inspector).toBeVisible();
+    });
+  }
 }
 
 test.describe("desktop right tools panel", () => {

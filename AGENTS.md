@@ -1197,7 +1197,10 @@ several decisions below.
       lives at `/opencode`, a navbar peer of DSH and Claude.** Every runtime is reached from
       the navbar, so the root belongs to none of them. `/sessions/:id` stays where it was:
       moving it would break deep links, notification click URLs and phone transfer for no gain.
-35. **The live Browser is one destination in a single right tools slot.** The functional
+35. **All runtime islands share the right tools slot through SessionShell.** OpenCode,
+    Claude and DSH pass their native runtime-prefixed session IDs to the same shell-owned
+    opener, visibility state, Inspector replacement, and Browser/Minichats/Terminal panel.
+    Keep shared tools here rather than adding island-specific drawers. The functional
     Browser, Minichats WIP page and Terminal WIP page share one selector; the latter two make
     the information architecture visible without claiming #56 or #59 has shipped. On desktop
     the tools slot participates in the conversation flex row and replaces the persistent
