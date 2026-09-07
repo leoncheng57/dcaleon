@@ -40,12 +40,12 @@ export function RuntimePickerPage() {
         <p className="mt-2 text-sm text-[var(--color-text-muted)]">
           Pick a runtime to get started.{" "}
           <a
-            href="https://github.com/leoncheng57/custom-dca-opencode"
+            href="https://github.com/leoncheng57/dcaleon"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[var(--color-text-action-ghost)] underline"
           >
-            leoncheng57/custom-dca-opencode
+            leoncheng57/dcaleon
           </a>
         </p>
       </header>
