@@ -14,6 +14,7 @@ import {
   api,
   formatCost,
   type DiscoveredProject,
+  type ClaudeMemorySnapshot,
   type HealthResponse,
   type SessionSummary,
   type Worktree,
@@ -182,6 +183,7 @@ export function HubPage() {
   const [pinsSaving, setPinsSaving] = useState(false);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [recents, setRecents] = useState<SessionSummary[] | null>(null);
+  const [memory, setMemory] = useState<ClaudeMemorySnapshot | null>(null);
   const recentOpens = readRecentSessionOpens(localStorage);
 
   // The projects this browser knows about, newest first. The BFF unions this
@@ -250,6 +252,14 @@ export function HubPage() {
   useEffect(() => {
     if (!directory) return;
     void api.worktrees(directory).then((result) => setWorktrees(result.worktrees)).catch(() => setWorktrees([]));
+  }, [directory]);
+
+  useEffect(() => {
+    if (!directory) { setMemory(null); return; }
+    let cancelled = false;
+    setMemory(null);
+    void api.memory(directory).then((result) => { if (!cancelled) setMemory(result); }).catch(() => { if (!cancelled) setMemory({ index: "", entries: [], truncated: false }); });
+    return () => { cancelled = true; };
   }, [directory]);
 
   useEffect(() => {
@@ -709,6 +719,15 @@ export function HubPage() {
           </details>
         </div>
       </details>
+
+      {directory && memory && (
+        <details className="rounded-xl border border-[var(--color-border-default)]" data-testid="opencode-memory-summary">
+          <summary className="cursor-pointer list-none border-b border-[var(--color-border-default)] px-4 py-2 text-sm font-semibold" data-testid="opencode-memory-summary-toggle">
+            Memory <span className="font-normal text-[var(--color-text-muted)]">({memory.entries.length}{memory.truncated ? "+" : ""})</span>
+          </summary>
+          {memory.entries.length === 0 ? <p className="p-4 text-sm text-[var(--color-text-muted)]">No Claude Code memory entries for this project.</p> : <ul className="divide-y divide-[var(--color-border-default)] p-1">{memory.entries.map((entry) => <li key={entry.filename} className="flex min-w-0 items-baseline gap-2 px-3 py-2" data-testid="opencode-memory-summary-entry"><span className="min-w-0 flex-1 truncate text-sm">{entry.filename.replace(/\.md$/, "")}</span><span className="shrink-0 text-xs text-[var(--color-text-muted)]">{entry.type}</span></li>)}</ul>}
+        </details>
+      )}
 
       {directory && worktrees.length > 0 && (
         <details className="rounded-xl border border-[var(--color-border-default)]" data-testid="opencode-worktree-list">
