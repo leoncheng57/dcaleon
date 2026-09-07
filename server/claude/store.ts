@@ -240,9 +240,11 @@ export class ClaudeSessionStore extends EventEmitter {
           const filePath = FILE_TOOLS.has(name) ? stringField(block.input, "file_path") ?? stringField(block.input, "notebook_path") : undefined;
           const command = name === "Bash" ? stringField(block.input, "command") : undefined;
           if (filePath && MUTATION_TOOLS.has(name)) edited.add(path.relative(session.directory, filePath) || filePath);
+          const bashPreview = command ? command.split("\n")[0].trim().slice(0, 120) : undefined;
           session.events.push({
             id, messageId: id, timestamp: now, kind: "tool", status: "running", name, attachments: [],
             ...(filePath ? { detail: path.relative(session.directory, filePath) || filePath } : {}),
+            ...(bashPreview && !filePath ? { detail: bashPreview } : {}),
             ...(command ? { commandText: command } : {}),
           });
         }

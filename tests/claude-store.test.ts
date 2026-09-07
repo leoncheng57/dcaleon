@@ -157,8 +157,8 @@ describe("Claude session store", () => {
     ] } });
     instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.01 });
     const tools = session.events.filter((event) => event.kind === "tool");
-    expect(tools.map((event) => event.kind === "tool" && event.detail)).toEqual(["src/a.ts", "src/a.ts", "src/b.ts", undefined]);
-    expect(tools[3]).toMatchObject({ name: "Bash", commandText: "npm test" });
+    expect(tools.map((event) => event.kind === "tool" && event.detail)).toEqual(["src/a.ts", "src/a.ts", "src/b.ts", "npm test"]);
+    expect(tools[3]).toMatchObject({ name: "Bash", detail: "npm test", commandText: "npm test" });
     const patch = session.events.find((event) => event.kind === "patch");
     // Read does not count as an edit; Edit + Write on two files do.
     expect(patch).toMatchObject({ kind: "patch", files: ["src/a.ts", "src/b.ts"], fileCount: 2, filesTruncated: false });
