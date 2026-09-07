@@ -90,6 +90,8 @@ export interface SessionShellProps {
 
   inspector?: {
     desktop: ReactNode;
+    /** Keep long question/permission banners from consuming the tools slot. */
+    constrainBanners?: boolean;
   };
 
   overlays?: ReactNode;
@@ -116,7 +118,9 @@ export function SessionShell({ testIds, header, banners, transcript, scroll, com
         )}
       </header>
 
-      {banners}
+      <div className={inspector?.constrainBanners ? "max-h-[25%] shrink-0 overflow-y-auto" : "contents"}>
+        {banners}
+      </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-h-0 min-w-0 flex-1">

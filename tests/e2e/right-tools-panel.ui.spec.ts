@@ -53,6 +53,17 @@ async function mockBrowser(page: Page): Promise<BrowserFixture> {
 
 test.describe("desktop right tools panel", () => {
   test.use({ viewport: { width: 1440, height: 900 }, hasTouch: false });
+  test("keeps the panel usable beside tall permission and question banners", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockBrowser(page);
+    await page.goto("/sessions/ses_mock_done?directory=/tmp/mock-project");
+    await page.getByTestId("opencode-live-browser-open").click();
+    const panel = page.getByTestId("opencode-right-tools-panel");
+    await expect(page.getByTestId("opencode-live-browser-frame")).toBeVisible();
+    expect((await panel.boundingBox())!.height).toBeGreaterThan(240);
+    await page.getByTestId("opencode-right-tools-close").click();
+    await expect(page.getByTestId("opencode-session-inspector")).toBeVisible();
+  });
 
   for (const [status, message] of [[403, "live browser is disabled"], [409, "browser page capacity reached"], [502, "Chromium unavailable"]] as const) {
     test(`keeps the selector usable after an open failure (${status})`, async ({ page }) => {

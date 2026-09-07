@@ -932,6 +932,7 @@ export function ConversationPage() {
         ),
       }}
       inspector={{
+        constrainBanners: liveBrowserOpen,
         desktop: (
         <>
         <SessionInspector
