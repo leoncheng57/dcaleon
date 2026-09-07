@@ -14,6 +14,12 @@ test("runs the DSH fixture flow under the nested public preview path", async ({ 
   await page.getByTestId("dsh-create").click();
   await expect(page).toHaveURL(/\/dcaleon\/pr-previews\/pr-1\/#\/dsh\/sessions\/dsh-/u);
   await expect(page.getByTestId("dsh-conversation")).toBeVisible();
+  await page.getByTestId("opencode-live-browser-open").click();
+  await expect(page.getByTestId("opencode-live-browser-simulator")).toContainText("unavailable in the simulator");
+  await page.getByTestId("opencode-right-tools-selector").click();
+  await page.getByTestId("opencode-right-tools-terminal").click();
+  await expect(page.getByTestId("opencode-terminal-wip")).toBeVisible();
+  await page.getByTestId("opencode-right-tools-close").click();
 
   await page.getByTestId("dsh-prompt").fill("Inspect the public DSH fixture");
   await page.getByTestId("dsh-send").click();

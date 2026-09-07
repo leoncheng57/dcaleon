@@ -1,8 +1,9 @@
-import type { ClipboardEvent, FocusEvent, ReactNode, RefObject, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ArrowDown } from "lucide-react";
+import { useState, type ClipboardEvent, type FocusEvent, type ReactNode, type RefObject, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { ArrowDown, Globe } from "lucide-react";
 
 import { Button } from "../ds/button.js";
 import { SessionActionBar } from "./session-action-bar.js";
+import { RightToolsPanel } from "./right-tools-panel.js";
 import { RunningIndicator, Transcript } from "../components/transcript.js";
 import type { DisplayItem, RunningActivity } from "../lib/derive.js";
 import type { UserEvent, AgentEvent } from "../lib/transcript.js";
@@ -22,6 +23,8 @@ export interface SessionShellTestIds {
 
 export interface SessionShellProps {
   testIds: SessionShellTestIds;
+  /** Runtime-prefixed conversation ID; all islands use the same tools slot. */
+  browserSessionID: string;
 
   header: {
     backLink: ReactNode;
@@ -90,14 +93,13 @@ export interface SessionShellProps {
 
   inspector?: {
     desktop: ReactNode;
-    /** Keep long question/permission banners from consuming the tools slot. */
-    constrainBanners?: boolean;
   };
 
   overlays?: ReactNode;
 }
 
-export function SessionShell({ testIds, header, banners, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
+export function SessionShell({ testIds, browserSessionID, header, banners, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
+  const [toolsOpen, setToolsOpen] = useState(false);
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--color-background-base)]" data-testid={testIds.root}>
       <header className="flex shrink-0 flex-col gap-1.5 border-b border-[var(--color-border-default)] px-3 py-2 sm:px-4 sm:py-2.5">
@@ -108,17 +110,23 @@ export function SessionShell({ testIds, header, banners, transcript, scroll, com
           </h1>
           {header.badges}
         </div>
-        {(header.stats || header.actions) && (
+        {(header.stats || header.actions || browserSessionID) && (
           <div className="flex min-w-0 items-center gap-3">
             {header.stats}
             <SessionActionBar testId={testIds.actions}>
+              <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0"
+                onClick={() => setToolsOpen(true)} disabled={!browserSessionID}
+                aria-label="Open live browser" title="Browser / Minichats / Terminal"
+                aria-expanded={toolsOpen} data-testid="opencode-live-browser-open">
+                <Globe aria-hidden="true" className="h-3.5 w-3.5" />
+              </Button>
               {header.actions}
             </SessionActionBar>
           </div>
         )}
       </header>
 
-      <div className={inspector?.constrainBanners ? "max-h-[25%] shrink-0 overflow-y-auto" : "contents"}>
+      <div className={toolsOpen ? "max-h-[25%] shrink-0 overflow-y-auto" : "contents"}>
         {banners}
       </div>
 
@@ -169,7 +177,8 @@ export function SessionShell({ testIds, header, banners, transcript, scroll, com
             </button>
           )}
         </div>
-        {inspector?.desktop}
+        <div className={toolsOpen ? "hidden" : "contents"}>{inspector?.desktop}</div>
+        {toolsOpen && browserSessionID && <RightToolsPanel key={browserSessionID} sessionID={browserSessionID} onClose={() => setToolsOpen(false)} />}
       </div>
 
       <footer
