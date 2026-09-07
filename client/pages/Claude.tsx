@@ -74,7 +74,7 @@ export function ClaudePage() {
               <label className="grid gap-1.5 text-sm">
                 Model preset
                 <select className="h-11 rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3" value={presetId} onChange={(event) => { setPresetId(event.target.value); setConfirmedBuild(false); }} data-testid="claude-preset">
-                  {config.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label} · {preset.mode} ({preset.model}{preset.effort ? `/${preset.effort}` : ""})</option>)}
+                  {config.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
                 </select>
               </label>
               <label className="grid gap-1.5 text-sm">
