@@ -25,6 +25,16 @@ a web frontend for an agent server you already run.
 It is deliberately **not** a replacement for the `opencode` CLI. Both are clients of
 the same server and can be attached at the same time, watching the same sessions.
 
+OpenCode, Claude, and DSH conversation pages share a Codex-inspired right tools panel,
+opened with the globe button in every island's session toolbar. Its live Browser drives
+a server-side Chromium page that persists per conversation. New pages start at
+`https://leoncheng.dev`; reopening keeps the current page. Transcript web links carry a
+browser icon and open in this same panel (including pasted URLs in user messages).
+**Minichats** and **Terminal** are
+currently clearly marked work-in-progress destinations rather than simulated functionality.
+On desktop Browser replaces the Inspector in the layout, and on phones it becomes a
+safe-area-aware full-screen surface.
+
 ## Playbooks
 
 The Runner's native **Playbooks** section at `/playbooks` catalogs the live **composer
@@ -420,6 +430,17 @@ The BFF additionally canonicalizes every browser-provided workspace path beneath
 `PROJECTS_DIR` or `OPENCODE_WORKTREE_ROOT`. The preview tunnel is disabled unless
 `PREVIEW_ALLOWED_PORTS` explicitly allows a localhost port, and it never forwards
 cookies, authorization, host headers or OpenCode credentials.
+
+The optional live Browser is disabled unless `LIVE_BROWSER_ENABLED=true`. It uses a separate
+server-side Chromium process and persistent credential profile, not the localhost preview.
+HTTP(S), subresources and WebSockets are refused when they target loopback, private, link-local,
+CGNAT or cloud-metadata addresses; unsafe protocols and downloads are blocked, service workers
+and speculative connections are disabled, and WebRTC is constrained to avoid non-proxied UDP.
+The profile root must grant no group/other access or Browser launch fails; Chromium-created
+descendants remain protected by that root. Unexpected symlinks and foreign owners are refused.
+URL/DNS checks do not pin Chromium's DNS resolution; use deployment-level egress controls
+where hostile sites or DNS rebinding are in scope. This is not a network sandbox.
+Only the visible page streams; hidden pages freeze and are reaped after the configured idle time.
 
 Note that permission precedence is **last-match-wins**, the opposite of most ACL
 systems. Broad rules first, specific overrides after.

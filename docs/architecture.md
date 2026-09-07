@@ -13,6 +13,7 @@ flowchart TD
   BFF --> OpenCode[opencode serve :4096]
   BFF --- Boundary[Credentials, directory validation, SSE fan-out]
   BFF --- Integrations[Local Git, GitHub/GitLab, ntfy, preview proxy]
+  BFF --> ManagedBrowser[Optional managed Chromium: one page per conversation]
   OpenCode --- Sessions[One process for every project; sessions use directory]
   OpenCode --- Tools[Agent tools execute on the host user]
 ```
@@ -98,6 +99,7 @@ rather than presenting a plausible guess as fact.
 | Git worktrees and repository state | Host | Local filesystem and Git |
 | Global event subscriptions | BFF | Process lifetime |
 | Sub-agent state | BFF | Derived per request; never stored |
+| Live Browser pages and cookie jar | BFF-managed Chromium | Per-session pages; persistent private profile |
 
 ## Safety boundary
 
@@ -113,6 +115,9 @@ The BFF adds narrower boundaries around browser-controlled input:
 - OpenCode and forge credentials remain server-side.
 - The preview proxy accepts only explicitly allowlisted localhost ports and strips sensitive
   request headers.
+- The live Browser is off by default; HTTP(S), subresources and WebSockets share one
+  private-network policy, its credential profile is host-private, and only its visible page
+  streams while hidden pages freeze.
 - Plan/Build policy activation and prompt submission are serialized per directory and session.
 - Unknown event types are tolerated because the global stream contains events outside the
   typed client union.
@@ -128,6 +133,7 @@ The BFF adds narrower boundaries around browser-controlled input:
 | Notifications | `server/notifications.ts`, `client/lib/useNotificationCenter.tsx` | Manual-only resolution semantics |
 | Sub-agent state or controls | `server/opencode/subagents.ts` | Evidence precedence and honest `unknown` rows |
 | Preview behavior | `server/preview.ts` | Port allowlist and stripped credentials |
+| Live Browser or right tools panel | `server/browser/`, `client/components/right-tools-panel.tsx` | Private-network policy, private profile, one visible stream |
 | Deployment | `deploy/README.md`, `scripts/launchd.ts` | One supervised BFF and one existing OpenCode server |
 
 ## Verification architecture

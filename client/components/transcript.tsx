@@ -9,7 +9,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ChangeModal } from "./change-modal.js";
-import { Markdown } from "../ds/markdown.js";
+import { LinkifiedText, Markdown } from "../ds/markdown.js";
 import { Badge } from "../ds/badge.js";
 import { FileReference } from "../ds/file-reference.js";
 import { cn } from "../ds/utils.js";
@@ -290,7 +290,7 @@ function UserBubble({ event, onExport }: { event: UserEvent; onExport?: (event: 
           )}
           data-testid="opencode-user-message-body"
         >
-          {event.text && <pre className="whitespace-pre-wrap break-words font-sans leading-relaxed">{event.text}</pre>}
+          {event.text && <pre className="whitespace-pre-wrap break-words font-sans leading-relaxed"><LinkifiedText text={event.text} /></pre>}
           <Attachments items={event.attachments} />
         </div>
       )}

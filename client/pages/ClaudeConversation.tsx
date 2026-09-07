@@ -477,6 +477,7 @@ export function ClaudeConversationPage() {
 
   return (
     <SessionShell
+      browserSessionID={id}
       testIds={{
         root: "claude-conversation",
         transcript: "claude-transcript",

@@ -117,6 +117,7 @@ export function DshConversationPage() {
   return (
     <>
     <SessionShell
+      browserSessionID={id}
       testIds={{
         root: "dsh-conversation",
         transcript: "dsh-transcript",

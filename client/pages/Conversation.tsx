@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Boxes, ChevronDown, FolderOpen, GitPullRequest, Globe, Info, MessageSquareText, OctagonX, PersonStanding, Share2, WrapText } from "lucide-react";
+import { Boxes, ChevronDown, FolderOpen, GitPullRequest, Info, MessageSquareText, OctagonX, PersonStanding, Share2, WrapText } from "lucide-react";
 
 import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
@@ -10,7 +10,6 @@ import { SessionShell } from "../components/session-shell.js";
 import { SessionOverflowMenu } from "../components/session-overflow-menu.js";
 import { SessionInspector } from "../components/session-inspector.js";
 import { WorkspacePanels } from "../components/workspace-panels.js";
-import { LiveBrowserDrawer } from "../components/live-browser-drawer.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { AutoPermissionsControl } from "../components/auto-permissions-control.js";
 import { ModelPicker } from "../components/model-picker.js";
@@ -74,7 +73,6 @@ export function ConversationPage() {
   const [sending, setSending] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [liveBrowserOpen, setLiveBrowserOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<"files" | "changes">("files");
   const [workspaceTarget, setWorkspaceTarget] = useState<WorkspaceTarget | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -531,6 +529,7 @@ export function ConversationPage() {
 
   return (
     <SessionShell
+      browserSessionID={id}
       testIds={{
         root: "opencode-conversation",
         title: "opencode-session-title",
@@ -592,17 +591,6 @@ export function ConversationPage() {
             data-testid="opencode-mobile-workspace-open"
           >
             <FolderOpen aria-hidden="true" className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="md"
-            variant="ghost"
-            className="min-h-11 min-w-12 px-0"
-            onClick={() => setLiveBrowserOpen(true)}
-            aria-label="Open live browser"
-            title="Open live browser"
-            data-testid="opencode-live-browser-open"
-          >
-            <Globe aria-hidden="true" className="h-3.5 w-3.5" />
           </Button>
           <Button
             size="md"
@@ -950,7 +938,6 @@ export function ConversationPage() {
       }}
       overlays={(
         <>
-      {liveBrowserOpen && <LiveBrowserDrawer sessionID={id ?? ""} onClose={() => setLiveBrowserOpen(false)} />}
       {workspaceOpen && (
         <WorkspacePanels
           directory={directory}

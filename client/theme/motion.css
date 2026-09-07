@@ -1,0 +1,15 @@
+/* Shared interaction timing. Inherit through light/dark themes unchanged. */
+:root {
+  --motion-duration-fast: 150ms;
+  --motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.ds-panel-motion {
+  transition-property: width, opacity, transform;
+  transition-duration: var(--motion-duration-fast);
+  transition-timing-function: var(--motion-easing-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-panel-motion { transition: none; }
+}

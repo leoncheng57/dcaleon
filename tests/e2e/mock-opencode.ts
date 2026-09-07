@@ -264,6 +264,7 @@ const messages = new Map<string, unknown[]>([
   // avoid. The toolbar spec asserts on the cost and context readouts, which are
   // derived from message usage, so an empty transcript would not do.
   ["ses_mock_toolbar", structuredClone(fixture)],
+  ["ses_mock_right_tools", structuredClone(fixture)],
   [PARENT_ID, parentMessages()],
   [CHILD_RUNNING, [
     { info: { id: "msg_cr_1", role: "user", agent: "explore", time: { created: 1787400001500 } }, parts: [{ id: "prt_cr_1", messageID: "msg_cr_1", type: "text", text: "Audit the parser" }] },
@@ -402,6 +403,7 @@ const AUTO_DIRECTORY_INPUT = "/tmp/mock-auto-project";
 // the same directory will flip it under each other, so each such file owns a
 // directory of its own. This one belongs to conversation-toolbar.ui.spec.ts.
 const TOOLBAR_DIRECTORY_INPUT = "/tmp/mock-toolbar-project";
+const RIGHT_TOOLS_DIRECTORY_INPUT = "/tmp/mock-right-tools-project";
 // Parked-permission state is per-directory too, and the same parallel-files rule
 // applies to it: smoke.ui.spec.ts owns MOCK_DIRECTORY, smoke.api.spec.ts owns this
 // one. Only an owner can assert an exact pending list, because any other file
@@ -433,6 +435,7 @@ mkdirSync(MOCK_DIRECTORY_INPUT, { recursive: true });
 mkdirSync(SECOND_DIRECTORY_INPUT, { recursive: true });
 mkdirSync(AUTO_DIRECTORY_INPUT, { recursive: true });
 mkdirSync(TOOLBAR_DIRECTORY_INPUT, { recursive: true });
+mkdirSync(RIGHT_TOOLS_DIRECTORY_INPUT, { recursive: true });
 mkdirSync(API_PERMISSION_DIRECTORY_INPUT, { recursive: true });
 mkdirSync(TOOL_FAILURE_DIRECTORY_INPUT, { recursive: true });
 mkdirSync(CATALOGUE_FAILURE_DIRECTORY_INPUT, { recursive: true });
@@ -442,6 +445,7 @@ export const MOCK_DIRECTORY = realpathSync(MOCK_DIRECTORY_INPUT);
 export const SECOND_DIRECTORY = realpathSync(SECOND_DIRECTORY_INPUT);
 const AUTO_DIRECTORY = realpathSync(AUTO_DIRECTORY_INPUT);
 export const TOOLBAR_DIRECTORY = realpathSync(TOOLBAR_DIRECTORY_INPUT);
+const RIGHT_TOOLS_DIRECTORY = realpathSync(RIGHT_TOOLS_DIRECTORY_INPUT);
 const API_PERMISSION_DIRECTORY = realpathSync(API_PERMISSION_DIRECTORY_INPUT);
 const TOOL_FAILURE_DIRECTORY = realpathSync(TOOL_FAILURE_DIRECTORY_INPUT);
 const CATALOGUE_FAILURE_DIRECTORY = realpathSync(CATALOGUE_FAILURE_DIRECTORY_INPUT);
@@ -593,6 +597,14 @@ const SESSIONS: Array<Record<string, any>> = [
     model: { providerID: "anthropic", id: "claude-opus-5" },
     cost: 0.0431,
     tokens: { input: 110, output: 940, reasoning: 250, cache: { read: 10400, write: 800 } },
+    time: { created: 1787000000000, updated: 1787000012000 },
+  },
+  {
+    id: "ses_mock_right_tools",
+    title: "Review the browser panel",
+    directory: RIGHT_TOOLS_DIRECTORY,
+    agent: "build",
+    model: { providerID: "anthropic", id: "claude-opus-5" },
     time: { created: 1787000000000, updated: 1787000012000 },
   },
   {

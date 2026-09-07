@@ -21,6 +21,21 @@ test("serves an interactive, credential-free PR simulator", async ({ page }) => 
   await expect(page.getByTestId("opencode-transcript")).toContainText("All verification passed");
   await expect(page.getByTestId("opencode-todo-list")).toContainText("Review the PR deployment");
 
+  // The public preview renders the real shared right-panel shell, but the
+  // Browser destination is a deterministic unavailable fixture: no Chromium
+  // process or browser API is started in the credential-free simulator.
+  await page.getByTestId("opencode-live-browser-open").click();
+  await expect(page.getByTestId("opencode-right-tools-panel")).toHaveAttribute("data-destination", "browser");
+  await expect(page.getByTestId("opencode-live-browser-simulator")).toContainText("Live browser unavailable in the simulator");
+  await page.getByTestId("opencode-right-tools-selector").click();
+  await page.getByTestId("opencode-right-tools-minichats").click();
+  await expect(page.getByTestId("opencode-minichats-wip")).toContainText("Work in progress");
+  await page.getByTestId("opencode-right-tools-selector").click();
+  await page.getByTestId("opencode-right-tools-terminal").click();
+  await expect(page.getByTestId("opencode-terminal-wip")).toContainText("Work in progress");
+  await page.getByTestId("opencode-right-tools-close").click();
+  await expect(page.getByTestId("opencode-right-tools-panel")).toHaveCount(0);
+
   await page.goto("./#/playbooks/workflows");
   await expect(page.getByTestId("opencode-playbook-workflow-card")).toHaveCount(14);
   await page.getByTestId("opencode-playbook-workflow-start-dca-session").click();
