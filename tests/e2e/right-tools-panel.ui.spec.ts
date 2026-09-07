@@ -55,12 +55,26 @@ for (const runtime of ["claude", "dsh"] as const) {
   for (const phone of [false, true]) {
     test(`${runtime} shares Browser, Minichats and Terminal on ${phone ? "phone" : "desktop"}`, async ({ page }) => {
       await page.setViewportSize({ width: phone ? 390 : 1440, height: 800 });
+      if (runtime === "claude") await page.route("**/api/claude/usage", (route) => route.fulfill({ json: {
+        available: true, session: { utilization: 42, resetsAt: null }, weekly: { utilization: 17, resetsAt: null },
+        weeklyByModel: {}, subscriptionType: "max", rateLimitTier: "default",
+      } }));
       await page.goto(`/${runtime}`);
       await page.getByTestId(`${runtime}-create`).click();
       await expect(page).toHaveURL(new RegExp(`/${runtime}/sessions/${runtime}-`));
       const sessionID = new URL(page.url()).pathname.split("/").at(-1)!;
       const fixture = await mockBrowser(page, sessionID);
       const opener = page.getByTestId("opencode-live-browser-open");
+      if (runtime === "claude") {
+        const usage = page.getByTestId("claude-usage-trigger");
+        await expect(usage).toBeVisible();
+        if (phone) {
+          const usageBounds = (await usage.boundingBox())!;
+          const openerBounds = (await opener.boundingBox())!;
+          expect(usageBounds.y + usageBounds.height).toBeLessThanOrEqual(openerBounds.y);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      }
       const inspector = page.getByTestId("opencode-session-inspector");
       if (!phone) await expect(inspector).toBeVisible();
       await opener.click();
