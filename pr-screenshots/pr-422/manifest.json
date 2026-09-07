@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 422,
+  "sourceSha": "7c596529661722cb5cd74b6dfe4cfc457418678a",
+  "capturedAt": "2026-09-07T06:09:26.105Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/claude",
+      "fullPage": false,
+      "captures": {
+        "desktop": {
+          "filename": "01-claude-065edbf8--desktop.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 68745,
+          "sha256": "15ccf390614ea21933176f277e56e59c0c7bace282851974dc413d5951569170"
+        },
+        "mobile": {
+          "filename": "01-claude-9754c109--mobile.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 63257,
+          "sha256": "69f0881da6cebeb83c9f99dc2370ad3a88bbd0d4be23914aabb1ca37a4a5d1d5"
+        }
+      }
+    }
+  ]
+}
