@@ -35,6 +35,13 @@ currently clearly marked work-in-progress destinations rather than simulated fun
 On desktop Browser replaces the Inspector in the layout, and on phones it becomes a
 safe-area-aware full-screen surface.
 
+## Design components
+
+Open **More → Design components** (`/design-components`) for the mobile-first live
+gallery. Shared panels, selectors, state views, and motion use the same primitives
+as the real tools panel. See the [component guide](docs/design-components/README.md)
+for composition and contribution rules. Examples use local state, not feature APIs.
+
 ## Playbooks
 
 The Runner's native **Playbooks** section at `/playbooks` catalogs the live **composer

@@ -39,7 +39,7 @@ export function PanelSelector<T extends string>({ options, value, onChange, test
     }} onKeyDown={(event) => {
       if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(); }
     }}>
-      <Button ref={trigger} variant="ghost" size="sm" type="button" className="gap-2 px-2"
+      <Button ref={trigger} variant="ghost" size="sm" type="button" className="min-h-11 gap-2 px-2"
         aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)} data-testid={testId}>
         {active?.icon}{active?.label}{active?.wip && <Badge>WIP</Badge>}<ChevronDown size={14} aria-hidden="true" />
       </Button>

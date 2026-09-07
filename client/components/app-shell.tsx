@@ -36,6 +36,7 @@ function documentTitle(pathname: string): string {
   if (pathname === "/settings/notifications") return `Notifications | ${APP_NAME}`;
   if (pathname === "/tools") return `MCPs | ${APP_NAME}`;
   if (pathname === "/docs") return `Docs | ${APP_NAME}`;
+  if (pathname === "/design-components") return `Design components | ${APP_NAME}`;
   if (pathname.startsWith("/docs/")) return `${getDoc(pathname.slice("/docs/".length))?.title ?? "Document"} | ${APP_NAME}`;
   if (pathname === "/planning") return `Planning | ${APP_NAME}`;
   if (pathname === "/observability") return `Observability | ${APP_NAME}`;
@@ -151,6 +152,7 @@ export function AppShell() {
       { id: "opencode", title: "OpenCode", to: scopedPath("/opencode"), keywords: ["sessions", "hub", "projects", "opencode"] },
       { id: "tools", title: "MCPs", to: scopedPath("/tools"), keywords: ["mcp", "lsp", "permissions", "tools"] },
       { id: "docs", title: "Docs", to: scopedPath("/docs"), keywords: ["architecture", "contributing", "internals"] },
+      { id: "design-components", title: "Design components", to: "/design-components", keywords: ["design system", "mobile", "panels", "gallery"] },
       {
         id: "notifications",
         title: "Notifications",
@@ -203,7 +205,7 @@ export function AppShell() {
   return (
     <div className="h-full min-h-0">
       <div className="flex h-full min-h-0 flex-col" inert={paletteOpen ? true : undefined}>
-        <nav className="flex h-11 shrink-0 items-center gap-1 border-b border-[var(--color-border-default)] px-3" aria-label="Main">
+        <nav className="flex h-11 shrink-0 items-center gap-0 border-b border-[var(--color-border-default)] px-2 min-[360px]:gap-1 min-[360px]:px-3" aria-label="Main">
           <NavLink to="/" className="text-sm font-bold tracking-tight" data-testid="opencode-nav-home">
             DCA
           </NavLink>

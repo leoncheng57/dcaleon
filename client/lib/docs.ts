@@ -20,6 +20,14 @@ export const DOC_CATEGORY_ORDER: DocCategory[] = ["start", "architecture", "oper
 
 export const DOCS: DocDefinition[] = [
   {
+    slug: "design-components-guide",
+    title: "Design components guide",
+    description: "Mobile-first component conventions, shared panels, states, motion, and the live gallery.",
+    category: "architecture",
+    sourcePath: "docs/design-components/README.md",
+    load: () => import("../../docs/design-components/README.md?raw").then((module) => module.default),
+  },
+  {
     slug: "architecture",
     title: "Architecture",
     description: "Topology, request and event flows, state ownership, safety boundaries, and extension seams.",

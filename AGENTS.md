@@ -1225,6 +1225,12 @@ several decisions below.
 
 ## Client conventions (inherited from the OpenHands runner, still enforced)
 
+- **Design components are mobile-first.** Begin at 320–390px with reachable 44px
+  coarse-pointer actions, then enhance desktop. Keep layout/focus in ResponsivePanel,
+  destination disclosure in PanelSelector, and state views in PanelState. Feature
+  APIs stay outside these primitives. Extend `/design-components` and
+  `docs/design-components/README.md` together; reuse semantic colors and motion tokens.
+
 - `client/ds/` primitives are forwardRef + `cn()` + semantic `var(--color-*)` tokens
   only. **Never raw hex.**
 - Every interactive element carries a `data-testid`.
