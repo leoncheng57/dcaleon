@@ -410,6 +410,40 @@ describe("usage", () => {
       tokens: { input: 100, output: 900, reasoning: 250, cacheRead: 10000, cacheWrite: 750, total: 12000 },
     });
   });
+
+  it("attaches final message metrics and a cumulative cost to agent prose", () => {
+    const transcript = normalizeTranscript([
+      {
+        info: { id: "assistant-one", role: "assistant", time: { created: 1_000, completed: 3_500 } },
+        parts: [
+          { id: "text-one", type: "text", text: "First" },
+          { id: "finish-one", type: "step-finish", cost: 0.0012, tokens: { input: 10, output: 4 } },
+        ],
+      },
+      {
+        info: { id: "assistant-two", role: "assistant", time: { created: 4_000, completed: 5_000 } },
+        parts: [
+          { id: "text-two-a", type: "text", text: "Second A" },
+          { id: "finish-two-a", type: "step-finish", cost: 0.002, tokens: { input: 20, output: 5, cache: { read: 6 } } },
+          { id: "text-two-b", type: "text", text: "Second B" },
+          { id: "finish-two-b", type: "step-finish", cost: 0.003, tokens: { input: 30, output: 7, reasoning: 2 } },
+        ],
+      },
+    ]);
+    const prose = transcript.events.filter((event) => event.kind === "agent");
+    expect(prose[0]).toMatchObject({ messageCost: 0.0012, cumulativeCost: 0.0012, messageDurationMs: 2_500 });
+    expect(prose[1]).not.toHaveProperty("messageCost");
+    expect(prose[2]).toMatchObject({
+      messageCost: 0.005,
+      cumulativeCost: 0.0062,
+      messageDurationMs: 1_000,
+      inputTokens: 50,
+      outputTokens: 12,
+      reasoningTokens: 2,
+      cacheReadTokens: 6,
+      cacheWriteTokens: 0,
+    });
+  });
 });
 
 describe("toolDetail", () => {
@@ -481,7 +515,11 @@ describe("frozen contract", () => {
   // server before being written down.
   const ALLOWED: Record<string, string[]> = {
     user: ["kind", "id", "messageId", "timestamp", "text", "reminders", "workflows", "attachments", "mode"],
-    agent: ["kind", "id", "messageId", "timestamp", "text", "mode"],
+    agent: [
+      "kind", "id", "messageId", "timestamp", "text", "mode",
+      "messageCost", "cumulativeCost", "messageDurationMs", "inputTokens", "outputTokens",
+      "reasoningTokens", "cacheReadTokens", "cacheWriteTokens",
+    ],
     thought: ["kind", "id", "messageId", "timestamp", "text", "durationMs"],
     tool: [
       "kind", "id", "messageId", "timestamp", "status", "name",
