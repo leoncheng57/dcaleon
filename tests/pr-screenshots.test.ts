@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { decidePublication, MAX_ROUTE_LENGTH, MAX_SCREENSHOTS, parseScreenshotBlock, resolveCaptureConfig, screenshotFilename, screenshotRequestLabel } from "../scripts/pr-screenshots.js";
+import { decidePublication, MAX_ROUTE_LENGTH, MAX_SCREENSHOTS, parseScreenshotBlock, resolveCaptureConfig, SCREENSHOT_ROUTES, screenshotFilename, screenshotRequestLabel, screenshotStableRoot } from "../scripts/pr-screenshots.js";
 
 describe("screenshot E2E discovery", () => {
   it("skips ordinary E2E discovery but fails when capture config is required", () => {
@@ -98,6 +98,39 @@ describe("PR screenshot requests", () => {
       .toThrow(/not a known UI route/u);
     expect(() => parseScreenshotBlock("```screenshots\n/playbooks/commands/verify\n```"))
       .toThrow(/not a known UI route/u);
+  });
+
+  it("gives every capturable route a stable root testid", () => {
+    // The bug this locks: /dsh (#253) and later /claude were allowlisted while the
+    // capture spec still fell through to `opencode-hub`, so the route validated and
+    // then burned a Playwright timeout on a testid its page never renders. Any route
+    // reachable through parsing must resolve to a wait target.
+    for (const { pattern, stableRoot } of SCREENSHOT_ROUTES) {
+      expect(stableRoot, `${pattern} maps to an empty stable root`).toMatch(/^[a-z][a-z0-9-]*$/u);
+    }
+    expect(screenshotStableRoot("/nope")).toBeNull();
+  });
+
+  it("keeps stable-root patterns anchored and mutually exclusive", () => {
+    // Ordering is presentation only, which is true exactly while no two patterns can
+    // match one pathname. An overlap would let an earlier entry shadow a later route's
+    // stable root, reintroducing the wrong-wait failure by a different route.
+    for (const { pattern } of SCREENSHOT_ROUTES) {
+      expect(pattern.source.startsWith("^"), `${pattern} must be anchored at the start`).toBe(true);
+      expect(pattern.source.endsWith("$"), `${pattern} must be anchored at the end`).toBe(true);
+    }
+    const samples = ["/", "/sessions/ses_1", "/settings", "/settings/notifications", "/tools", "/docs", "/docs/architecture", "/planning", "/observability", "/playbooks", "/playbooks/workflows", "/playbooks/workflows/start-dca-session", "/playbooks/reminders", "/playbooks/reminders/session-handoff", "/dsh", "/dsh/sessions/dsh-mock-1"];
+    for (const sample of samples) {
+      const matches = SCREENSHOT_ROUTES.filter((route) => route.pattern.test(sample));
+      expect(matches, `${sample} should match exactly one pattern`).toHaveLength(1);
+    }
+  });
+
+  it("accepts Playbooks reminder detail routes alongside their workflow twin", () => {
+    // Decision 31 documents both categories at 1:1, so the reminder half is capturable.
+    expect(parseScreenshotBlock("```screenshots\n/playbooks/reminders\n/playbooks/reminders/session-handoff\n```").requests)
+      .toHaveLength(2);
+    expect(screenshotStableRoot("/playbooks/reminders/session-handoff")).toBe("opencode-playbooks");
   });
 
   it("accepts the DSH lab and one DSH conversation, but not an arbitrary DSH path", () => {

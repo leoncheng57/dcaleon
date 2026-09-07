@@ -1193,6 +1193,20 @@ widths. The sticky comment renders `Route`, `Desktop`, and `Mobile` columns. Req
 limited to 10 known UI routes and reject whitespace, controls, schemes, hosts,
 backslashes, malformed encoding, and path traversal.
 
+**A capturable route and its wait target are one table.** `SCREENSHOT_ROUTES` in
+`scripts/pr-screenshots.ts` pairs each allowlisted pattern with the testid that proves
+its page rendered, and both the validator and the capture spec read it. They used to be
+an allowlist here and a ternary chain in the spec, and the pair drifted twice — `/dsh`
+(#253) and then `/claude` were allowlisted while the spec still fell through to a default
+`opencode-hub`. That failure mode is expensive to read: the route validates, then the run
+burns a full Playwright visibility timeout on a testid the page never renders, which
+looks like a flaky capture rather than a missing map entry. So there is no default arm;
+`screenshotStableRoot()` returns `null` and validation rejects the route at parse time.
+Patterns must stay anchored and mutually exclusive, because an overlap would let an
+earlier entry shadow a later route's stable root and reintroduce the wrong wait — a
+route whose testid differs per depth needs one pattern per depth (`/docs` vs `/docs/:slug`),
+not one pattern with an optional tail.
+
 The read-only `pull_request` workflow runs the production SPA and BFF against only the
 fixed Playwright OpenCode and forge mocks. A separate default-branch `workflow_run`
 publisher treats the artifact as untrusted, validates its manifest and PNGs, writes only

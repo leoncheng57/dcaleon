@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { resolveCaptureConfig, screenshotRequestLabel, SCREENSHOT_VIEWPORTS, VIEWPORTS, type ScreenshotRequest } from "../../scripts/pr-screenshots.js";
+import { resolveCaptureConfig, screenshotRequestLabel, screenshotStableRoot, SCREENSHOT_VIEWPORTS, VIEWPORTS, type ScreenshotRequest } from "../../scripts/pr-screenshots.js";
 
 const config = resolveCaptureConfig(process.env, process.env.PR_SCREENSHOT_CAPTURE_REQUIRED === "true");
 const requests = config
@@ -25,30 +25,12 @@ test.describe("requested PR screenshots", () => {
         expect(response?.ok(), `route ${request.requestedRoute} should load`).toBe(true);
 
         const pathname = new URL(request.requestedRoute, "http://screenshot.invalid").pathname;
-        const stableRoot = pathname.startsWith("/sessions/")
-          ? "opencode-conversation"
-          : pathname === "/settings/notifications"
-            ? "opencode-notifications"
-            : pathname === "/settings"
-              ? "opencode-settings"
-              : pathname === "/observability"
-        ? "opencode-observability"
-        : pathname === "/tools"
-                ? "opencode-tools"
-                : pathname === "/planning"
-                  ? "opencode-planning"
-                : pathname === "/docs"
-                  ? "opencode-docs"
-                : pathname.startsWith("/docs/")
-                  ? "opencode-doc"
-                    : pathname.startsWith("/playbooks")
-                      ? "opencode-playbooks"
-                    : pathname === "/dsh"
-                      ? "dsh-home"
-                    : pathname.startsWith("/dsh/sessions/")
-                      ? "dsh-conversation"
-                      : "opencode-hub";
-        await expect(page.getByTestId(stableRoot)).toBeVisible();
+        const stableRoot = screenshotStableRoot(pathname);
+        // Unreachable via the runner, which validates every route against the same
+        // table. Asserted anyway so a hand-written request file names the missing
+        // map entry instead of timing out on whatever a fallback guessed.
+        expect(stableRoot, `route ${request.requestedRoute} has no stable root testid in SCREENSHOT_ROUTES`).not.toBeNull();
+        await expect(page.getByTestId(stableRoot as string)).toBeVisible();
         if (pathname === "/planning") {
           await expect(page.getByTestId("opencode-planning-list")).toBeVisible();
           if (new URL(request.requestedRoute, "http://screenshot.invalid").searchParams.get("create") === "1") {
