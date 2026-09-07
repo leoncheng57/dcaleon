@@ -6,7 +6,7 @@ import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { LoadingIndicator } from "../ds/loading-indicator.js";
-import { RunningIndicator, Transcript } from "../components/transcript.js";
+import { SessionShell } from "../components/session-shell.js";
 import { SessionInspector } from "../components/session-inspector.js";
 import { WorkspacePanels } from "../components/workspace-panels.js";
 import { LiveBrowserDrawer } from "../components/live-browser-drawer.js";
@@ -42,6 +42,7 @@ import {
   type ModelCatalogue,
   type ModelSelection,
 } from "../lib/models.js";
+import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
 
 const WRAP_KEY = "opencode.wrapOutput.v1";
 const APP_NAME = "DCA";
@@ -109,15 +110,9 @@ export function ConversationPage() {
   const derivedModelMarker = useRef<string | undefined>(undefined);
   const modelSelectionDirty = useRef(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const transcriptScrollerRef = useRef<HTMLDivElement | null>(null);
-  const transcriptContentRef = useRef<HTMLDivElement | null>(null);
-  const followingTranscript = useRef(true);
-  const transcriptScrollInitialized = useRef(false);
-  const transcriptHeight = useRef(0);
-  const [newActivity, setNewActivity] = useState(false);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   const [composerCollapsed, setComposerCollapsed] = useState(false);
-  const composerCardRef = useRef<HTMLDivElement | null>(null);
+  const composerCardRef = useRef<HTMLFormElement | null>(null);
   const [autoSafetyOpen, setAutoSafetyOpen] = useState(false);
   const collapseGuard = useRef(createComposerCollapseGuard());
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
@@ -457,66 +452,7 @@ export function ConversationPage() {
   // Follow live output only while the reader remains near the bottom. Depending
   // on the event array (not its length) also covers a streaming row growing in
   // place rather than only newly appended rows.
-  useLayoutEffect(() => {
-    const scroller = transcriptScrollerRef.current;
-    if (!scroller) return;
-    if (!transcriptScrollInitialized.current || followingTranscript.current) {
-      scroller.scrollTop = scroller.scrollHeight;
-      transcriptScrollInitialized.current = true;
-      setNewActivity(false);
-    } else {
-      setNewActivity(true);
-    }
-  }, [events]);
-
-  useEffect(() => {
-    const scroller = transcriptScrollerRef.current;
-    const content = transcriptContentRef.current;
-    if (!scroller || !content || typeof ResizeObserver === "undefined") return;
-    followingTranscript.current = true;
-    transcriptScrollInitialized.current = false;
-    transcriptHeight.current = 0;
-    setNewActivity(false);
-    let frame = 0;
-    const sync = () => {
-      frame = 0;
-      const grew = scroller.scrollHeight > transcriptHeight.current;
-      transcriptHeight.current = scroller.scrollHeight;
-      if (followingTranscript.current) {
-        scroller.scrollTop = scroller.scrollHeight;
-        setNewActivity(false);
-      } else if (grew) {
-        setNewActivity(true);
-      }
-    };
-    const observer = new ResizeObserver(() => {
-      if (frame) cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(sync);
-    });
-    observer.observe(scroller);
-    observer.observe(content);
-    sync();
-    return () => {
-      observer.disconnect();
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, [directory, id]);
-
-  const updateTranscriptFollow = () => {
-    const scroller = transcriptScrollerRef.current;
-    if (!scroller) return;
-    const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 96;
-    followingTranscript.current = nearBottom;
-    if (nearBottom) setNewActivity(false);
-  };
-
-  const jumpToLatest = () => {
-    const scroller = transcriptScrollerRef.current;
-    if (!scroller) return;
-    followingTranscript.current = true;
-    setNewActivity(false);
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
-  };
+  const follow = useTranscriptFollow(events, `${directory}\0${id}`);
 
   // The composer grows with its content instead of showing a resize grabber.
   // `min-h-24` still floors the box, so a one-line draft keeps the same 96px
@@ -625,17 +561,26 @@ export function ConversationPage() {
   }
 
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="opencode-conversation">
-      {/* The session title owns the header context. The same action set follows
-          it at every width so changing viewport does not change the workflow. */}
-      <header className="flex shrink-0 flex-col gap-1.5 border-b border-[var(--color-border-default)] px-3 py-2 sm:px-4 sm:py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
+    <SessionShell
+      testIds={{
+        root: "opencode-conversation",
+        title: "opencode-session-title",
+        transcript: "opencode-transcript",
+        jumpToLatest: "opencode-jump-to-latest",
+        composerCard: "opencode-composer-card",
+        textarea: "opencode-composer",
+        send: "opencode-send",
+        actions: "opencode-mobile-conversation-actions",
+      }}
+      header={{
+        backLink: (
           <Link to={`/opencode?directory=${encodeURIComponent(directory)}`} className="hidden shrink-0 text-sm underline sm:inline">
             ← Sessions
           </Link>
-          <h1 className="min-w-0 flex-1 truncate text-sm font-semibold sm:text-base" data-testid="opencode-session-title">
-            {session?.title ?? "Session"}
-          </h1>
+        ),
+        title: session?.title ?? "Session",
+        badges: (
+          <>
           {/* A validated Managed Child was authorized by a human; an ordinary
               delegated child keeps the neutral badge. */}
           {parentID && (session?.managed
@@ -653,9 +598,9 @@ export function ConversationPage() {
           >
             <OctagonX aria-hidden="true" className="h-4 w-4" />
           </button>}
-        </div>
-
-        <div className="flex min-w-0 items-center gap-3">
+          </>
+        ),
+        stats: (
           <div className="hidden min-w-0 items-center gap-2 text-xs tabular-nums text-[var(--color-text-muted)] sm:flex">
             {session && session.cost > 0 && <span data-testid="opencode-session-cost">{formatCost(session.cost)}</span>}
             {contextTokens > 0 && (
@@ -665,7 +610,9 @@ export function ConversationPage() {
               </span>
             )}
           </div>
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:ml-auto sm:w-fit sm:flex-none" aria-label="Session actions" data-testid="opencode-mobile-conversation-actions">
+        ),
+        actions: (
+          <>
           <Button
             size="md"
             variant="ghost"
@@ -817,11 +764,11 @@ export function ConversationPage() {
               </div>
             )}
           </div>
-          </div>
-        </div>
-
-      </header>
-
+          </>
+        ),
+      }}
+      banners={(
+        <>
       {parentID && (
         <div className="px-3 pt-2 sm:px-4 sm:pt-3" data-testid="opencode-parent-link">
           <p className="rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-neutral-muted)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
@@ -898,33 +845,38 @@ export function ConversationPage() {
       {stream.questions.map((request) => (
         <QuestionRequest key={request.id} directory={directory} sessionID={id} request={request} onResolved={stream.refresh} />
       ))}
-
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div
-          ref={transcriptScrollerRef}
-          onScroll={updateTranscriptFollow}
-          className="thin-scrollbar relative min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 py-6 sm:px-6 sm:py-8"
-          data-testid="opencode-transcript"
-        >
-          {newActivity && (
-            <div
-              className="sticky z-10 flex h-0 justify-center"
-              style={{ top: "calc(100% - 3.5rem)" }}
-              data-testid="opencode-new-activity"
-            >
-              <Button
-                size="sm"
-                variant="secondary"
-                className="shadow-md"
-                onClick={jumpToLatest}
-                aria-label="Jump to latest activity"
-                data-testid="opencode-jump-to-latest"
-              >
-                Jump to latest
-              </Button>
-            </div>
-          )}
-          <div ref={transcriptContentRef} className="mx-auto min-w-0 max-w-3xl">
+        </>
+      )}
+      transcript={{
+        items,
+        wrap,
+        collapsedGroups,
+        onToggleGroup: toggleGroup,
+        onExport: exportMessage,
+        directory,
+        sessionId: id,
+        onOpenWorkspaceChanges: openWorkspaceChanges,
+        referenceProvider: (children) => (
+          <WorkspaceReferenceProvider directory={directory} resolved={resolvedReferences} onOpen={openWorkspaceTarget}>{children}</WorkspaceReferenceProvider>
+        ),
+        loaded: stream.loaded,
+        running: stream.running,
+        activity,
+        loadingState: <LoadingIndicator />,
+        emptyState: (
+          <p className="py-16 text-center text-sm text-[var(--color-text-muted)]">
+            No transcript events yet.
+          </p>
+        ),
+      }}
+      scroll={{
+        scrollerRef: follow.scrollerRef,
+        contentRef: follow.contentRef,
+        onScroll: follow.onScroll,
+        showNewActivity: follow.newActivity,
+        onJumpToLatest: follow.jumpToLatest,
+        beforeTranscript: (
+          <>
             {stream.loaded && stream.hasEarlier && (
               <div className="mb-6 flex justify-center">
                 <Button
@@ -944,56 +896,43 @@ export function ConversationPage() {
                 <Alert variant="danger">Could not load earlier messages: {stream.loadEarlierError}</Alert>
               </div>
             )}
-            {!stream.loaded ? (
-              <LoadingIndicator />
-            ) : items.length === 0 ? (
-              <p className="py-16 text-center text-sm text-[var(--color-text-muted)]">
-                No transcript events yet.
-              </p>
-            ) : (
-              <WorkspaceReferenceProvider
-                directory={directory}
-                resolved={resolvedReferences}
-                onOpen={openWorkspaceTarget}
-              >
-                <Transcript
-                  items={items}
-                  wrap={wrap}
-                  collapsedGroups={collapsedGroups}
-                  onToggleGroup={toggleGroup}
-                  onExport={exportMessage}
-                  directory={directory}
-                  sessionId={id}
-                  onOpenWorkspaceChanges={openWorkspaceChanges}
-                />
-              </WorkspaceReferenceProvider>
-            )}
-            {stream.running && (
-              <div className="mt-6">
-                <RunningIndicator activity={activity} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <SessionInspector
-          directory={directory}
-          sessionID={id}
-          events={events}
-          todos={stream.todos}
-          todosLoaded={stream.todosLoaded}
-          todosError={stream.todosError}
-          requestedTab={requestedInspectorTab}
-          mobileOpen={inspectorOpen}
-          onMobileClose={() => setInspectorOpen(false)}
-          modelCatalogue={modelCatalogue}
-          defaultModel={selectedModel}
-        />
-      </div>
-
-      <footer className="relative z-20 shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto max-w-3xl" ref={composerCardRef}>
-          {composerCollapsed ? (
+          </>
+        ),
+      }}
+      composer={{
+        draft,
+        onDraftChange: setDraft,
+        composerRef,
+        onKeyDown: submitOnEnter,
+        onFocus: () => {
+                setComposerCollapsed(false);
+                collapseGuard.current.markComposerFocus();
+              },
+        onBlur: () => {
+                requestAnimationFrame(() => {
+                  if (collapseGuard.current.shouldCollapseOnBlur({
+                    narrowViewport: window.matchMedia("(max-width: 639.98px)").matches,
+                    focusInsideComposer: composerCardRef.current?.contains(document.activeElement) ?? false,
+                  })) {
+                    setComposerCollapsed(true);
+                  }
+                });
+              },
+        onPaste: (event) => {
+                const images = [...event.clipboardData.items]
+                  .filter((item) => item.kind === "file")
+                  .map((item) => item.getAsFile())
+                  .filter((file): file is File => file !== null);
+                if (images.length) addAttachments(images);
+              },
+        placeholder: "Send a follow-up…",
+        disabled: false,
+        onSubmit: () => void send(),
+        submitLabel: sending ? "Sending…" : "Send",
+        submitDisabled: !canPrompt || sending || !draft.trim(),
+        wrapperRef: composerCardRef,
+        onControlsPointerDownCapture: () => collapseGuard.current.markControlInteraction(),
+        collapsedBar: composerCollapsed ? (
             <button
               type="button"
               className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[var(--color-border-default)] px-3 text-left text-sm text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)]"
@@ -1007,8 +946,9 @@ export function ConversationPage() {
               <span className="min-w-0 flex-1 truncate">{draft.trim() || "Write a follow-up"}</span>
               {attachments.length > 0 && <span className="text-xs">{attachments.length} attached</span>}
             </button>
-          ) : <>
-          <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2" onPointerDownCapture={() => collapseGuard.current.markControlInteraction()}>
+        ) : undefined,
+        modeControl: (
+          <>
             {session?.managed ? (
               <div className="flex min-h-10 items-center rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface-neutral-muted)] px-3 text-sm" data-testid="opencode-managed-child-agent-fixed">
                 Managed Child · <span className="ml-1 font-semibold">{session.managed.requestedAgent[0].toUpperCase() + session.managed.requestedAgent.slice(1)}</span>
@@ -1022,6 +962,9 @@ export function ConversationPage() {
             ) : (
               <AgentModeToggle mode={agentIdentityKnown ? mode : undefined} onChange={selectMode} disabled={!agentIdentityKnown} testId="opencode-composer-mode" />
             )}
+          </>
+        ),
+        modelPicker: (
             <ModelPicker
               catalogue={modelCatalogue}
               value={selectedModel}
@@ -1030,6 +973,9 @@ export function ConversationPage() {
               label="Model"
               midConversation={transcript.events.length > 0}
             />
+        ),
+        controlsRowEnd: (
+          <>
             <button
               type="button"
               className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)]"
@@ -1049,7 +995,10 @@ export function ConversationPage() {
                     ? `Verifying agent "${foreignAgent}" against the live roster…`
                     : "Agent identity unavailable; continue in the TUI or create a web session"}
             </span>
-          </div>
+          </>
+        ),
+        beforeTextarea: (
+          <>
           {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{attachments.map((attachment, index) => <button key={`${attachment.filename}-${index}`} type="button" onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="rounded border border-[var(--color-border-default)] px-2 py-1 text-xs" data-testid="opencode-attachment-chip">{attachment.filename} x</button>)}</div>}
           {attachments.length > 0 && selectedModelDetails && !selectedModelDetails.capabilities.image && (
             <p className="mb-2 text-xs text-[var(--color-text-warning)]" data-testid="opencode-model-image-warning">
@@ -1058,57 +1007,10 @@ export function ConversationPage() {
           )}
           {attachmentError && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert" data-testid="opencode-attachment-error">{attachmentError}</p>}
           {composerError && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert" data-testid="opencode-composer-error">{composerError}</p>}
-          {/* One card owns the border so the textarea and its controls share a
-              frame. Laying the controls out on their own rail is what keeps
-              them aligned: as flex siblings of the textarea they stretched to
-              its height, while the fixed-height Send button did not. */}
-          <div
-            className="min-w-0 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] transition-colors focus-within:border-[var(--color-border-focus)]"
-            data-testid="opencode-composer-card"
-          >
-            <textarea
-              ref={composerRef}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={submitOnEnter}
-              onFocus={() => {
-                setComposerCollapsed(false);
-                collapseGuard.current.markComposerFocus();
-              }}
-              onBlur={() => {
-                requestAnimationFrame(() => {
-                  if (collapseGuard.current.shouldCollapseOnBlur({
-                    narrowViewport: window.matchMedia("(max-width: 639.98px)").matches,
-                    focusInsideComposer: composerCardRef.current?.contains(document.activeElement) ?? false,
-                  })) {
-                    setComposerCollapsed(true);
-                  }
-                });
-              }}
-              onPaste={(event) => {
-                const images = [...event.clipboardData.items]
-                  .filter((item) => item.kind === "file")
-                  .map((item) => item.getAsFile())
-                  .filter((file): file is File => file !== null);
-                if (images.length) addAttachments(images);
-              }}
-              rows={1}
-              enterKeyHint="enter"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="Send a follow-up…"
-              className="thin-scrollbar block max-h-64 min-h-24 w-full resize-none border-0 bg-transparent p-3 text-base text-[var(--color-text-default)] outline-none placeholder:text-[var(--color-text-muted)] sm:min-h-16 sm:p-2.5 sm:text-sm"
-              data-testid="opencode-composer"
-            />
-            {/* Kept deliberately short: a session showing the auto-permission,
-                interrupted, permission and question banners at once leaves the
-                transcript only a sliver of a 720px viewport, so every pixel the
-                footer takes comes straight out of readable transcript. */}
-            {/* The whole row arms the collapse guard: Reminder, Workflows and
-                Send used to sit outside the Attach-only guard, so tapping them
-                with the keyboard open collapsed the composer mid-tap. */}
-            <div className="flex min-w-0 items-center gap-2 border-t border-[var(--color-border-default)] px-2 py-2 sm:py-1" onPointerDownCapture={() => collapseGuard.current.markControlInteraction()}>
+          </>
+        ),
+        bottomRailStart: (
+          <>
               <label className="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-md px-2.5 text-xs font-semibold text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)] sm:min-h-8" data-testid="opencode-attach-label">
                 Attach
                 <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple className="sr-only" data-testid="opencode-attach" onChange={(event) => {
@@ -1131,15 +1033,28 @@ export function ConversationPage() {
                   onPick={setActiveWorkflow}
                 />
               )}
-              <span className="flex-1" aria-hidden="true" />
-              <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" onClick={() => void send()} disabled={!canPrompt || sending || !draft.trim()} data-testid="opencode-send">
-                {sending ? "Sending…" : "Send"}
-              </Button>
-            </div>
-          </div>
-          </>}
-        </div>
-      </footer>
+          </>
+        ),
+      }}
+      inspector={{
+        desktop: (
+        <SessionInspector
+          directory={directory}
+          sessionID={id}
+          events={events}
+          todos={stream.todos}
+          todosLoaded={stream.todosLoaded}
+          todosError={stream.todosError}
+          requestedTab={requestedInspectorTab}
+          mobileOpen={inspectorOpen}
+          onMobileClose={() => setInspectorOpen(false)}
+          modelCatalogue={modelCatalogue}
+          defaultModel={selectedModel}
+        />
+        ),
+      }}
+      overlays={(
+        <>
       {liveBrowserOpen && <LiveBrowserDrawer sessionID={id ?? ""} onClose={() => setLiveBrowserOpen(false)} />}
       {workspaceOpen && (
         <WorkspacePanels
@@ -1204,6 +1119,8 @@ export function ConversationPage() {
           onClose={() => setShareTarget(null)}
         />
       )}
-    </main>
+        </>
+      )}
+    />
   );
 }

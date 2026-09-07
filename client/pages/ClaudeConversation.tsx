@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowDown, Download, Eye, FolderOpen, GitBranch, GitMerge, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Download, Eye, FolderOpen, GitBranch, GitMerge, ListChecks, ListTree, OctagonX, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
 import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { cn } from "../ds/utils.js";
-import { RunningIndicator, Transcript } from "../components/transcript.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
@@ -14,6 +13,7 @@ import { ClaudeInspector } from "../components/claude-inspector.js";
 import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
+import { SessionShell } from "../components/session-shell.js";
 import { ReminderPicker } from "../components/reminder-picker.js";
 import { WorkflowPicker } from "../components/workflow-picker.js";
 import { api, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary, type ReminderSummary, type WorkflowSummary } from "../lib/api.js";
@@ -30,7 +30,7 @@ import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
-import type { AgentMode } from "../lib/agentMode.js";
+import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
 
 function claudeModelCatalogue(modelIds: string[]): ModelCatalogue {
@@ -255,11 +255,6 @@ export function ClaudeConversationPage() {
   const [queued, setQueued] = useState<string | null>(null);
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const bottom = useRef<HTMLDivElement | null>(null);
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const following = useRef(true);
-  const scrollInitialized = useRef(false);
-  const [newActivity, setNewActivity] = useState(false);
   const refreshInFlight = useRef(false);
   const refreshQueued = useRef<string | null>(null);
   const sessionScope = useRef(id);
@@ -355,33 +350,7 @@ export function ClaudeConversationPage() {
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
-  useLayoutEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    if (!scrollInitialized.current || following.current) {
-      scroller.scrollTop = scroller.scrollHeight;
-      scrollInitialized.current = true;
-      setNewActivity(false);
-    } else {
-      setNewActivity(true);
-    }
-  }, [events]);
-
-  const updateFollow = useCallback(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 96;
-    following.current = nearBottom;
-    if (nearBottom) setNewActivity(false);
-  }, []);
-
-  const jumpToLatest = useCallback(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    following.current = true;
-    setNewActivity(false);
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
-  }, []);
+  const follow = useTranscriptFollow(events, id);
 
   const items = useMemo(() => collapseActionGroups(events), [events]);
   const activity = useMemo(() => runningActivity(events), [events]);
@@ -484,136 +453,159 @@ export function ClaudeConversationPage() {
   }, [session?.running, sending, queued]);
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-[var(--color-background-base)]" data-testid="claude-conversation">
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-border-default)] px-3 py-2">
-        <Link to="/claude" className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" data-testid="claude-back">Claude lab</Link>
-        <span aria-hidden="true">/</span>
-        <strong className="min-w-0 truncate text-sm">{session?.title ?? "Conversation"}</strong>
-        <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
-        {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
-        {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
-        <div className="ml-auto flex items-center gap-1" aria-label="Session actions">
-          <ClaudeUsageIndicator tokenUsage={session?.tokenUsage} />
-          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setRunlogOpen(true)} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setExportOpen(true)} disabled={events.length === 0} aria-label="Export transcript" title="Export" data-testid="claude-open-export"><Download aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-          <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" disabled aria-label="Live preview coming soon" title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-        </div>
-      </header>
-      <div className="flex min-h-0 flex-1">
-        <div className="relative min-h-0 min-w-0 flex-1">
-          <div ref={scrollerRef} onScroll={updateFollow} className="h-full overflow-y-auto px-4 py-5 sm:px-8" data-testid="claude-transcript">
-            <div className="mx-auto max-w-4xl">
-              {events.length === 0 && !error && <div className="py-20 text-center"><Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" /><p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p></div>}
-              <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>
-                <Transcript items={items} wrap collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
-              </WorkspaceReferenceProvider>
-              {session?.running && <div className="mt-5"><RunningIndicator activity={activity} /></div>}
-              <div ref={bottom} />
-            </div>
+    <SessionShell
+      testIds={{
+        root: "claude-conversation",
+        transcript: "claude-transcript",
+        jumpToLatest: "claude-jump-to-latest",
+        composerForm: "claude-composer",
+        composerCard: "claude-composer-card",
+        textarea: "claude-prompt",
+        send: "claude-send",
+        controlsRow: "claude-mode-toggle",
+      }}
+      header={{
+        backLink: <Link to="/claude" className="shrink-0 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" data-testid="claude-back">Claude lab</Link>,
+        title: session?.title ?? "Conversation",
+        badges: (
+          <>
+            <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
+            {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
+            {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
+          </>
+        ),
+        stats: <ClaudeUsageIndicator tokenUsage={session?.tokenUsage} />,
+        actions: (
+          <>
+            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setRunlogOpen(true)} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setExportOpen(true)} disabled={events.length === 0} aria-label="Export transcript" title="Export" data-testid="claude-open-export"><Download aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" disabled aria-label="Live preview coming soon" title="Live preview is coming soon" data-testid="claude-preview-soon"><Eye aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+          </>
+        ),
+      }}
+      transcript={{
+        items,
+        wrap: true,
+        collapsedGroups,
+        onToggleGroup: toggleGroup,
+        referenceProvider: (children) => (
+          <WorkspaceReferenceProvider directory={id} resolved={resolved} onOpen={openTarget}>{children}</WorkspaceReferenceProvider>
+        ),
+        loaded: session !== null || !!error,
+        running: !!session?.running,
+        activity,
+        emptyState: !error ? (
+          <div className="py-20 text-center">
+            <Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" />
+            <p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p>
           </div>
-          {newActivity && (
-            <button
-              type="button"
-              className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-[var(--color-background-surface-neutral-muted)]"
-              onClick={jumpToLatest}
-              data-testid="claude-jump-to-latest"
-            >
-              <ArrowDown aria-hidden="true" size={13} />
-              New activity
-            </button>
-          )}
-        </div>
-        <div className="hidden lg:flex">
-          <ClaudeInspector events={events} title={session?.title ?? "claude-session"} />
-        </div>
-      </div>
-      <form className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-background-surface)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" onSubmit={(event) => { event.preventDefault(); void send(); }} data-testid="claude-composer">
-        <div className="mx-auto max-w-3xl">
-          {session && (
-              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2" data-testid="claude-mode-toggle">
-                <AgentModeToggle
-                  mode={planMode ? "plan" : "build"}
-                  onChange={(mode) => setPlanMode(mode === "plan")}
-                  disabled={session.running}
-                  testId="claude-composer-mode"
-                />
-                <ModelPicker
-                  catalogue={modelCatalogue}
-                  value={selectedModel}
-                  onChange={setSelectedModel}
-                  testId="claude-composer-model"
-                  label="Model"
-                  disabled={session.running}
-                  midConversation={events.length > 0}
-                />
+        ) : null,
+      }}
+      scroll={{
+        scrollerRef: follow.scrollerRef,
+        contentRef: follow.contentRef,
+        onScroll: follow.onScroll,
+        showNewActivity: follow.newActivity,
+        onJumpToLatest: follow.jumpToLatest,
+      }}
+      composer={{
+        draft,
+        onDraftChange: setDraft,
+        composerRef,
+        onKeyDown: keyDown,
+        placeholder: worktreeClosed ? "This worktree session is finished." : "Send a follow-up…",
+        disabled: !session || worktreeClosed,
+        onSubmit: () => void send(),
+        submitLabel: session?.running ? "Queue" : "Send",
+        submitDisabled: !draft.trim() || sending || !session || worktreeClosed || !!queued,
+        modeControl: session ? (
+          <AgentModeToggle
+            mode={planMode ? "plan" : "build"}
+            onChange={(mode) => setPlanMode(mode === "plan")}
+            disabled={session.running}
+            testId="claude-composer-mode"
+          />
+        ) : null,
+        modelPicker: session ? (
+          <ModelPicker
+            catalogue={modelCatalogue}
+            value={selectedModel}
+            onChange={setSelectedModel}
+            testId="claude-composer-model"
+            label="Model"
+            disabled={session.running}
+            midConversation={events.length > 0}
+          />
+        ) : null,
+        beforeTextarea: (
+          <>
+            {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
+            {queued && (
+              <div className="mb-2 flex items-start gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-medium text-[var(--color-text-info)]">Queued — will send when the current turn finishes</span>
+                  <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued}</p>
+                </div>
+                <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
               </div>
-          )}
-          {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
-          {queued && (
-            <div className="mb-2 flex items-start gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
-              <div className="min-w-0 flex-1">
-                <span className="text-[11px] font-medium text-[var(--color-text-info)]">Queued — will send when the current turn finishes</span>
-                <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued}</p>
-              </div>
-              <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
-            </div>
-          )}
-          <div className="min-w-0 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] transition-colors focus-within:border-[var(--color-border-focus)]" data-testid="claude-composer-card">
-            <textarea
-              ref={composerRef}
-              className="thin-scrollbar block max-h-64 min-h-24 w-full resize-none border-0 bg-transparent p-3 text-base text-[var(--color-text-default)] outline-none placeholder:text-[var(--color-text-muted)] sm:min-h-16 sm:p-2.5 sm:text-sm"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={keyDown}
-              placeholder={worktreeClosed ? "This worktree session is finished." : "Send a follow-up…"}
-              disabled={!session || worktreeClosed}
-              rows={1}
-              data-testid="claude-prompt"
+            )}
+          </>
+        ),
+        bottomRailStart: (
+          <>
+            {reminderCatalogue.length > 0 && (
+              <ReminderPicker catalogue={reminderCatalogue} value={selectedReminder} onChange={setSelectedReminder} />
+            )}
+            {workflowCatalogue.length > 0 && (
+              <WorkflowPicker catalogue={workflowCatalogue} attached={selectedWorkflow} onDetach={() => setSelectedWorkflow("")} onPick={setActiveWorkflow} />
+            )}
+          </>
+        ),
+        bottomRailEnd: session?.running ? (
+          <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button>
+        ) : null,
+      }}
+      inspector={{
+        desktop: (
+          <div className="hidden lg:flex">
+            <ClaudeInspector events={events} title={session?.title ?? "claude-session"} />
+          </div>
+        ),
+      }}
+      overlays={(
+        <>
+          {activeWorkflow && (
+            <ClaudeWorkflowDialog
+              workflow={activeWorkflow}
+              onClose={() => setActiveWorkflow(null)}
+              onApplyToComposer={(draftText, workflowID) => {
+                setDraft(draftText);
+                setSelectedWorkflow(workflowID);
+                setActiveWorkflow(null);
+                requestAnimationFrame(() => composerRef.current?.focus());
+              }}
             />
-            <div className="flex min-w-0 items-center gap-2 border-t border-[var(--color-border-default)] px-2 py-2 sm:py-1">
-              {reminderCatalogue.length > 0 && (
-                <ReminderPicker catalogue={reminderCatalogue} value={selectedReminder} onChange={setSelectedReminder} />
-              )}
-              {workflowCatalogue.length > 0 && (
-                <WorkflowPicker catalogue={workflowCatalogue} attached={selectedWorkflow} onDetach={() => setSelectedWorkflow("")} onPick={setActiveWorkflow} />
-              )}
-              <span className="flex-1" aria-hidden="true" />
-              {session?.running && <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button>}
-              <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="submit" disabled={!draft.trim() || sending || !session || worktreeClosed || !!queued} data-testid="claude-send">{session?.running ? "Queue" : "Send"}</Button>
-            </div>
-          </div>
-        </div>
-      </form>
-      {activeWorkflow && (
-        <ClaudeWorkflowDialog
-          workflow={activeWorkflow}
-          onClose={() => setActiveWorkflow(null)}
-          onApplyToComposer={(draftText, workflowID) => {
-            setDraft(draftText);
-            setSelectedWorkflow(workflowID);
-            setActiveWorkflow(null);
-            requestAnimationFrame(() => composerRef.current?.focus());
-          }}
-        />
+          )}
+          {changesOpen && session && <ChangesDrawer session={session} onClose={() => setChangesOpen(false)} onMutated={() => void refresh()} />}
+          {filesOpen && <ClaudeFilesDrawer sessionId={id} target={fileTarget} onClose={() => { setFilesOpen(false); setFileTarget(null); }} />}
+          {runlogOpen && <ClaudeRunLogDrawer events={events} title={session?.title ?? "claude-session"} onClose={() => setRunlogOpen(false)} />}
+          {exportOpen && (
+            <section className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col border-l border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:left-auto sm:w-[28rem]" role="dialog" aria-modal="true" aria-label="Export transcript" data-testid="claude-export">
+              <header className="flex items-center gap-2 border-b border-[var(--color-border-default)] p-2">
+                <Download aria-hidden="true" size={16} /><strong className="text-sm">Export transcript</strong>
+                <Button className="ml-auto" size="sm" variant="ghost" onClick={() => setExportOpen(false)} data-testid="claude-export-close"><X aria-hidden="true" size={15} /> Close</Button>
+              </header>
+              <div className="grid gap-2 p-4 text-sm">
+                <p className="text-[var(--color-text-muted)]">Download this conversation. Runs entirely in your browser — nothing is published.</p>
+                <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "md"), serializeShareMarkdown(session?.title ?? "Claude session", events, { kind: "session" }), "text/markdown")} data-testid="claude-export-md">Download Markdown</Button>
+                <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "json"), serializeSessionJson(session?.title ?? "Claude session", events), "application/json")} data-testid="claude-export-json">Download JSON</Button>
+              </div>
+            </section>
+          )}
+        </>
       )}
-      {changesOpen && session && <ChangesDrawer session={session} onClose={() => setChangesOpen(false)} onMutated={() => void refresh()} />}
-      {filesOpen && <ClaudeFilesDrawer sessionId={id} target={fileTarget} onClose={() => { setFilesOpen(false); setFileTarget(null); }} />}
-      {runlogOpen && <ClaudeRunLogDrawer events={events} title={session?.title ?? "claude-session"} onClose={() => setRunlogOpen(false)} />}
-      {exportOpen && (
-        <section className="fixed inset-x-0 bottom-0 top-11 z-50 flex flex-col border-l border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:left-auto sm:w-[28rem]" role="dialog" aria-modal="true" aria-label="Export transcript" data-testid="claude-export">
-          <header className="flex items-center gap-2 border-b border-[var(--color-border-default)] p-2">
-            <Download aria-hidden="true" size={16} /><strong className="text-sm">Export transcript</strong>
-            <Button className="ml-auto" size="sm" variant="ghost" onClick={() => setExportOpen(false)} data-testid="claude-export-close"><X aria-hidden="true" size={15} /> Close</Button>
-          </header>
-          <div className="grid gap-2 p-4 text-sm">
-            <p className="text-[var(--color-text-muted)]">Download this conversation. Runs entirely in your browser — nothing is published.</p>
-            <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "md"), serializeShareMarkdown(session?.title ?? "Claude session", events, { kind: "session" }), "text/markdown")} data-testid="claude-export-md">Download Markdown</Button>
-            <Button variant="secondary" onClick={() => downloadText(shareFilename(session?.title ?? "claude-session", "json"), serializeSessionJson(session?.title ?? "Claude session", events), "application/json")} data-testid="claude-export-json">Download JSON</Button>
-          </div>
-        </section>
-      )}
-    </main>
+    />
   );
 }
