@@ -545,6 +545,15 @@ export function ClaudeConversationPage() {
               </div>
           )}
           {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
+          {queued && (
+            <div className="mb-2 flex items-start gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
+              <div className="min-w-0 flex-1">
+                <span className="text-[11px] font-medium text-[var(--color-text-info)]">Queued — will send when the current turn finishes</span>
+                <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued}</p>
+              </div>
+              <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
+            </div>
+          )}
           <div className="min-w-0 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] transition-colors focus-within:border-[var(--color-border-focus)]" data-testid="claude-composer-card">
             <textarea
               ref={composerRef}
@@ -564,7 +573,6 @@ export function ClaudeConversationPage() {
               {workflowCatalogue.length > 0 && (
                 <WorkflowPicker catalogue={workflowCatalogue} attached={selectedWorkflow} onDetach={() => setSelectedWorkflow("")} onPick={setActiveWorkflow} />
               )}
-              {queued && <span className="text-[11px] text-[var(--color-text-muted)]" data-testid="claude-queued">Queued</span>}
               <span className="flex-1" aria-hidden="true" />
               {session?.running && <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="button" variant="danger" onClick={() => void cancel()} data-testid="claude-cancel"><OctagonX aria-hidden="true" size={15} className="mr-1" /> Stop</Button>}
               <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" type="submit" disabled={!draft.trim() || sending || !session || worktreeClosed || !!queued} data-testid="claude-send">{session?.running ? "Queue" : "Send"}</Button>
