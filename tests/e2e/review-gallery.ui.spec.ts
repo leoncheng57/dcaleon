@@ -3,7 +3,7 @@ import path from "node:path";
 import { test } from "@playwright/test";
 import { galleryFilename, THEMES, validateScenarios } from "../../scripts/review-gallery.js";
 import { VIEWPORTS } from "../../scripts/pr-screenshots.js";
-import { prepareReviewState } from "./review-capture.js";
+import { installReviewFixtures, prepareReviewState } from "./review-capture.js";
 
 const requestFile = process.env.REVIEW_GALLERY_REQUEST;
 const output = process.env.REVIEW_GALLERY_OUTPUT;
@@ -12,6 +12,7 @@ test.describe("local review gallery", () => {
   if (!scenarios.length) test.skip("run with screenshots:gallery", () => {});
   for (const scenario of scenarios) for (const theme of THEMES) for (const viewport of ["desktop", "mobile"] as const) {
     test(`${scenario.id} ${theme} ${viewport} @gallery`, async ({ page, baseURL }) => {
+      await installReviewFixtures(page);
       // Block external browser traffic, including attempted credential-bearing image requests.
       await page.context().route("**/*", route => {
         const url = new URL(route.request().url());
