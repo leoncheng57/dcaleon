@@ -38,32 +38,35 @@ test.describe("mobile conversation action bar", () => {
     const controls = [
       page.getByTestId("opencode-mobile-workspace-open"),
       page.getByTestId("opencode-mobile-reviews-open"),
-      page.getByTestId("opencode-mobile-runlog-open"),
       page.getByTestId("opencode-mobile-auto-permissions-toggle"),
       page.getByTestId("opencode-mobile-auto-permissions-info"),
+      page.getByTestId("opencode-mobile-runlog-open"),
       page.getByTestId("opencode-mobile-session-menu-trigger"),
     ];
     for (const control of controls) {
       const rect = await box(control);
-      expect(rect.height).toBeGreaterThanOrEqual(control === controls[3] || control === controls[4] ? 36 : 44);
-      expect(rect.width).toBeGreaterThanOrEqual(control === controls[3] ? 64 : control === controls[4] ? 36 : 48);
+      expect(rect.height).toBeGreaterThanOrEqual(control === controls[2] || control === controls[3] ? 36 : 44);
+      expect(rect.width).toBeGreaterThanOrEqual(control === controls[2] ? 64 : control === controls[3] ? 36 : 48);
       await expect(control).toHaveAttribute("title", /.+/);
     }
     await expect(controls[0]).toHaveAccessibleName("Open workspace");
     // The reviews opener appends the session's unique-link count when there is
     // one, so match the shape rather than this fixture's current total.
     await expect(controls[1]).toHaveAccessibleName(/^Open reviews(, \d+ links?)?$/);
-    await expect(controls[2]).toHaveAccessibleName("Open run log");
-    await expect(controls[3]).toHaveAttribute("role", "switch");
-    await expect(controls[3]).toHaveAttribute("aria-checked", "false");
-    await expect(controls[3]).toHaveAccessibleName("Turn auto permissions on");
-    await expect(controls[4]).toHaveAccessibleName("Auto permissions safety");
+    await expect(controls[2]).toHaveAttribute("role", "switch");
+    await expect(controls[2]).toHaveAttribute("aria-checked", "false");
+    await expect(controls[2]).toHaveAccessibleName("Turn auto permissions on");
+    await expect(controls[3]).toHaveAccessibleName("Auto permissions safety");
+    await expect(controls[4]).toHaveAccessibleName("Open run log");
     await expect(controls[5]).toHaveAccessibleName("More session actions");
-    await expect(controls[3]).toContainText("OFF");
+    await expect(controls[2]).toContainText("OFF");
     const autoGroup = page.getByTestId("opencode-mobile-auto-permissions-group");
+    const autoBox = await box(autoGroup);
+    const runlogBox = await box(controls[4]);
+    expect(runlogBox.x).toBeGreaterThanOrEqual(autoBox.x + autoBox.width);
     await expect(autoGroup.getByTestId("opencode-mobile-auto-permissions-state")).toHaveText("OFF");
     await expect(page.getByTestId("opencode-mobile-auto-permissions-group")).toContainText("OFF");
-    for (const control of [controls[0], controls[1], controls[2], controls[4], controls[5]]) {
+    for (const control of [controls[0], controls[1], controls[3], controls[4], controls[5]]) {
       expect(await control.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/transparent|rgba\(0, 0, 0, 0\)/);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
