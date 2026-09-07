@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 440,
+  "sourceSha": "8fc29b56f3bb3cd0b1d4d64347b2d35d0edde4bc",
+  "capturedAt": "2026-09-07T19:53:42.546Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/docs",
+      "fullPage": false,
+      "captures": {
+        "desktop": {
+          "filename": "01-docs-1b939c48--desktop.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 107497,
+          "sha256": "4d5e565cd8ee6020bcd369b4413b7158729e38fa1b533ce82ff5e50a619a83ca"
+        },
+        "mobile": {
+          "filename": "01-docs-060c2d47--mobile.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 50857,
+          "sha256": "424afaaee70b0f62a2d41593f56134eaa45e90caa49893da9ae98ac91c988031"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "reason": "Author override from the screenshots block (an empty block explicitly skips capture).",
+    "needsLocalReview": false
+  }
+}
