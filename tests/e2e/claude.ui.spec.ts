@@ -17,6 +17,20 @@ test.describe("Claude Code runtime", () => {
     await expect(page.getByTestId("claude-prompt")).toBeEnabled();
   });
 
+  test("pastes an image into the composer and sends it to Claude", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").evaluate((textarea) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new Uint8Array([1, 2, 3, 4])], "pasted.png", { type: "image/png" }));
+      textarea.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: transfer }));
+    });
+    await expect(page.getByTestId("claude-attachment-chip")).toContainText("pasted.png");
+    await page.getByTestId("claude-prompt").fill("What is in this image?");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Inspected attached image (4 bytes)");
+    await expect(page.getByTestId("claude-attachment-chip")).toHaveCount(0);
+  });
+
   test("does not leak tool inputs or init data into the transcript", async ({ page }) => {
     await createSession(page);
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");

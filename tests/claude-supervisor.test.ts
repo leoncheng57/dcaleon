@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, chmod } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, writeFile, chmod } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -84,6 +84,17 @@ describe("Claude supervisor", () => {
     await supervisor.run({ session: { id: "s1", sessionUuid: "u1", started: false }, preset, workspace, text: "hello" });
     await vi.waitFor(() => expect(frames.some((f) => f.type === "result")).toBe(true));
     expect(frames.map((f) => f.type)).toEqual(["system", "assistant", "result"]);
+  });
+
+  it("removes turn-scoped image files after the child closes", async () => {
+    const { root, supervisor, workspace } = await harness(`
+      process.stdout.write(JSON.stringify({ type: "system", subtype: "init", claude_code_version: "2.1.257", session_id: "x" }) + "\\n");
+    `);
+    const attachments = path.join(root, "attachments", "turn");
+    await mkdir(attachments, { recursive: true });
+    await writeFile(path.join(attachments, "image.png"), "image");
+    await supervisor.run({ session: { id: "cleanup", sessionUuid: "uc", started: false }, preset, workspace, text: "hello", turnMode: "plan", cleanupDirectory: attachments });
+    await vi.waitFor(async () => expect(access(attachments)).rejects.toThrow());
   });
 
   it("fails the turn closed when the init frame version does not match the pin", async () => {

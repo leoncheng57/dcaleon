@@ -6,6 +6,7 @@ import type { PromptTag } from "./store.js";
 
 export interface ClaudePromptInput {
   text: string;
+  imagePaths?: string[];
   reminder?: Pick<ReminderPreset, "id" | "body">;
   workflow?: Pick<WorkflowPreset, "id" | "injector">;
 }
@@ -33,6 +34,10 @@ export interface ComposedClaudePrompt {
  */
 export function composeClaudePrompt(input: ClaudePromptInput): ComposedClaudePrompt {
   let text = input.text;
+  if (input.imagePaths?.length) {
+    const paths = input.imagePaths.map((imagePath) => `- ${JSON.stringify(imagePath)}`).join("\n");
+    text += `\n\nThe user attached the following images. Inspect them as part of this request:\n${paths}`;
+  }
   if (input.workflow) text = withWorkflowTag(text, input.workflow);
   if (input.reminder) text = withReminderTag(text, input.reminder);
   return {

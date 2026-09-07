@@ -34,6 +34,7 @@ import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
 import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
+import { MAX_IMAGE_ATTACHMENTS, readImageAttachment, selectImageFiles, type ImageAttachment } from "../lib/attachments.js";
 
 function claudeModelCatalogue(modelIds: string[]): ModelCatalogue {
   return {
@@ -239,6 +240,8 @@ export function ClaudeConversationPage() {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
   const [changesOpen, setChangesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [runlogOpen, setRunlogOpen] = useState(false);
@@ -258,7 +261,7 @@ export function ClaudeConversationPage() {
   const [workflowCatalogue, setWorkflowCatalogue] = useState<WorkflowSummary[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState("");
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
-  const [queued, setQueued] = useState<string | null>(null);
+  const [queued, setQueued] = useState<{ text: string; attachments: ImageAttachment[] } | null>(null);
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const refreshInFlight = useRef(false);
@@ -404,7 +407,16 @@ export function ClaudeConversationPage() {
   // A merged/discarded worktree session is finished: its cwd is gone.
   const worktreeClosed = session?.isolation === "worktree" && events.some((event) => event.kind === "status" && (event.label === "Merged into project" || event.label === "Worktree discarded"));
 
-  const sendText = async (text: string) => {
+  const addAttachments = (files: Iterable<File>) => {
+    const selection = selectImageFiles(files, attachments.length);
+    setAttachmentError(selection.error ?? "");
+    if (!selection.files.length) return;
+    void Promise.all(selection.files.map(readImageAttachment))
+      .then((next) => setAttachments((items) => [...items, ...next].slice(0, MAX_IMAGE_ATTACHMENTS)))
+      .catch(() => setAttachmentError("Could not read the selected image."));
+  };
+
+  const sendText = async (text: string, images: ImageAttachment[] = []) => {
     if (!text || sending || worktreeClosed) return;
     setSending(true);
     setError("");
@@ -414,12 +426,14 @@ export function ClaudeConversationPage() {
         plan: planMode,
         reminder: selectedReminder || undefined,
         workflow: selectedWorkflow || undefined,
+        images,
       });
       setSelectedReminder("");
       setSelectedWorkflow("");
       await refresh();
     } catch (cause) {
       setDraft(text);
+      setAttachments(images);
       setSending(false);
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -429,10 +443,13 @@ export function ClaudeConversationPage() {
     if (!text || worktreeClosed) return;
     setDraft("");
     if (sending || session?.running) {
-      setQueued(text);
+      setQueued({ text, attachments });
+      setAttachments([]);
       return;
     }
-    void sendText(text);
+    const images = attachments;
+    setAttachments([]);
+    void sendText(text, images);
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -452,9 +469,9 @@ export function ClaudeConversationPage() {
 
   useEffect(() => {
     if (!session?.running && !sending && queued) {
-      const text = queued;
+      const { text, attachments: images } = queued;
       setQueued(null);
-      void sendText(text);
+      void sendText(text, images);
     }
   }, [session?.running, sending, queued]);
 
@@ -573,6 +590,13 @@ export function ClaudeConversationPage() {
         draft,
         onDraftChange: setDraft,
         composerRef,
+        onPaste: (event) => {
+          const images = [...event.clipboardData.items]
+            .filter((item) => item.kind === "file")
+            .map((item) => item.getAsFile())
+            .filter((file): file is File => file !== null);
+          if (images.length) addAttachments(images);
+        },
         onKeyDown: keyDown,
         placeholder: worktreeClosed ? "This worktree session is finished." : "Send a follow-up…",
         disabled: !session || worktreeClosed,
@@ -605,15 +629,21 @@ export function ClaudeConversationPage() {
               <div className="mb-2 flex items-start gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
                 <div className="min-w-0 flex-1">
                   <span className="text-[11px] font-medium text-[var(--color-text-info)]">Queued — will send when the current turn finishes</span>
-                  <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued}</p>
+                  <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued.text}</p>
                 </div>
-                <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
+                <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued.text); setAttachments(queued.attachments); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
               </div>
             )}
+            {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{attachments.map((attachment, index) => <button key={`${attachment.filename}-${index}`} type="button" onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="rounded border border-[var(--color-border-default)] px-2 py-1 text-xs" data-testid="claude-attachment-chip">{attachment.filename} x</button>)}</div>}
+            {attachmentError && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert" data-testid="claude-attachment-error">{attachmentError}</p>}
           </>
         ),
         bottomRailStart: (
           <>
+            <label className="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-md px-2.5 text-xs font-semibold text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)] sm:min-h-8" data-testid="claude-attach-label">
+              Attach
+              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple className="sr-only" data-testid="claude-attach" onChange={(event) => { addAttachments(event.target.files ?? []); event.target.value = ""; }} />
+            </label>
             {reminderCatalogue.length > 0 && (
               <ReminderPicker catalogue={reminderCatalogue} value={selectedReminder} onChange={setSelectedReminder} />
             )}
