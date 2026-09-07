@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "../ds/button.js";
 import { Markdown } from "../ds/markdown.js";
+import { TranscriptLink } from "../lib/transcriptBrowser.js";
 import { api, type ReviewCheck, type ReviewCommit, type ReviewDetails, type ReviewStatus } from "../lib/api.js";
 
 function formatDuration(seconds: number | null): string {
@@ -31,7 +32,7 @@ function CheckRow({ check }: { check: ReviewCheck }) {
   );
   return (
     <li data-testid="opencode-review-check" data-status={check.status}>
-      {externalUrl ? <a href={externalUrl} target="_blank" rel="noreferrer" className="block underline">{content}</a> : content}
+      {externalUrl ? <TranscriptLink href={externalUrl} target="_blank" rel="noreferrer" className="block underline">{content}</TranscriptLink> : content}
     </li>
   );
 }
@@ -47,7 +48,7 @@ function CommitRow({ commit }: { commit: ReviewCommit }) {
   );
   return (
     <li data-testid="opencode-review-commit" data-sha={commit.shortSha}>
-      {externalUrl ? <a href={externalUrl} target="_blank" rel="noreferrer" className="block underline" title={`View the diff for ${commit.shortSha}`}>{content}</a> : content}
+      {externalUrl ? <TranscriptLink href={externalUrl} target="_blank" rel="noreferrer" className="block underline" title={`View the diff for ${commit.shortSha}`}>{content}</TranscriptLink> : content}
       {commit.subjectTruncated && <Truncated show />}
     </li>
   );
@@ -86,9 +87,9 @@ export function ReviewCard({ url }: { url: string }) {
 
   return (
     <article className="min-w-0 max-w-full overflow-hidden rounded border border-[var(--color-border-default)] p-2" data-testid="opencode-review-card" data-state={review?.state ?? (error ? "error" : "loading")}>
-      <a href={url} target="_blank" rel="noreferrer" className="block break-words text-xs font-semibold underline">
+      <TranscriptLink href={url} target="_blank" rel="noreferrer" className="block break-words text-xs font-semibold underline">
         {review?.title ?? url}
-      </a>
+      </TranscriptLink>
       {review && <p className="mt-0.5 break-words text-[11px] text-[var(--color-text-muted)]">{review.project} #{review.number}</p>}
       {review ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
@@ -128,7 +129,7 @@ export function ReviewCard({ url }: { url: string }) {
                     <ul className="mt-1 space-y-2">{details.comments.value.map((comment) => <li key={comment.id} className="min-w-0 text-xs" data-testid="opencode-review-comment"><div className="flex flex-wrap gap-1 text-[11px]"><strong>{comment.author}</strong>{comment.resolved && <span className="text-[var(--color-text-muted)]">resolved</span>}</div><Markdown source={comment.body} untrusted className="break-words" />{comment.bodyTruncated && <Truncated show />}</li>)}</ul>
                   </section>
                   {details.reviews.value.length > 0 && <section data-testid="opencode-review-reviews"><div className="flex items-center justify-between gap-2"><h3 className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Reviews ({details.reviews.value.length})</h3><Truncated show={details.reviews.truncated} /></div><ul className="mt-1 space-y-2">{details.reviews.value.map((item) => <li key={item.id} className="text-xs"><strong>{item.author}</strong> <span className="text-[var(--color-text-muted)]">{item.state}</span><Markdown source={item.body} untrusted className="break-words" /><Truncated show={item.bodyTruncated} /></li>)}</ul></section>}
-                  {details.pipelines.value.length > 0 && <section data-testid="opencode-review-pipelines"><h3 className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Pipelines</h3><ul className="mt-1 space-y-1">{details.pipelines.value.map((pipeline) => { const externalUrl = safeExternalUrl(pipeline.webUrl); return <li key={pipeline.id} data-status={pipeline.status} className="text-[11px]">{externalUrl ? <a href={externalUrl} target="_blank" rel="noreferrer" className="underline">Pipeline {pipeline.id}: {pipeline.status}</a> : <span>Pipeline {pipeline.id}: {pipeline.status}</span>}</li>; })}</ul></section>}
+                  {details.pipelines.value.length > 0 && <section data-testid="opencode-review-pipelines"><h3 className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Pipelines</h3><ul className="mt-1 space-y-1">{details.pipelines.value.map((pipeline) => { const externalUrl = safeExternalUrl(pipeline.webUrl); return <li key={pipeline.id} data-status={pipeline.status} className="text-[11px]">{externalUrl ? <TranscriptLink href={externalUrl} target="_blank" rel="noreferrer" className="underline">Pipeline {pipeline.id}: {pipeline.status}</TranscriptLink> : <span>Pipeline {pipeline.id}: {pipeline.status}</span>}</li>; })}</ul></section>}
                   <section data-testid="opencode-review-checks">
                     <div className="flex items-center justify-between gap-2"><h3 className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Checks and jobs ({details.checks.value.length})</h3><Truncated show={details.checks.truncated} /></div>
                     {details.checks.error && <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">Checks {details.checks.error.toLowerCase()}.</p>}

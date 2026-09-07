@@ -1200,6 +1200,11 @@ several decisions below.
 35. **All runtime islands share the right tools slot through SessionShell.** OpenCode,
     Claude and DSH pass their native runtime-prefixed session IDs to the same shell-owned
     opener, visibility state, Inspector replacement, and Browser/Minichats/Terminal panel.
+    New Chromium pages default to `https://leoncheng.dev`; reattaching an existing page
+    never resets its URL. Transcript-only web links use a shared context to open the
+    session Browser, with an inline globe and accessible action label. Bare user URLs
+    are linkified without interpreting user prose as Markdown. Links still pass the
+    BFF's normal navigation/SSRF policy; file references and mail links keep their semantics.
     Keep shared tools here rather than adding island-specific drawers. The functional
     Browser, Minichats WIP page and Terminal WIP page share one selector; the latter two make
     the information architecture visible without claiming #56 or #59 has shipped. On desktop

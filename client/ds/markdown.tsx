@@ -37,6 +37,7 @@ import { useWorkspaceReference } from "../lib/workspaceReferences.js";
 import { FileReference } from "./file-reference.js";
 import { MermaidDiagram } from "./mermaid-diagram.js";
 import { cn } from "./utils.js";
+import { TranscriptLink } from "../lib/transcriptBrowser.js";
 
 /** Allowed link protocols when rendering markdown. Relative targets pass. */
 export function isSafeHref(url: string): boolean {
@@ -155,9 +156,9 @@ function MarkdownLink({ href, children }: { href: string; children: React.ReactN
   // rendering an anchor the reader cannot trust.
   if (!isSafeHref(href)) return <>{children}</>;
   return (
-    <a href={href} {...linkAttributes(href, internalLinksInSameTab)}>
+    <TranscriptLink href={href} {...linkAttributes(href, internalLinksInSameTab)}>
       {children}
-    </a>
+    </TranscriptLink>
   );
 }
 
@@ -275,9 +276,9 @@ export function LinkifiedText({ text }: { text: string }) {
         const [url, trailing] = splitTrailingPunctuation(part);
         return (
           <Fragment key={i}>
-            <a href={url} target="_blank" rel="noreferrer" className="underline hover:opacity-80">
+            <TranscriptLink href={url} target="_blank" rel="noreferrer" className="underline hover:opacity-80">
               {url}
-            </a>
+            </TranscriptLink>
             {trailing}
           </Fragment>
         );
