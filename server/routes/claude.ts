@@ -17,6 +17,7 @@ import { PathError } from "../paths.js";
 import { visibleReminder, visibleReminders } from "../reminders/loader.js";
 import { isValidReminderId } from "../reminders/reminders.js";
 import { isValidWorkflowId, workflowCatalogue } from "../workflows/workflows.js";
+import { fetchClaudeUsage } from "../claude/usage.js";
 
 const MAX_PROMPT = 40_000;
 
@@ -368,6 +369,16 @@ export function claudeRoutes(
       res.json({ pr: { ...status, checks: details?.checks?.value ?? [] } });
     } catch (cause) {
       error(res, 502, cause instanceof Error ? cause.message : "could not read PR status");
+    }
+  });
+
+  router.get("/claude/usage", async (_req, res) => {
+    if (!requireEnabled(res)) return;
+    try {
+      const data = await fetchClaudeUsage(config.cliVersion);
+      res.json(data);
+    } catch (cause) {
+      res.json({ available: false, reason: cause instanceof Error ? cause.message : "Unknown error" });
     }
   });
 

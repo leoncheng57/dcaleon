@@ -194,6 +194,11 @@ export interface ClaudeSessionSummary {
   updatedAt: string;
   running: boolean;
 }
+export interface ClaudeUsageBucket { utilization: number; resetsAt: string | null }
+export type ClaudeUsage =
+  | { available: true; session: ClaudeUsageBucket; weekly: ClaudeUsageBucket; weeklyByModel: Record<string, ClaudeUsageBucket>; subscriptionType: string | null; rateLimitTier: string | null }
+  | { available: false; reason: string };
+
 export type DshTrajectoryCategory = "turn" | "request" | "message" | "tool" | "compaction" | "child" | "status" | "error";
 export interface DshTrajectoryUsage {
   inputTokens: number;
@@ -848,6 +853,7 @@ export const api = {
     json<{ url: string; number: number }>(r)),
   claudePrStatus: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/pr`).then((r) =>
     json<{ pr: import("./api.js").ClaudePrStatus | null }>(r)),
+  claudeUsage: () => fetch("/api/claude/usage").then((r) => json<ClaudeUsage>(r)),
   dshTrajectory: (id: string, options: { limit?: number; before?: number } = {}) => {
     const query = new URLSearchParams({ limit: String(options.limit ?? 200) });
     if (options.before !== undefined) query.set("before", String(options.before));
