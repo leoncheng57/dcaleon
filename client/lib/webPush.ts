@@ -77,6 +77,22 @@ async function rememberPushIdentity(installationId: string, publicKey: string): 
   }
 }
 
+/**
+ * A subscription is bound for the whole of its life to the VAPID key it was
+ * created with, so one minted under a superseded key is not merely stale: every
+ * push signed with the current key is refused, and Apple refuses it as
+ * `403 BadJwtToken` rather than the `410` that would retire the record. A key
+ * the browser declines to report counts as a mismatch, because keeping a
+ * subscription that cannot be proven current is what silently breaks delivery.
+ */
+export function matchesApplicationServerKey(subscription: PushSubscription, publicKey: string): boolean {
+  const current = subscription.options.applicationServerKey;
+  if (!current) return false;
+  const expected = applicationServerKey(publicKey);
+  const actual = new Uint8Array(current);
+  return actual.length === expected.length && actual.every((byte, index) => byte === expected[index]);
+}
+
 export function webPushSupported(): boolean {
   return window.isSecureContext && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
@@ -107,7 +123,14 @@ export async function subscribeWebPush(publicKey: string): Promise<PushSubscript
   if (permission !== "granted") throw new Error("Notification permission was not granted");
   const registration = await serviceWorkerRegistration();
   const existing = await registration.pushManager.getSubscription();
-  const subscription = existing ?? await registration.pushManager.subscribe({
+  const reusable = existing && matchesApplicationServerKey(existing, publicKey) ? existing : null;
+  if (existing && !reusable) {
+    // The endpoint is about to change, and the server matches records by
+    // endpoint, so the superseded row has to go now or nothing reconciles it.
+    await api.removePushSubscription(existing.endpoint).catch(() => undefined);
+    await existing.unsubscribe();
+  }
+  const subscription = reusable ?? await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: applicationServerKey(publicKey),
   });
