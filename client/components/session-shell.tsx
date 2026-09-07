@@ -126,7 +126,7 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
         )}
       </header>
 
-      <div className={toolsOpen ? "max-h-[25%] shrink-0 overflow-y-auto" : "contents"}>
+      <div className="max-h-[25%] shrink-0 overflow-y-auto">
         {banners}
       </div>
 
