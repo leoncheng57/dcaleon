@@ -37,11 +37,24 @@ emit({
   tools: ["Read", "Bash"],
 });
 
-if (prompt.includes("The user attached the following images")) {
+if (prompt.includes("queue fixture: navigation")) {
+  await new Promise((resolve) => setTimeout(resolve, 15000));
+  emit({ type: "assistant", message: { content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
+} else if (prompt.includes("The user attached the following images")) {
   const match = prompt.match(/^- (".*")$/m);
   const imagePath = match ? JSON.parse(match[1]) : "";
   const bytes = readFileSync(imagePath);
   emit({ type: "assistant", message: { content: [{ type: "text", text: `Inspected attached image (${bytes.length} bytes)` }] } });
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
+} else if (prompt.includes("queue fixture: initial")) {
+  // Long enough for the UI to enqueue several follow-ups while this turn is
+  // authoritatively running. Later queue-fixture prompts complete immediately.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  emit({ type: "assistant", message: { content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
+} else if (prompt.includes("queue fixture:")) {
+  emit({ type: "assistant", message: { content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
 } else if (prompt.includes("stay running")) {
   // Slow mode: stay alive until the supervisor sends SIGTERM (the cancel test).

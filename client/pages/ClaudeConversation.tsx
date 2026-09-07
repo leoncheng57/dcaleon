@@ -81,6 +81,20 @@ const OPENCODE_ONLY_WORKFLOWS = new Set<string>([
 ]);
 const DIFF_LINE_STEP = 400;
 
+interface QueuedClaudePrompt {
+  id: string;
+  text: string;
+  attachments: ImageAttachment[];
+}
+
+// A queue belongs to a Claude session, not to one mounting of its page. Keeping
+// it at module scope means an in-app trip to the hub and back cannot silently
+// discard follow-ups. A full page reload remains an explicit process boundary;
+// image data can be larger than browser storage quotas, so pretending it is
+// durably persisted would be less honest than retaining it for this app run.
+const queuedPromptsBySession = new Map<string, QueuedClaudePrompt[]>();
+let queuedPromptSequence = 0;
+
 function DiffLine({ line }: { line: string }) {
   const className = line.startsWith("+") && !line.startsWith("+++")
     ? "text-[var(--color-text-success)]"
@@ -264,7 +278,8 @@ export function ClaudeConversationPage() {
   const [workflowCatalogue, setWorkflowCatalogue] = useState<WorkflowSummary[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState("");
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
-  const [queued, setQueued] = useState<{ text: string; attachments: ImageAttachment[] } | null>(null);
+  const [queued, setQueued] = useState<QueuedClaudePrompt[]>(() => [...(queuedPromptsBySession.get(id) ?? [])]);
+  const [queuePaused, setQueuePaused] = useState(false);
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const refreshInFlight = useRef(false);
@@ -303,6 +318,8 @@ export function ClaudeConversationPage() {
 
   useEffect(() => {
     sessionScope.current = id;
+    setQueued([...(queuedPromptsBySession.get(id) ?? [])]);
+    setQueuePaused(false);
     refreshQueued.current = null;
     setSession(null);
     setEvents([]);
@@ -430,7 +447,7 @@ export function ClaudeConversationPage() {
       .catch(() => setAttachmentError("Could not read the selected image."));
   };
 
-  const sendText = async (text: string, images: ImageAttachment[] = []) => {
+  const sendText = async (text: string, images: ImageAttachment[] = [], fromQueue = false) => {
     if (!text || sending || worktreeClosed) return;
     setSending(true);
     setError("");
@@ -448,21 +465,32 @@ export function ClaudeConversationPage() {
     } catch (cause) {
       setDraft(text);
       setAttachments(images);
+      if (fromQueue) setQueuePaused(true);
       setSending(false);
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
+  const updateQueue = useCallback((update: (current: QueuedClaudePrompt[]) => QueuedClaudePrompt[]) => {
+    setQueued((current) => {
+      const next = update(current);
+      if (next.length > 0) queuedPromptsBySession.set(id, next);
+      else queuedPromptsBySession.delete(id);
+      return next;
+    });
+  }, [id]);
   const send = () => {
     const text = draft.trim();
     if (!text || worktreeClosed) return;
     setDraft("");
     if (sending || session?.running) {
-      setQueued({ text, attachments });
+      const item = { id: `${id}:${Date.now()}:${queuedPromptSequence++}`, text, attachments };
+      updateQueue((current) => [...current, item]);
       setAttachments([]);
       return;
     }
     const images = attachments;
     setAttachments([]);
+    setQueuePaused(false);
     void sendText(text, images);
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -472,7 +500,6 @@ export function ClaudeConversationPage() {
     }
   };
   const cancel = async () => {
-    setQueued(null);
     try {
       await api.cancelClaude(id);
       await refresh();
@@ -482,12 +509,12 @@ export function ClaudeConversationPage() {
   };
 
   useEffect(() => {
-    if (!session?.running && !sending && queued) {
-      const { text, attachments: images } = queued;
-      setQueued(null);
-      void sendText(text, images);
+    if (session && !session.running && !sending && !queuePaused && queued.length > 0) {
+      const [{ text, attachments: images }] = queued;
+      updateQueue((current) => current.slice(1));
+      void sendText(text, images, true);
     }
-  }, [session?.running, sending, queued]);
+  }, [session, sending, queuePaused, queued, updateQueue]);
 
   return (
     <SessionShell
@@ -627,7 +654,7 @@ export function ClaudeConversationPage() {
         disabled: !session || worktreeClosed,
         onSubmit: () => void send(),
         submitLabel: session?.running ? "Queue" : "Send",
-        submitDisabled: !draft.trim() || sending || !session || worktreeClosed || !!queued,
+        submitDisabled: !draft.trim() || sending || !session || worktreeClosed,
         modeControl: session ? (
           <AgentModeToggle
             mode={planMode ? "plan" : "build"}
@@ -650,13 +677,36 @@ export function ClaudeConversationPage() {
         beforeTextarea: (
           <>
             {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
-            {queued && (
-              <div className="mb-2 flex items-start gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
-                <div className="min-w-0 flex-1">
-                  <span className="text-[11px] font-medium text-[var(--color-text-info)]">Queued — will send when the current turn finishes</span>
-                  <p className="mt-0.5 line-clamp-3 text-xs text-[var(--color-text-default)]">{queued.text}</p>
+            {queued.length > 0 && (
+              <div className="mb-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
+                <div className="text-[11px] font-medium text-[var(--color-text-info)]">
+                  {queued.length} queued — {queuePaused ? "paused after a failed send" : "one will send after each completed turn"}
                 </div>
-                <button type="button" className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" onClick={() => { setQueued(null); setDraft(queued.text); setAttachments(queued.attachments); }} aria-label="Cancel queued message" data-testid="claude-queued-dismiss"><X aria-hidden="true" size={14} /></button>
+                <ol className="mt-1 space-y-1">
+                  {queued.map((item, index) => (
+                    <li key={item.id} className="flex min-w-0 items-start gap-2" data-testid="claude-queued-item">
+                      <span className="shrink-0 text-[10px] tabular-nums text-[var(--color-text-muted)]">{index + 1}.</span>
+                      <p className="min-w-0 flex-1 line-clamp-2 text-xs text-[var(--color-text-default)]">
+                        {item.text}
+                        {item.attachments.length > 0 && <span className="ml-1 text-[var(--color-text-muted)]">· {item.attachments.length} image{item.attachments.length === 1 ? "" : "s"}</span>}
+                      </p>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]"
+                        onClick={() => {
+                          updateQueue((current) => current.filter((candidate) => candidate.id !== item.id));
+                          setDraft(item.text);
+                          setAttachments(item.attachments);
+                          composerRef.current?.focus();
+                        }}
+                        aria-label={`Cancel queued message ${index + 1}`}
+                        data-testid="claude-queued-dismiss"
+                      >
+                        <X aria-hidden="true" size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ol>
               </div>
             )}
             {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{attachments.map((attachment, index) => <button key={`${attachment.filename}-${index}`} type="button" onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="rounded border border-[var(--color-border-default)] px-2 py-1 text-xs" data-testid="claude-attachment-chip">{attachment.filename} x</button>)}</div>}
