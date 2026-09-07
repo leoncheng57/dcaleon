@@ -9,8 +9,8 @@ import { cn } from "../ds/utils.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
 import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
-import { ClaudeInspector } from "../components/claude-inspector.js";
 import { ClaudeRunLogDrawer } from "../components/claude-runlog-drawer.js";
+import { SessionInspector } from "../components/session-inspector.js";
 import { ClaudeUsageIndicator } from "../components/claude-usage-indicator.js";
 import { ClaudeWorkflowDialog } from "../components/claude-workflow-dialog.js";
 import { SessionShell } from "../components/session-shell.js";
@@ -27,6 +27,7 @@ import {
   START_DCA_SESSION_WORKFLOW_ID,
 } from "../lib/workflows.js";
 import { collapseActionGroups, runningActivity } from "../lib/derive.js";
+import type { InspectorTab } from "../lib/inspectorTabs.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WorkspaceReferenceProvider } from "../lib/workspaceReferences.js";
@@ -241,6 +242,8 @@ export function ClaudeConversationPage() {
   const [changesOpen, setChangesOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [runlogOpen, setRunlogOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [requestedInspectorTab, setRequestedInspectorTab] = useState<InspectorTab | undefined>();
   const [exportOpen, setExportOpen] = useState(false);
   const [modelCatalogue, setModelCatalogue] = useState<ModelCatalogue | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | undefined>();
@@ -466,20 +469,33 @@ export function ClaudeConversationPage() {
         controlsRow: "claude-mode-toggle",
       }}
       header={{
-        backLink: <Link to="/claude" className="shrink-0 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]" data-testid="claude-back">Claude lab</Link>,
+        backLink: <Link to="/claude" className="hidden shrink-0 text-sm underline sm:inline" data-testid="claude-back">← Claude lab</Link>,
         title: session?.title ?? "Conversation",
         badges: (
           <>
             <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>
             {session?.workspaceLabel && <Badge variant="neutral">{session.workspaceLabel}</Badge>}
             {session?.branch && <Badge variant="neutral" data-testid="claude-branch"><GitBranch aria-hidden="true" size={12} className="mr-1 inline" />{session.branch}</Badge>}
+            {session?.running && <Badge variant="info">running</Badge>}
+            {session?.running && (
+              <button
+                type="button"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--color-text-danger)] hover:bg-[var(--color-background-surface-danger-muted)]"
+                onClick={() => void cancel()}
+                aria-label="Stop running agent"
+                title="Stop running agent"
+                data-testid="claude-stop"
+              >
+                <OctagonX aria-hidden="true" className="h-4 w-4" />
+              </button>
+            )}
           </>
         ),
         stats: <ClaudeUsageIndicator tokenUsage={session?.tokenUsage} />,
         actions: (
           <>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setFilesOpen(true)} aria-label="Open files" title="Files" data-testid="claude-open-files"><FolderOpen aria-hidden="true" className="h-3.5 w-3.5" /></Button>
-            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setRunlogOpen(true)} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
+            <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => { setRequestedInspectorTab("runlog"); setInspectorOpen(true); }} aria-label="Open run log" title="Run log" data-testid="claude-open-runlog"><ListTree aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} disabled={worktreeClosed} aria-label="Open changes" title="Changes" data-testid="claude-open-changes"><ListChecks aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             {session?.prUrl && (
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} aria-label="Open pull request status" title="Reviews" data-testid="claude-open-reviews"><GitPullRequest aria-hidden="true" className="h-3.5 w-3.5" /></Button>
@@ -578,9 +594,14 @@ export function ClaudeConversationPage() {
       }}
       inspector={{
         desktop: (
-          <div className="hidden lg:flex">
-            <ClaudeInspector events={events} title={session?.title ?? "claude-session"} />
-          </div>
+          <SessionInspector
+            directory={id}
+            sessionID={id}
+            events={events}
+            requestedTab={requestedInspectorTab}
+            mobileOpen={inspectorOpen}
+            onMobileClose={() => setInspectorOpen(false)}
+          />
         ),
       }}
       overlays={(
