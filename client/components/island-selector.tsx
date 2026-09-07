@@ -109,7 +109,7 @@ export function IslandSelector(props: IslandSelectorProps) {
           data-testid="island-selector-panel"
         >
           <div className="border-b border-[var(--color-border-default)] px-3 py-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Runtimes</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Runtime Islands</span>
           </div>
           <div className="p-1.5">
             {ISLANDS.map((island) => {
