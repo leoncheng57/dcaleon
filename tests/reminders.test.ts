@@ -85,7 +85,7 @@ describe("parseReminderMarkdown", () => {
       "---",
       "name: local",
       "description: A reminder documented by this application.",
-      "source_repo: https://github.com/leoncheng57/custom-dca-opencode",
+      "source_repo: https://github.com/leoncheng57/dcaleon",
       "source_path: agent-skills/commands/local.md",
       "source_commit: 0123456789abcdef0123456789abcdef01234567",
       "---",
@@ -93,7 +93,7 @@ describe("parseReminderMarkdown", () => {
       "Apply the documented instruction.",
     ].join("\n"));
     expect(parsed?.source).toEqual({
-      repo: "https://github.com/leoncheng57/custom-dca-opencode",
+      repo: "https://github.com/leoncheng57/dcaleon",
       path: "agent-skills/commands/local.md",
       commit: "0123456789abcdef0123456789abcdef01234567",
     });

@@ -1,6 +1,6 @@
 # Sub-agents and child sessions
 
-This guide explains delegated work in custom-dca-opencode: what creates a child session, how
+This guide explains delegated work in dcaleon: what creates a child session, how
 the browser observes it, where Plan/Build permissions apply, and when a separate Git worktree
 is the safer form of parallelism.
 

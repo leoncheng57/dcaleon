@@ -6,7 +6,7 @@
 // something else — in the next one.
 //
 // Issue #305 is the concrete case. PR #302 committed
-// `node_modules -> ../../custom-dca-opencode/node_modules` (mode 120000), so
+// `node_modules -> ../../dcaleon/node_modules` (mode 120000), so
 // every clone and every worktree cut from `main` materialised a link into one
 // particular checkout's dependencies. Installing in any of them wrote through
 // into the primary tree that the live launchd BFF service runs from. Nothing

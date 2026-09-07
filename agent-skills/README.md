@@ -5,7 +5,7 @@ worked simulations, and the build-time parser that fed the Runner's
 `/playbooks` catalogue. All of it has been removed.
 
 There is no public catalogue. The former commands-only static site under
-`/custom-dca-opencode/agent-skills/` and the workflow that published it are retired,
+`/dcaleon/agent-skills/` and the workflow that published it are retired,
 and the published directory has been removed from `gh-pages`. The only catalogue is
 the Runner's own `/playbooks`, which reads this content out of the bundle it was
 built from. The archived separate repository still owns

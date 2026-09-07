@@ -15,7 +15,7 @@ launchd: UI + BFF (:3210) ----> OpenCode (:4097)
       +-- rebuilt on app upgrade        +-- left running
 ```
 
-The supervised unit is `ai.custom-dca-opencode.bff`. It serves the built SPA and
+The supervised unit is `ai.dcaleon.bff`. It serves the built SPA and
 production BFF on port `3210` by default, with logs under `.state/logs/`. OpenCode
 is a separate, long-lived process named by `OPENCODE_URL` in `.env`.
 
@@ -51,7 +51,7 @@ launchd stops the old BFF and starts the new BFF
 | Component | During `service:install` |
 |---|---|
 | Built UI and BFF | Rebuilt, then served by the new BFF process. |
-| LaunchAgent | Replaced and restarted for `ai.custom-dca-opencode.bff` only. |
+| LaunchAgent | Replaced and restarted for `ai.dcaleon.bff` only. |
 | Browser or phone | May briefly reconnect while `:3210` has no BFF listener. |
 | Tailscale Serve | Stays configured and continues proxying to `:3210` after the BFF returns. |
 | OpenCode | Not started, stopped, or restarted. Active agent turns continue. |
@@ -115,8 +115,8 @@ npm run service:install -- --port=3210
 Use `npm run service:install -- --port=3211` to choose another supervised port.
 Port `3000` is rejected because `npm run dev` uses it by default. Installation is
 idempotent: it rebuilds the app, replaces only
-`~/Library/LaunchAgents/ai.custom-dca-opencode.bff.plist`, and bootstraps only the
-matching `gui/$UID/ai.custom-dca-opencode.bff` job. Uninstall does not use `pkill`,
+`~/Library/LaunchAgents/ai.dcaleon.bff.plist`, and bootstraps only the
+matching `gui/$UID/ai.dcaleon.bff` job. Uninstall does not use `pkill`,
 does not touch OpenCode, and preserves logs.
 
 ## Operations checklist
@@ -197,4 +197,4 @@ launchctl print "gui/$UID/ai.opencode.serve"
 ```
 
 The jobs and logs are intentionally unambiguous: `ai.opencode.serve` uses
-`opencode.launchd.*.log`; `ai.custom-dca-opencode.bff` uses `bff.launchd.*.log`.
+`opencode.launchd.*.log`; `ai.dcaleon.bff` uses `bff.launchd.*.log`.

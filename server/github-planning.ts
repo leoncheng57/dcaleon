@@ -12,8 +12,8 @@
 
 export const PLANNING_REPOSITORY = {
   owner: "leoncheng57",
-  repo: "custom-dca-opencode",
-  url: "https://github.com/leoncheng57/custom-dca-opencode",
+  repo: "dcaleon",
+  url: "https://github.com/leoncheng57/dcaleon",
 } as const;
 
 export const PLANNING_LIMITS = {
@@ -213,7 +213,7 @@ async function fetchPage(page: number): Promise<PlanningPage> {
       headers: {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "custom-dca-opencode",
+        "User-Agent": "dcaleon",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       redirect: "error",
@@ -244,7 +244,7 @@ async function fetchLabelsPage(page: number): Promise<PlanningPage> {
       headers: {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "custom-dca-opencode",
+        "User-Agent": "dcaleon",
         ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
       },
       redirect: "error",
@@ -403,7 +403,7 @@ async function planningRequest(target: URL, init: RequestInit = {}): Promise<unk
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) headers.set("Accept", "application/vnd.github+json");
   headers.set("X-GitHub-Api-Version", "2022-11-28");
-  headers.set("User-Agent", "custom-dca-opencode");
+  headers.set("User-Agent", "dcaleon");
   if (process.env.GITHUB_TOKEN) headers.set("Authorization", `Bearer ${process.env.GITHUB_TOKEN}`);
   let response: Response;
   try {
@@ -658,7 +658,7 @@ export async function createPlanningIssue(value: unknown): Promise<PlanningItem>
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        "User-Agent": "custom-dca-opencode",
+        "User-Agent": "dcaleon",
         "X-GitHub-Api-Version": "2022-11-28",
       },
       body: JSON.stringify(input),

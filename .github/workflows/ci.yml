@@ -94,7 +94,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.e2e
-          tags: custom-dca-opencode-e2e:ci
+          tags: dcaleon-e2e:ci
           load: true
           push: false
           cache-from: type=gha,scope=e2e-linux-amd64-v1
@@ -105,7 +105,7 @@ jobs:
       - name: Isolated E2E
         run: >-
           npm run test:e2e:docker --
-          --image custom-dca-opencode-e2e:ci
+          --image dcaleon-e2e:ci
           --artifact-root "$RUNNER_TEMP/e2e-artifacts"
 
       # Always, not only on failure: the bundle carries summary.json and

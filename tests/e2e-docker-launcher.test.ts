@@ -178,8 +178,8 @@ describe("argument forwarding", () => {
   });
 
   it("reads a prebuilt --image so CI can own the build cache", () => {
-    const parsed = parseArgs(["--image", "custom-dca-opencode-e2e:ci", "--artifact-root", "/tmp/out"]);
-    expect(parsed.options.image).toBe("custom-dca-opencode-e2e:ci");
+    const parsed = parseArgs(["--image", "dcaleon-e2e:ci", "--artifact-root", "/tmp/out"]);
+    expect(parsed.options.image).toBe("dcaleon-e2e:ci");
     expect(parsed.options.artifactRoot).toBe("/tmp/out");
     expect(parsed.playwrightArgs).toEqual([]);
   });
@@ -187,8 +187,8 @@ describe("argument forwarding", () => {
 
 describe("prebuilt image reference", () => {
   it.each([
-    ["a plain name", "custom-dca-opencode-e2e"],
-    ["a name and tag", "custom-dca-opencode-e2e:ci"],
+    ["a plain name", "dcaleon-e2e"],
+    ["a name and tag", "dcaleon-e2e:ci"],
     ["a registry path", "ghcr.io/owner/name:v1.2.3"],
     ["dots and underscores in the tag", "image:1.2_3-rc.1"],
   ])("accepts %s", (_label, value) => {
@@ -251,7 +251,7 @@ describe("artifact destination", () => {
 describe("container security posture", () => {
   const args = dockerCreateArgs({
     runID: "20260826t023015z-abc12345",
-    tag: "custom-dca-opencode-e2e:run-20260826t023015z-abc12345",
+    tag: "dcaleon-e2e:run-20260826t023015z-abc12345",
     sourceSHA: "f".repeat(40),
     playwrightArgs: ["tests/e2e/smoke.ui.spec.ts"],
   });
@@ -324,7 +324,7 @@ describe("container security posture", () => {
       "CI=true",
       "E2E_RUN_ID=20260826t023015z-abc12345",
       `E2E_SOURCE_SHA=${"f".repeat(40)}`,
-      "E2E_IMAGE_TAG=custom-dca-opencode-e2e:run-20260826t023015z-abc12345",
+      "E2E_IMAGE_TAG=dcaleon-e2e:run-20260826t023015z-abc12345",
     ]);
     // A bare `--env NAME` copies that variable in from the host. Every entry
     // above assigns a value, so nothing is inherited.
@@ -340,7 +340,7 @@ describe("container security posture", () => {
   });
 
   it("puts the image immediately before the forwarded command", () => {
-    expect(args.at(-2)).toBe("custom-dca-opencode-e2e:run-20260826t023015z-abc12345");
+    expect(args.at(-2)).toBe("dcaleon-e2e:run-20260826t023015z-abc12345");
     expect(args.at(-1)).toBe("tests/e2e/smoke.ui.spec.ts");
   });
 

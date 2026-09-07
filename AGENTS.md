@@ -276,7 +276,7 @@ several decisions below.
     not frozen neutral — when an authoritative fetch classifies it.
 17. **Project Planning is one fixed repository feed and issue creator.** `/planning` is
     about improving this application, not whichever project directory is currently
-    selected, so the BFF hard-codes `leoncheng57/custom-dca-opencode` and accepts no
+    selected, so the BFF hard-codes `leoncheng57/dcaleon` and accepts no
     repository or directory from the browser. GitHub issues and pull requests share
     one list and retain their type, state, labels, creation time and last-activity
     time. Label colors are deliberately dropped: GitHub supplies arbitrary hex while
@@ -1053,7 +1053,7 @@ several decisions below.
 32. **RETIRED — the public command catalogue is gone, and `gh-pages:agent-skills/`
     was deleted rather than left serving a stale index.** This decision used to
     specify a dependency-free generator that reused the command parser and published
-    escaped HTML to `/custom-dca-opencode/agent-skills/` from trusted `main` commits.
+    escaped HTML to `/dcaleon/agent-skills/` from trusted `main` commits.
     It is superseded, not merely unimplemented, and the machinery
     (`.github/workflows/publish-agent-skills.yml`, `scripts/agent-skills-site.ts`,
     its two entry points, `scripts/publish-workflow-audit.ts`,

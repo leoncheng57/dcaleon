@@ -4,19 +4,19 @@ import { splitProjectWorkspace } from "../client/lib/projectPath.js";
 
 describe("splitProjectWorkspace", () => {
   it("returns just the project when there is no worktree marker", () => {
-    expect(splitProjectWorkspace("custom-dca-opencode")).toEqual({ project: "custom-dca-opencode" });
+    expect(splitProjectWorkspace("dcaleon")).toEqual({ project: "dcaleon" });
   });
 
   it("splits a project and its worktree sibling", () => {
-    expect(splitProjectWorkspace("custom-dca-opencode.worktrees/plan-build-toggle")).toEqual({
-      project: "custom-dca-opencode",
+    expect(splitProjectWorkspace("dcaleon.worktrees/plan-build-toggle")).toEqual({
+      project: "dcaleon",
       workspace: "plan-build-toggle",
     });
   });
 
   it("handles a nested workspace path", () => {
-    expect(splitProjectWorkspace("custom-dca-opencode.worktrees/nested/deep")).toEqual({
-      project: "custom-dca-opencode",
+    expect(splitProjectWorkspace("dcaleon.worktrees/nested/deep")).toEqual({
+      project: "dcaleon",
       workspace: "nested/deep",
     });
   });

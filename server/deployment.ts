@@ -40,7 +40,7 @@ export const DEPLOYMENT_LIMITS = {
  * an attacker-chosen service name is not a thing we want to be possible.
  */
 const SERVICES = [
-  { label: "ai.custom-dca-opencode.bff", role: "bff" as const },
+  { label: "ai.dcaleon.bff", role: "bff" as const },
   { label: "ai.opencode.serve", role: "opencode" as const },
 ];
 

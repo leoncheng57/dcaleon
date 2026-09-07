@@ -13,7 +13,7 @@ jobs:
     permissions:
       contents: read
     env:
-      PREVIEW_BASE_PATH: /custom-dca-opencode/pr-previews/pr-${{ github.event.pull_request.number }}/
+      PREVIEW_BASE_PATH: /dcaleon/pr-previews/pr-${{ github.event.pull_request.number }}/
     steps:
       - name: Check out pull request
         uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
       group: pr-screenshot-publication
       cancel-in-progress: false
     env:
-      PREVIEW_URL: https://leoncheng.dev/custom-dca-opencode/pr-previews/pr-${{ github.event.pull_request.number }}/
+      PREVIEW_URL: https://leoncheng.dev/dcaleon/pr-previews/pr-${{ github.event.pull_request.number }}/
     steps:
       - name: Check out trusted base for the Pages writer
         uses: actions/checkout@v4
@@ -91,7 +91,7 @@ jobs:
           const fs = require('node:fs');
           const path = require('node:path');
           const manifest = JSON.parse(fs.readFileSync('bundle/manifest.json', 'utf8'));
-          const expectedBase = `/custom-dca-opencode/pr-previews/pr-${process.env.PR_NUMBER}/`;
+          const expectedBase = `/dcaleon/pr-previews/pr-${process.env.PR_NUMBER}/`;
           if (manifest.version !== 1 || String(manifest.prNumber) !== process.env.PR_NUMBER || manifest.sha !== process.env.HEAD_SHA || manifest.basePath !== expectedBase) {
             throw new Error('artifact identity does not match this PR commit');
           }

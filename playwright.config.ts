@@ -42,7 +42,7 @@ const stateFiles =
 // module deliberately only knows how to own and delete `.json` files, and
 // weakening that guard for log fixtures would trade a real safety property for
 // convenience. Same path per lane, overwritten, never globbed or deleted.
-const LOG_DIR = `/tmp/custom-dca-opencode-e2e-logs-${PORT}`;
+const LOG_DIR = `/tmp/dcaleon-e2e-logs-${PORT}`;
 if (process.env.TEST_WORKER_INDEX === undefined) {
   mkdirSync(LOG_DIR, { recursive: true });
   const at = (offsetMs: number) => new Date(Date.UTC(2026, 7, 29, 12, 0, 0) + offsetMs).toISOString();
@@ -108,7 +108,7 @@ export const appServer = {
     PROJECTS_DIR: "/tmp",
     PROJECT_PINS_FILE: stateFiles.PROJECT_PINS_FILE,
     MODEL_PINS_FILE: stateFiles.MODEL_PINS_FILE,
-    OPENCODE_WORKTREE_ROOT: "/tmp/custom-dca-opencode-e2e-worktrees",
+    OPENCODE_WORKTREE_ROOT: "/tmp/dcaleon-e2e-worktrees",
     NOTIFICATION_PREFS_FILE: stateFiles.NOTIFICATION_PREFS_FILE,
     NOTIFICATION_HISTORY_FILE: stateFiles.NOTIFICATION_HISTORY_FILE,
     INSTRUCTION_AUDIT_FILE: stateFiles.INSTRUCTION_AUDIT_FILE,
@@ -123,7 +123,7 @@ export const appServer = {
     // NODE_ENV is set on the server command above, never on the build.
     DSH_TEST_UNSAFE_BRIDGE: "true",
     DSH_SDK_VERSION: "0.1.1rc2",
-    DSH_STATE_DIR: `/tmp/custom-dca-opencode-dsh-state-${PORT}`,
+    DSH_STATE_DIR: `/tmp/dcaleon-dsh-state-${PORT}`,
     DSH_BRIDGE_SCRIPT: `${process.cwd()}/tests/e2e/mock-dsh-bridge.py`,
     DSH_PRESETS_JSON: JSON.stringify([
       {
@@ -150,7 +150,7 @@ export const appServer = {
       label: "DSH E2E workspace",
       directory: process.cwd(),
     }]),
-    DSH_EXPERIMENT_LEDGER: `/tmp/custom-dca-opencode-dsh-ledger-${PORT}.json`,
+    DSH_EXPERIMENT_LEDGER: `/tmp/dcaleon-dsh-ledger-${PORT}.json`,
   },
 };
 

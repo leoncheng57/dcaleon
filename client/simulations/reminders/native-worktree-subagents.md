@@ -26,7 +26,7 @@ $ git status --short
 ## assistant
 
 This parent is a fresh Build-only session, so it can delegate safely. Creating
-a sibling worktree at `../custom-dca-opencode.worktrees/notification-badge` on
+a sibling worktree at `../dcaleon.worktrees/notification-badge` on
 branch `fix/notification-badge`, then launching the child with the absolute
 worktree path, exclusive ownership of the badge component, the required
 `pwd; git rev-parse --show-toplevel; git status --short --branch` preflight,
