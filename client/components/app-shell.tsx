@@ -29,7 +29,7 @@ const APP_NAME = "DCA";
 const BUILD_LABEL = formatBuildLabel(__APP_VERSION__, __APP_COMMIT__);
 
 function documentTitle(pathname: string): string {
-  if (pathname === "/") return APP_NAME;
+  if (pathname === "/") return `Runtimes | ${APP_NAME}`;
   if (pathname === "/opencode") return `Sessions | ${APP_NAME}`;
   if (pathname.startsWith("/sessions/")) return `Session | ${APP_NAME}`;
   if (pathname === "/settings") return `Settings | ${APP_NAME}`;
@@ -147,8 +147,8 @@ export function AppShell() {
 
   const commands = buildPaletteCommands({
     navigation: [
-      { id: "home", title: "Home", to: "/", keywords: ["landing", "repository"] },
-      { id: "opencode", title: "OpenCode", to: scopedPath("/opencode"), keywords: ["sessions", "hub", "projects"] },
+      { id: "home", title: "Home", to: "/", keywords: ["runtimes", "picker", "landing"] },
+      { id: "opencode", title: "OpenCode", to: scopedPath("/opencode"), keywords: ["sessions", "hub", "projects", "opencode"] },
       { id: "tools", title: "MCPs", to: scopedPath("/tools"), keywords: ["mcp", "lsp", "permissions", "tools"] },
       { id: "docs", title: "Docs", to: scopedPath("/docs"), keywords: ["architecture", "contributing", "internals"] },
       {

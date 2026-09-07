@@ -3,13 +3,15 @@ import { expect, test } from "@playwright/test";
 const DIR = "/tmp/mock-project";
 
 test.describe("landing page and runtime navigation", () => {
-  test("the root is a minimal landing that points at the public repository", async ({ page }) => {
+  test("the root is a runtime picker with clickable cards", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("opencode-home")).toBeVisible();
-    await expect(page.getByTestId("opencode-home-repository")).toHaveAttribute("href", "https://github.com/leoncheng57/dcaleon");
+    await expect(page.getByTestId("runtime-picker")).toBeVisible();
+    await expect(page.getByTestId("runtime-card-opencode")).toBeVisible();
+    await expect(page.getByTestId("runtime-card-dsh")).toBeVisible();
+    await expect(page.getByTestId("runtime-card-claude")).toBeVisible();
     // The OpenCode hub no longer owns the root.
     await expect(page.getByTestId("opencode-hub")).toHaveCount(0);
-    await expect(page).toHaveTitle("DCA");
+    await expect(page).toHaveTitle("Runtimes | DCA");
   });
 
   test("island selector opens and navigates to OpenCode, keeping the directory scope", async ({ page }) => {
@@ -40,6 +42,6 @@ test.describe("landing page and runtime navigation", () => {
     await page.goto("/opencode");
     await page.getByTestId("opencode-nav-home").click();
     await expect(page).toHaveURL("/");
-    await expect(page.getByTestId("opencode-home")).toBeVisible();
+    await expect(page.getByTestId("runtime-picker")).toBeVisible();
   });
 });
