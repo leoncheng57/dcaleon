@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import type { Readable } from "node:stream";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
 
@@ -144,7 +144,7 @@ export class ClaudeSupervisor extends EventEmitter {
   private readonly children = new Map<string, ChildProcessByStdio<null, Readable, Readable>>();
   private readonly buffers = new Map<string, Buffer>();
 
-  constructor(private readonly config: ClaudeConfig) {
+  constructor(private config: ClaudeConfig) {
     super();
   }
 
@@ -257,6 +257,16 @@ export class ClaudeSupervisor extends EventEmitter {
     this.buffers.set(sessionId, frame);
   }
 
+  private reloadCliVersion(): string {
+    try {
+      const raw = readFileSync(path.resolve(".env"), "utf8");
+      const match = raw.match(/^CLAUDE_CLI_VERSION\s*=\s*['"]?([^'"\s#]+)/m);
+      return match?.[1] ?? this.config.cliVersion;
+    } catch {
+      return this.config.cliVersion;
+    }
+  }
+
   private receiveLine(sessionId: string, line: string): void {
     if (!line.trim()) return;
     let parsed: ClaudeFrame;
@@ -268,15 +278,22 @@ export class ClaudeSupervisor extends EventEmitter {
     }
     // Fail closed on binary drift: the init frame carries the CLI version, and a
     // mismatch with the pin means the wire format is no longer trusted.
+    // When the .env has already been updated to match the new binary, accept
+    // the version without requiring a full server restart.
     if (parsed.type === "system" && parsed.subtype === "init") {
       const version = typeof parsed.claude_code_version === "string" ? parsed.claude_code_version : "";
       if (version !== this.config.cliVersion) {
-        this.emit("frame", {
-          sessionId,
-          frame: { type: "error", subtype: "version_mismatch", expected: this.config.cliVersion, received: version },
-        });
-        this.children.get(sessionId)?.kill("SIGTERM");
-        return;
+        const refreshed = this.reloadCliVersion();
+        if (version === refreshed) {
+          this.config = { ...this.config, cliVersion: refreshed };
+        } else {
+          this.emit("frame", {
+            sessionId,
+            frame: { type: "error", subtype: "version_mismatch", expected: this.config.cliVersion, received: version },
+          });
+          this.children.get(sessionId)?.kill("SIGTERM");
+          return;
+        }
       }
     }
     this.emit("frame", { sessionId, frame: parsed });

@@ -374,7 +374,10 @@ export function HubPage() {
   const recentlyActive = recents ? recentlyActiveSessions(recents) : [];
   // Cross-project, like Recents: running sessions and unresolved notification
   // sessions, both already fetched for other surfaces on this page.
-  const attention = buildAttentionSummary(recents ?? [], notificationRecords);
+  const opencodeNotifications = notificationRecords.filter(
+    (r) => !r.sessionID?.startsWith("claude-"),
+  );
+  const attention = buildAttentionSummary(recents ?? [], opencodeNotifications);
 
   // Recents span projects, so every row needs a project label — two sessions
   // called "Fix the tests" are otherwise indistinguishable. Discovery only
