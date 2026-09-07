@@ -111,8 +111,8 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
           {header.badges}
         </div>
         {(header.stats || header.actions || browserSessionID) && (
-          <div className="flex min-w-0 items-center gap-3">
-            {header.stats}
+          <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+            {header.stats && <div className="min-w-0 shrink-0">{header.stats}</div>}
             <SessionActionBar testId={testIds.actions}>
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0"
                 onClick={() => setToolsOpen(true)} disabled={!browserSessionID}
