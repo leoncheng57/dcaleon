@@ -249,7 +249,11 @@ export class NotificationService {
     this.lookupSessionMetadata = lookupSessionMetadata
       ?? ((directory, sessionID, signal) => getSessionMetadata(this.config, directory, sessionID, signal));
     this.lookupSessionExcerpt = lookupSessionExcerpt
-      ?? ((directory, sessionID, signal) => latestAssistantExcerpt(this.config, directory, sessionID, signal));
+      // DSH sessions are local to the experiment store, so OpenCode has no
+      // transcript to look up after their title has been seeded above.
+      ?? ((directory, sessionID, signal) => sessionID.startsWith("dsh-")
+        ? Promise.resolve(undefined)
+        : latestAssistantExcerpt(this.config, directory, sessionID, signal));
   }
 
   /**

@@ -210,6 +210,9 @@ export class DshSessionStore extends EventEmitter {
       if (humanIntervention) record.interventions += 1;
     }
     this.persist();
+    // `update` is also emitted for streamed output, so consumers outside the
+    // experiment UI need a separate terminal signal.
+    this.emit("finished", { session, outcome });
   }
 
   private persist(): void {

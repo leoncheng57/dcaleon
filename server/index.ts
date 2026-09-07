@@ -123,7 +123,7 @@ app.use("/api", observabilityRoutes(opencode, PORT));
 app.use("/api", modelPinRoutes());
 app.use("/api", recentRoutes(opencode));
 app.use("/api", memoryRoutes());
-app.use("/api", dshRoutes(dsh));
+app.use("/api", dshRoutes(dsh, undefined, undefined, undefined, bus));
 app.use("/api", claudeRoutes(claude, undefined, claudeStore, bus));
 const opencodePort = Number(new URL(opencode.baseUrl).port || 80);
 app.use("/api", previewRoutes(parseAllowedPorts(process.env.PREVIEW_ALLOWED_PORTS, [PORT, opencodePort])));
