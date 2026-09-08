@@ -31,8 +31,34 @@ that the others were restarted or updated:
 | OpenCode server | `4096` unless `.env` says otherwise | Reference deployment may use `4097` | Separate OpenCode supervisor |
 
 Claude has no listening port. A Claude-island turn is a `claude` CLI child process
-launched and supervised by the dcaleon BFF. The browser always talks to the BFF;
-it never connects directly to either OpenCode or Claude.
+launched and supervised by the dcaleon BFF. DSH (DeepSeek Harness) sessions use a
+long-lived Python bridge process also spawned by the BFF. The browser always talks
+to the BFF; it never connects directly to OpenCode, Claude, or DSH.
+
+## Island independence during restarts
+
+The three runtime islands have different relationships to the BFF process:
+
+| Island | Relationship to BFF | Survives BFF restart? |
+|---|---|---|
+| OpenCode | Independent process (`ai.opencode.serve` LaunchAgent) | **Yes** — separate process continues, BFF reconnects via SSE |
+| Claude | Child process (`claude -p` spawned by BFF supervisor) | **No** — child killed on SIGTERM; session marked interrupted |
+| DSH | Child process (Python bridge spawned by BFF) | **No** — child killed with parent; session marked interrupted |
+
+**There is no way to restart one island without restarting the others** inside the
+BFF. They share one Express process. An OpenCode restart is independent because it
+is a separate LaunchAgent, but Claude and DSH always go down together with the BFF.
+
+**There is no single-runner bottleneck in production.** In development, `npm run dev`
+runs Vite and the BFF as two background jobs that start and stop together. In
+production, Vite is not involved at runtime: the SPA is pre-built into `dist/client/`
+and served as static files by Express. `service:install` builds once and starts a
+plain Node process; no Vite process runs in the supervised deployment.
+
+**No island can trigger a BFF restart.** There is no API route, agent tool, or code
+path that allows a running session to restart the BFF. The only restart paths are:
+external `service:install`, an external SIGTERM/SIGINT signal, or launchd's
+`KeepAlive` recovering from a crash.
 
 ## Reproducible production update
 
@@ -61,6 +87,35 @@ active OpenCode turns continue during an application update.
 
 If the checkout is dirty, preserve that work first. Commit it on its own branch or
 use a separate clean worktree; do not stash, discard, or deploy it accidentally.
+
+### Do not run `npm ci` while the BFF serves from the same checkout
+
+`npm ci` deletes `node_modules` before reinstalling. If the supervised BFF is
+running from that directory, its already-loaded `require()` and dynamic `import()`
+calls resolve into a directory that no longer exists, causing missing-module crashes
+or silent freezes. This is the most common deployment mistake; it was rediscovered
+in a live Codex debugging session.
+
+**If deploying from the checkout the BFF currently serves**, stop the BFF first:
+
+```bash
+launchctl bootout gui/$(id -u)/ai.dcaleon.bff
+# Wait for the port to release
+for attempt in 1 2 3 4 5; do
+  lsof -nP -iTCP:3210 -sTCP:LISTEN >/dev/null 2>&1 || break
+  sleep 1
+done
+npm ci
+npm run service:install -- --port=3210
+```
+
+This is **not** needed when `service:install` is the only command that touches
+`node_modules`, because it builds first and replaces the LaunchAgent afterward. The
+trap fires when `npm ci` is run as a separate manual step before `service:install`
+in the same checkout the BFF is serving.
+
+A separate deployment worktree avoids the problem entirely because the BFF never
+serves from it until `service:install` switches the LaunchAgent.
 
 ### When the normal checkout contains work in progress
 
@@ -147,22 +202,23 @@ both `5173`/`5174` and `3000`, but it does not stop the separate OpenCode server
 
 ## What each restart interrupts
 
-| Action | UI/BFF impact | OpenCode-island turns | Claude-island turns |
-|---|---|---|---|
-| Restart Vite only | Browser UI reconnects | Continue | Continue while the BFF remains alive |
-| Stop/restart `npm run dev` | Development UI and BFF stop | Continue in the separate OpenCode process | BFF supervision is interrupted; the session is marked interrupted on reload |
-| Run `service:install` | Production UI and BFF briefly restart | Continue in the separate OpenCode process | Active Claude turns are interrupted |
-| Restart OpenCode | No UI rebuild | Active turns are interrupted and are not automatically replayed | No direct effect while the BFF remains alive |
+| Action | UI/BFF impact | OpenCode-island turns | Claude-island turns | DSH-island turns |
+|---|---|---|---|---|
+| Restart Vite only | Browser UI reconnects | Continue | Continue while the BFF remains alive | Continue while the BFF remains alive |
+| Stop/restart `npm run dev` | Development UI and BFF stop | Continue in the separate OpenCode process | BFF supervision is interrupted; session marked interrupted on reload | Bridge killed; session marked interrupted on reload |
+| Run `service:install` | Production UI and BFF briefly restart | Continue in the separate OpenCode process | Installer refuses while active; `--force-active-claude` interrupts explicitly | Active bridge killed; session marked interrupted |
+| Restart OpenCode | No UI rebuild | Active turns are interrupted and are not automatically replayed | No direct effect while the BFF remains alive | No direct effect while the BFF remains alive |
 
 OpenCode owns its turns after the BFF submits them asynchronously, so a dcaleon BFF
-restart can reconnect and refetch their state. Claude turns instead run as processes
-owned by the BFF supervisor. Their transcript and Claude session ID remain durable,
-but an interrupted turn is not silently replayed; resume it explicitly after the BFF
-returns.
+restart can reconnect and refetch their state. Claude and DSH turns instead run as
+child processes owned by the BFF. Their transcripts and session IDs remain durable
+(persisted to `.state/` with mode `0600`), but an interrupted turn is not silently
+replayed; resume it explicitly after the BFF returns.
 
-Before a planned BFF deployment, let active Claude turns finish or cancel them
-deliberately. There is no reason to restart OpenCode as part of a dcaleon application
-upgrade.
+Before a planned BFF deployment, let active Claude and DSH turns finish or cancel
+them deliberately. The installer checks for active Claude sessions and refuses when
+any are running (there is no equivalent safety gate for DSH). There is no reason to
+restart OpenCode as part of a dcaleon application upgrade.
 
 ## Diagnose a failed production restart
 
