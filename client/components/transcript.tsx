@@ -483,12 +483,24 @@ export function ToolCallRow({ event, wrap, directory }: { event: ToolEvent; wrap
       data-status={event.status}
       {...(event.childSessionId ? { "data-child-session": event.childSessionId } : {})}
     >
+      {/*
+        The header WRAPS rather than ellipsizing: a terminal action is only
+        useful if you can read the command that ran, and `truncate` hid the
+        interesting tail of every long one (#159). The row stays a single flex
+        line — the summary/detail span grows taller instead of pushing siblings
+        onto a second line — so the status bullet, tool name, duration and
+        timestamp stay pinned to the first line and never wrap mid-token.
+        `items-baseline` aligns them with the command's first line, and
+        `text-left` is required because a wrapped <button> would otherwise
+        centre its last line.
+      */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
+        data-testid="opencode-tool-toggle"
         className={cn(
-          "inline-flex max-w-full items-center gap-1.5 rounded bg-[var(--color-background-muted)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]",
+          "inline-flex max-w-full items-baseline gap-1.5 rounded bg-[var(--color-background-muted)] px-2 py-0.5 text-left text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-default)]",
           failed && "border border-[var(--color-border-danger)]",
         )}
       >
@@ -498,11 +510,11 @@ export function ToolCallRow({ event, wrap, directory }: { event: ToolEvent; wrap
         </span>
         <span className="shrink-0 font-medium">{event.name}</span>
         {event.title ? (
-          <span className="min-w-0 truncate" data-testid="opencode-tool-summary">
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]" data-testid="opencode-tool-summary">
             {event.title}
           </span>
         ) : event.detail ? (
-          <span className="min-w-0 truncate font-mono" data-testid="opencode-tool-detail">
+          <span className="min-w-0 break-words font-mono [overflow-wrap:anywhere]" data-testid="opencode-tool-detail">
             {event.detail}
           </span>
         ) : null}

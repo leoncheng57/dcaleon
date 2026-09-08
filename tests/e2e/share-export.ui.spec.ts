@@ -39,7 +39,11 @@ test.describe.serial("share and export", () => {
     expect(copied).toContain("Add a health endpoint to the server.");
     expect(copied).toContain("I'll add the route now.");
     expect(copied).toContain("### Tool");
-    expect(copied).not.toMatch(/export const app|OPAQUE_SIGNATURE|ENCRYPTED_ONLY|npm test|partial output|context excerpt/);
+    // `coverage.reporter=text-summary` is a distinctive fragment of the bash
+    // fixture's command (tests/fixtures/session-messages.json). It stands in for
+    // "no tool input reaches the export"; keep it pointed at whatever that
+    // fixture actually runs, or this guard silently starts passing on absence.
+    expect(copied).not.toMatch(/export const app|OPAQUE_SIGNATURE|ENCRYPTED_ONLY|coverage\.reporter=text-summary|partial output|context excerpt/);
 
     const download = page.waitForEvent("download");
     await dialog.getByTestId("opencode-export-download").click();

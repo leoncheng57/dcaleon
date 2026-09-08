@@ -210,7 +210,7 @@
         "tool": "bash",
         "state": {
           "status": "running",
-          "input": { "command": "npm test", "timeout": 120000 },
+          "input": { "command": "npm test -- --reporter=verbose --coverage --coverage.reporter=text-summary --coverage.include='client/**' --coverage.exclude='**/*.d.ts'", "timeout": 120000 },
           "metadata": { "output": "partial output so far" },
           "time": { "start": 1787000020500 }
         },

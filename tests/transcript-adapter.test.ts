@@ -100,8 +100,23 @@ describe("tool events", () => {
     const running = tools.find((t) => t.name === "bash")!;
     expect(running.status).toBe("running");
     expect(running.output).toBe("partial output so far");
-    expect(running.commandText).toBe("npm test");
+    expect(running.commandText).toBe(
+      "npm test -- --reporter=verbose --coverage --coverage.reporter=text-summary --coverage.include='client/**' --coverage.exclude='**/*.d.ts'",
+    );
     expect(running.durationMs).toBeUndefined();
+  });
+
+  // The fixture command is deliberately long (#159): the transcript header now
+  // wraps instead of ellipsizing, so the fixture has to actually exercise a
+  // command that needs more than one line. It must still sit under toolDetail's
+  // 160-character cap, or the adapter would ellipsize it before CSS ever sees it
+  // and the wrap would have nothing to prove.
+  it("keeps the long fixture command under the detail cap so nothing is ellipsized", () => {
+    const running = tools.find((t) => t.name === "bash")!;
+    expect(running.detail).toBe(running.commandText);
+    expect(running.detail!.length).toBeGreaterThan(100);
+    expect(running.detail!.length).toBeLessThanOrEqual(160);
+    expect(running.detail).not.toContain("…");
   });
 
   it("preserves exact multiline shell commands separately from display detail", () => {
