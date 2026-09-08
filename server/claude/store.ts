@@ -300,7 +300,7 @@ export class ClaudeSessionStore extends EventEmitter {
         ? `Claude CLI version mismatch: expected ${String(frame.expected)}, received ${String(frame.received) || "unknown"}. Update CLAUDE_CLI_VERSION in your .env file to ${String(frame.received) || "the installed version"}, then restart the server.`
         : "Claude run failed";
       session.events.push({ id, messageId: id, timestamp: now, kind: "error", message });
-      this.finish(session, "failed");
+      this.finish(session, "failed", { failureReason: message });
     } else if (frame.type === "result") {
       session.sawResult = true;
       if (edited.size) {
@@ -343,7 +343,10 @@ export class ClaudeSessionStore extends EventEmitter {
           prose.reasoningTokens = typeof details?.thinking_tokens === "number" ? details.thinking_tokens : undefined;
         }
       }
-      this.finish(session, frame.is_error === true ? "failed" : "completed", { costUsd: cost });
+      this.finish(session, frame.is_error === true ? "failed" : "completed", {
+        costUsd: cost,
+        ...(frame.is_error === true ? { failureReason: "Claude returned an error result" } : {}),
+      });
     }
 
     session.events = session.events.slice(-MAX_EVENTS);
@@ -353,13 +356,18 @@ export class ClaudeSessionStore extends EventEmitter {
   }
 
   /** Backstop: the process exited. If no result frame settled the run, it failed. */
-  handleExit(sessionId: string): void {
+  handleExit(sessionId: string, details: { code?: number | null; signal?: NodeJS.Signals | null; stderr?: string } = {}): void {
     const session = this.sessions.get(sessionId);
     if (!session || !session.running) return;
     if (session.sawResult) return;
+    const suffix = details.signal
+      ? ` (signal ${details.signal})`
+      : details.code !== undefined && details.code !== null ? ` (exit code ${details.code})` : "";
+    const diagnostic = details.stderr?.trim().replace(/\s+/g, " ").slice(-500);
+    const message = `Claude process exited before completing the turn${suffix}${diagnostic ? `: ${diagnostic}` : ""}`;
     const id = `error-${randomUUID()}`;
-    session.events.push({ id, messageId: id, timestamp: new Date().toISOString(), kind: "error", message: "Claude process exited before completing the turn" });
-    this.finish(session, "failed");
+    session.events.push({ id, messageId: id, timestamp: new Date().toISOString(), kind: "error", message });
+    this.finish(session, "failed", { failureReason: message });
     this.emit("update", session.id);
   }
 
@@ -390,7 +398,7 @@ export class ClaudeSessionStore extends EventEmitter {
     this.emit("update", session.id);
   }
 
-  private finish(session: ClaudeSession, outcome: ClaudeRunRecord["outcome"], options: { costUsd?: number; humanIntervention?: boolean } = {}): void {
+  private finish(session: ClaudeSession, outcome: ClaudeRunRecord["outcome"], options: { costUsd?: number; humanIntervention?: boolean; failureReason?: string } = {}): void {
     const prose = [...session.events].reverse().find((item) => item.kind === "agent" && item.id === `agent-${session.activeRunId}`);
     if (prose?.kind === "agent" && prose.metricsStatus !== "final") {
       prose.metricsStatus = "final";
@@ -418,7 +426,7 @@ export class ClaudeSessionStore extends EventEmitter {
     this.persistSessions();
     // Every way a turn can end (result, error, exit, cancel) passes through
     // here, so this is the single hook the notification lane listens on.
-    this.emit("finished", { session, outcome });
+    this.emit("finished", { session, outcome, ...(options.failureReason ? { reason: options.failureReason } : {}) });
   }
 
   private atomicWrite(target: string, payload: string): void {

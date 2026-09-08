@@ -55,6 +55,7 @@ launchd stops the old BFF and starts the new BFF
 | Browser or phone | May briefly reconnect while `:3210` has no BFF listener. |
 | Tailscale Serve | Stays configured and continues proxying to `:3210` after the BFF returns. |
 | OpenCode | Not started, stopped, or restarted. Active agent turns continue. |
+| Claude Island | The install refuses to replace the BFF while a Claude turn is active. Wait for it to finish, or pass `--force-active-claude` to interrupt it explicitly. |
 
 ## Upgrade after GitHub changes
 
@@ -68,7 +69,11 @@ npm run service:install -- --port=3210
 
 `service:install` rebuilds the SPA and BFF, replaces the matching LaunchAgent, and
 starts the new BFF process. A connected browser briefly reconnects. OpenCode is not
-restarted, so active agent turns continue.
+restarted, so active OpenCode turns continue. Claude turns are BFF child processes;
+the installer checks them immediately before replacement and refuses while any are
+active. `--force-active-claude` is the explicit escape hatch when interruption is
+intentional. The check also fails closed when the running BFF cannot report Claude
+status; use the same flag when replacing a known-wedged or pre-Claude deployment.
 
 > `npm ci` is separate from `service:install`. Run it after a pull when the lockfile
 > may have changed; the installer builds with the dependencies already on disk.

@@ -55,4 +55,18 @@ describe("Claude Seatbelt profile", () => {
     expect(allowed.ok).toBe(true);
     expect(existsSync(path.join(workspace, "built.txt"))).toBe(true);
   });
+
+  it.runIf(onMac)("lets Homebrew runtimes load their shared libraries and Git read host configuration", async () => {
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "claude-sb-runtime-")));
+    temporary.push(root);
+    const workspace = path.join(root, "workspace");
+    const stateRoot = path.join(root, "state");
+    await run("/bin/mkdir", ["-p", workspace, stateRoot]);
+    const profile = claudeSeatbeltProfile({ workspace, stateRoot, binaryPath: process.execPath, mode: "read-only" });
+
+    const node = await underProfile(profile, `'${process.execPath}' --version >/dev/null`);
+    expect(node).toEqual({ ok: true, stderr: "" });
+    const git = await underProfile(profile, `cd '${workspace}' && /usr/bin/git config --global --list >/dev/null`);
+    expect(git).toEqual({ ok: true, stderr: "" });
+  });
 });

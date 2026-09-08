@@ -3,7 +3,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { publishClaudeRunEvents } from "../server/claude/notifications.js";
+import { claudeFailureName, publishClaudeRunEvents } from "../server/claude/notifications.js";
 import { NotificationService } from "../server/notifications/service.js";
 import { HistoryStore } from "../server/notifications/history.js";
 import { normalizePreferences, PreferenceStore } from "../server/notifications/preferences.js";
@@ -50,12 +50,19 @@ describe("Claude run notifications", () => {
     const { bus, history, service } = start();
 
     publishClaudeRunEvents(bus, { ...session, id: "claude-stopped" }, "cancelled");
-    publishClaudeRunEvents(bus, { ...session, id: "claude-broken" }, "failed");
+    publishClaudeRunEvents(bus, { ...session, id: "claude-broken" }, "failed", "Claude process exited before completing the turn (exit code 134)");
 
     await vi.waitFor(async () => expect(await history.list()).toHaveLength(2));
     const kinds = Object.fromEntries((await history.list()).map((record) => [record.sessionID, record.kind]));
     expect(kinds).toEqual({ "claude-stopped": "abort", "claude-broken": "error" });
+    expect((await history.list()).find((record) => record.sessionID === "claude-broken")?.displayBody).toBe("Stopped with an error: ClaudeExitCode134");
     service.stop();
+  });
+
+  it("classifies bounded failure names without putting stderr in the notification title", () => {
+    expect(claudeFailureName("Claude CLI version mismatch: expected 1, received 2")).toBe("ClaudeVersionMismatch");
+    expect(claudeFailureName("Claude process exited before completing the turn (signal SIGTERM): secret-shaped stderr")).toBe("ClaudeSignalSIGTERM");
+    expect(claudeFailureName("Claude returned an error result")).toBe("ClaudeErrorResult");
   });
 
   it("links the outbound click to the Claude surface when a public URL is configured", async () => {
