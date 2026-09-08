@@ -4,9 +4,11 @@ import {
   BFF_LABEL,
   DEFAULT_SUPERVISED_PORT,
   assertSupportedNodeVersion,
+  activeClaudeSessions,
   assertInstallablePlist,
   escapePlistString,
   parseSupervisedPort,
+  parseBffPlistPort,
   renderBffPlist,
 } from "../scripts/launchd.js";
 
@@ -35,6 +37,7 @@ describe("LaunchAgent plist generation", () => {
     expect(plist).toContain("<key>NODE_ENV</key>\n    <string>production</string>");
     expect(plist).toContain("<key>WorkingDirectory</key>");
     expect(plist).not.toContain("OPENCODE_SERVER_PASSWORD");
+    expect(parseBffPlistPort(plist)).toBe(3210);
     expect(() => assertInstallablePlist(plist)).not.toThrow();
   });
 
@@ -47,6 +50,15 @@ describe("LaunchAgent plist generation", () => {
   it("rejects Node versions older than the supported runtime", () => {
     expect(() => assertSupportedNodeVersion("21.7.0")).toThrow("Node 22 or newer is required");
     expect(() => assertSupportedNodeVersion("22.0.0")).not.toThrow();
+  });
+
+  it("finds only running Claude sessions for the deploy guard", () => {
+    expect(activeClaudeSessions({ sessions: [
+      { id: "claude-busy", title: "Finish the PR", running: true },
+      { id: "claude-idle", title: "Done", running: false },
+      { title: "Malformed", running: true },
+    ] })).toEqual([{ id: "claude-busy", title: "Finish the PR" }]);
+    expect(activeClaudeSessions({ sessions: "bad" })).toEqual([]);
   });
 
   it("keeps the optional OpenCode unit direct and impossible to install unresolved", () => {

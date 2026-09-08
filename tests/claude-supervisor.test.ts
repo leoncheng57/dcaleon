@@ -30,11 +30,12 @@ async function harness(body: string) {
 
 describe("Claude supervisor", () => {
   it("forwards no credential variables into the child", () => {
-    const env = claudeSupervisorEnvironment({ PATH: "/bin", HOME: "/home/x", ANTHROPIC_API_KEY: "sk-secret", CLAUDE_CODE_OAUTH_TOKEN: "tok" });
+    const env = claudeSupervisorEnvironment({ PATH: "/bin", HOME: "/home/x", SSH_AUTH_SOCK: "/tmp/agent.sock", ANTHROPIC_API_KEY: "sk-secret", CLAUDE_CODE_OAUTH_TOKEN: "tok" });
     expect(env.PATH).toBe("/bin");
     expect(env.HOME).toBe("/home/x");
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+    expect(env.SSH_AUTH_SOCK).toBe("/tmp/agent.sock");
   });
 
   it("provides the user identity claude needs to find its Keychain, synthesizing it when absent", () => {
@@ -59,6 +60,10 @@ describe("Claude supervisor", () => {
     // Auth prerequisites are present in both.
     expect(ro).toContain("Library/Keychains");
     expect(ro).toContain("SecurityServer");
+    expect(ro).toContain('(subpath "/opt")');
+    expect(ro).toContain('(subpath "/home/x/.gitconfig")');
+    expect(ro).toContain('(subpath "/home/x/.ssh/known_hosts")');
+    expect(writeLine(build)).not.toContain('(subpath "/opt")');
   });
 
   it("denies mutation tools in read-only and allows them by name in Build", () => {
@@ -155,6 +160,18 @@ describe("Claude supervisor", () => {
     // The result frame must precede the exit signal, every time.
     expect(order.indexOf("result")).toBeGreaterThan(-1);
     expect(order.indexOf("result")).toBeLessThan(order.indexOf("EXIT"));
+  });
+  it("reports the exit signal and bounded stderr with an incomplete turn", async () => {
+    const { supervisor, workspace } = await harness(`
+      process.stdout.write(JSON.stringify({ type: "system", subtype: "init", claude_code_version: "2.1.257" }) + "\\n");
+      process.stderr.write("runtime library denied");
+      process.exitCode = 17;
+    `);
+    let exit: Record<string, unknown> | undefined;
+    supervisor.on("exit", (value: Record<string, unknown>) => { exit = value; });
+    await supervisor.run({ session: { id: "stderr", sessionUuid: "ue", started: false }, preset, workspace, text: "hello", turnMode: "plan" });
+    await vi.waitFor(() => expect(exit).toBeDefined());
+    expect(exit).toMatchObject({ sessionId: "stderr", code: 17, stderr: "runtime library denied" });
   });
   it("a plan turn is read-only: plan permission mode, read-only settings, read-only Seatbelt", async () => {
     // Inspect the generated settings + a real profile rather than the child.

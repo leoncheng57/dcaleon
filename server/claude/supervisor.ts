@@ -24,9 +24,11 @@ export interface ClaudeFrame {
 // macOS resolves the login Keychain by user, and without USER even an
 // un-sandboxed `claude` reports "Not logged in". A launchd-supervised BFF has a
 // minimal env that lacks these, so they are synthesized from the process user
-// when absent. This is an allowlist by design — a credential var in `source`
-// (ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, ...) is never copied through.
-const SAFE_ENV = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "__CF_USER_TEXT_ENCODING"] as const;
+// when absent. SSH_AUTH_SOCK grants the same host Git authority documented for
+// this app without exposing a private-key file. This is an allowlist by design
+// — a credential var in `source` (ANTHROPIC_API_KEY,
+// CLAUDE_CODE_OAUTH_TOKEN, ...) is never copied through.
+const SAFE_ENV = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "__CF_USER_TEXT_ENCODING", "SSH_AUTH_SOCK"] as const;
 
 export function claudeSupervisorEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
@@ -79,8 +81,11 @@ export function claudeSeatbeltProfile(input: {
   const home = input.home ?? homedir();
   const runtimeRoot = path.dirname(input.binaryPath);
   const reads = [
-    "/System", "/usr", "/bin", "/sbin", "/Library", "/private/etc", "/dev", "/private/var",
+    // Apple's /usr/bin developer-tool shims load the selected, versioned Xcode
+    // bundle from /Applications. This is deliberately a read-only grant.
+    "/System", "/usr", "/bin", "/sbin", "/opt", "/Applications", "/Library", "/private/etc", "/dev", "/private/var",
     path.join(home, ".claude"), path.join(home, ".claude.json"), path.join(home, ".config"), path.join(home, ".local"),
+    path.join(home, ".gitconfig"), path.join(home, ".ssh/known_hosts"), path.join(home, ".ssh/config"),
     path.join(home, "Library/Keychains"), path.join(home, "Library/Preferences"), path.join(home, "Library/Caches"),
     input.binaryPath, runtimeRoot, input.workspace, input.stateRoot, "/private/tmp", "/tmp",
     ...(input.extraReads ?? []),
@@ -146,6 +151,7 @@ interface RunInput {
 export class ClaudeSupervisor extends EventEmitter {
   private readonly children = new Map<string, ChildProcessByStdio<null, Readable, Readable>>();
   private readonly buffers = new Map<string, Buffer>();
+  private readonly stderr = new Map<string, string>();
 
   constructor(private config: ClaudeConfig) {
     super();
@@ -223,27 +229,35 @@ export class ClaudeSupervisor extends EventEmitter {
       this.children.set(sessionId, child);
       registerResourceProcess(child, "Claude");
       this.buffers.set(sessionId, Buffer.alloc(0));
+      this.stderr.set(sessionId, "");
       child.once("spawn", () => resolve());
       child.once("error", (cause) => {
         this.children.delete(sessionId);
         this.buffers.delete(sessionId);
+        this.stderr.delete(sessionId);
         this.cleanup(input.cleanupDirectory);
         reject(cause);
       });
       child.stdout.on("data", (chunk: Buffer) => this.receiveChunk(sessionId, chunk));
-      child.stderr.on("data", (chunk: Buffer) => this.emit("diagnostic", chunk.toString("utf8").slice(0, 2_000)));
+      child.stderr.on("data", (chunk: Buffer) => {
+        const detail = chunk.toString("utf8");
+        this.stderr.set(sessionId, `${this.stderr.get(sessionId) ?? ""}${detail}`.slice(-4_000));
+        this.emit("diagnostic", detail.slice(0, 2_000));
+      });
       // `close`, not `exit`: `exit` can fire before the last stdout chunk is
       // delivered, which would let the turn be marked finished (and its final
       // `result` frame dropped) while frames are still in flight. `close` fires
       // only after every stdio stream has drained. Any partial trailing line is
       // flushed first so a frame without a final newline is not lost either.
-      child.once("close", (code) => {
+      child.once("close", (code, signal) => {
         const remainder = this.buffers.get(sessionId);
         if (remainder && remainder.length) this.receiveLine(sessionId, remainder.toString("utf8"));
+        const stderr = this.stderr.get(sessionId)?.trim();
         this.children.delete(sessionId);
         this.buffers.delete(sessionId);
+        this.stderr.delete(sessionId);
         this.cleanup(input.cleanupDirectory);
-        this.emit("exit", { sessionId, code });
+        this.emit("exit", { sessionId, code, signal, ...(stderr ? { stderr } : {}) });
       });
     });
   }
@@ -329,5 +343,6 @@ export class ClaudeSupervisor extends EventEmitter {
     for (const child of this.children.values()) child.kill("SIGTERM");
     this.children.clear();
     this.buffers.clear();
+    this.stderr.clear();
   }
 }

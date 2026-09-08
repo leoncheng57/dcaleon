@@ -140,9 +140,9 @@ describe("Claude session store", () => {
     const { instance } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
     instance.startRun(session, "x");
-    instance.handleExit(session.id);
+    instance.handleExit(session.id, { code: 134, stderr: "file system sandbox blocked open()" });
     expect(session.running).toBe(false);
-    expect(session.events.some((event) => event.kind === "error")).toBe(true);
+    expect(session.events.at(-1)).toMatchObject({ kind: "error", message: "Claude process exited before completing the turn (exit code 134): file system sandbox blocked open()" });
   });
 
   it("persists only bounded run metadata, never prompt or output", async () => {

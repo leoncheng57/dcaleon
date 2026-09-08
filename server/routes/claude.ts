@@ -60,10 +60,10 @@ export function claudeRoutes(
   // One child per session, so a frame is trusted to belong to its session; the
   // route still guards that the session is known and running before applying.
   supervisor.on("frame", ({ sessionId, frame }) => store.applyFrame(sessionId, frame));
-  supervisor.on("exit", ({ sessionId }) => store.handleExit(sessionId));
+  supervisor.on("exit", ({ sessionId, code, signal, stderr }) => store.handleExit(sessionId, { code, signal, stderr }));
   supervisor.on("diagnostic", (detail) => console.warn("[claude]", detail));
   store.on("error", (detail) => console.warn("[claude-ledger]", detail));
-  if (bus) store.on("finished", ({ session, outcome }) => publishClaudeRunEvents(bus, session, outcome));
+  if (bus) store.on("finished", ({ session, outcome, reason }) => publishClaudeRunEvents(bus, session, outcome, reason));
 
   router.use(async (_req, res, next) => {
     await ready;

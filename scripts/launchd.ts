@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,6 +93,25 @@ export function assertInstallablePlist(plist: string): void {
   }
 }
 
+export function activeClaudeSessions(payload: unknown): Array<{ id: string; title: string }> {
+  if (!payload || typeof payload !== "object") return [];
+  const sessions = (payload as { sessions?: unknown }).sessions;
+  if (!Array.isArray(sessions)) return [];
+  return sessions.flatMap((session) => {
+    if (!session || typeof session !== "object") return [];
+    const item = session as { id?: unknown; title?: unknown; running?: unknown };
+    if (item.running !== true || typeof item.id !== "string") return [];
+    return [{ id: item.id, title: typeof item.title === "string" && item.title.trim() ? item.title.trim() : item.id }];
+  });
+}
+
+export function parseBffPlistPort(plist: string): number | undefined {
+  const value = plist.match(/<key>PORT<\/key>\s*<string>(\d+)<\/string>/u)?.[1];
+  if (!value) return undefined;
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65_535 ? port : undefined;
+}
+
 function runLaunchctl(args: string[], allowFailure = false): boolean {
   const result = spawnSync("launchctl", args, { stdio: allowFailure ? "ignore" : "inherit" });
   if (!allowFailure && result.status !== 0) {
@@ -141,7 +160,29 @@ function serviceTarget(): string {
   return `${userDomain()}/${BFF_LABEL}`;
 }
 
-function install(port: number): void {
+function assertNoActiveClaudeSessions(port: number, force: boolean): void {
+  if (force) return;
+  const response = spawnSync("/usr/bin/curl", ["-fsS", "--max-time", "3", `http://127.0.0.1:${port}/api/claude/sessions`], { encoding: "utf8" });
+  // launchd says the service is loaded, so an unreadable status is unknown—not
+  // proof of zero active turns. The explicit force flag remains the recovery
+  // path for a wedged or pre-Claude deployment.
+  if (response.status !== 0) {
+    throw new Error(`refusing to replace the BFF because Claude session status on port ${port} is unavailable; retry when it is healthy or use --force-active-claude to interrupt any unknown work explicitly`);
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(response.stdout);
+  } catch {
+    throw new Error("refusing to replace the BFF because its Claude session response was not valid JSON");
+  }
+  const active = activeClaudeSessions(payload);
+  if (active.length === 0) return;
+  const names = active.slice(0, 5).map((session) => `- ${session.title} (${session.id})`).join("\n");
+  const remainder = active.length > 5 ? `\n- and ${active.length - 5} more` : "";
+  throw new Error(`refusing to replace the BFF while ${active.length} Claude session${active.length === 1 ? " is" : "s are"} running:\n${names}${remainder}\nWait for them to finish or rerun with --force-active-claude to interrupt them explicitly.`);
+}
+
+function install(port: number, forceActiveClaude: boolean): void {
   assertSupportedNodeVersion();
   const root = repoRoot();
   build(root);
@@ -178,6 +219,12 @@ function install(port: number): void {
   assertInstallablePlist(plist);
 
   if (runLaunchctl(["print", serviceTarget()], true)) {
+    // Check after the build, immediately before bootout, so a routine deploy
+    // cannot silently kill a Claude turn that started while assets compiled.
+    const currentPort = existsSync(servicePaths.plist)
+      ? parseBffPlistPort(readFileSync(servicePaths.plist, "utf8")) ?? port
+      : port;
+    assertNoActiveClaudeSessions(currentPort, forceActiveClaude);
     runLaunchctl(["bootout", serviceTarget()]);
   }
   assertPortAvailable(port);
@@ -222,11 +269,12 @@ function uninstall(): void {
 function main(): void {
   const action = process.argv[2];
   const portArg = process.argv.find((value) => value.startsWith("--port="))?.slice("--port=".length);
-  if (action === "install") install(parseSupervisedPort(portArg));
+  const forceActiveClaude = process.argv.includes("--force-active-claude");
+  if (action === "install") install(parseSupervisedPort(portArg), forceActiveClaude);
   else if (action === "status") status();
   else if (action === "logs") logs();
   else if (action === "uninstall") uninstall();
-  else throw new Error("usage: launchd.ts <install|status|logs|uninstall> [--port=3210]");
+  else throw new Error("usage: launchd.ts <install|status|logs|uninstall> [--port=3210] [--force-active-claude]");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

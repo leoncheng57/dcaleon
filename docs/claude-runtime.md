@@ -43,6 +43,10 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
   credential from the Keychain, the profile keeps HOME real and grants Keychain read — so
   Seatbelt confines workspace writes but does not isolate the credential store. The
   write-confinement is asserted on macOS in `tests/claude-seatbelt.test.ts`.
+  The read side includes Homebrew runtimes, versioned Xcode bundles used by Apple's
+  developer-tool shims, plus host Git configuration and SSH host verification;
+  `SSH_AUTH_SOCK` is forwarded as host Git authority without exposing a
+  private-key file. These reads do not widen the workspace write grant.
 - **Build writes:** a Build preset uses `permissionMode: "bypassPermissions"`. Headless
   `claude` denies a write that no rule pre-approves, so the permission prompt cannot be the
   gate here — Seatbelt is. Verified against the real binary: a read-only session is denied
@@ -90,6 +94,9 @@ Beyond the read-only experiment, the lane runs real writable coding sessions:
   atomic writes) and reload on boot. A session that was mid-turn when the BFF stopped is marked
   *Interrupted by a server restart* rather than spinning forever. `--resume` still works because
   `claude` keeps its own JSONL.
+- **Deploy protection.** `service:install` checks the running BFF immediately before
+  replacement and refuses while any Claude turn is active. An operator must wait or pass
+  `--force-active-claude`, making a destructive interruption explicit.
 
 ## Playbooks and notifications
 

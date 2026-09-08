@@ -2,6 +2,18 @@ import type { EventEmitter } from "node:events";
 
 import type { ClaudeRunRecord, ClaudeSession } from "./store.js";
 
+export function claudeFailureName(reason: string | undefined): string {
+  if (!reason) return "ClaudeRunFailed";
+  if (reason.includes("version mismatch")) return "ClaudeVersionMismatch";
+  const signal = reason.match(/\(signal ([A-Z0-9]+)\)/u)?.[1];
+  if (signal) return `ClaudeSignal${signal}`.slice(0, 48);
+  const code = reason.match(/\(exit code (-?\d+)\)/u)?.[1];
+  if (code) return `ClaudeExitCode${code.replace("-", "Negative")}`.slice(0, 48);
+  if (reason === "Claude returned an error result") return "ClaudeErrorResult";
+  if (reason === "Claude run failed") return "ClaudeRunFailed";
+  return "ClaudeProcessExited";
+}
+
 /**
  * Tell the notification lane that a Claude turn ended.
  *
@@ -22,6 +34,7 @@ export function publishClaudeRunEvents(
   bus: Pick<EventEmitter, "emit">,
   session: Pick<ClaudeSession, "id" | "title" | "directory">,
   outcome: ClaudeRunRecord["outcome"],
+  reason?: string,
 ): void {
   if (outcome === "running") return;
   bus.emit("event", {
@@ -38,7 +51,9 @@ export function publishClaudeRunEvents(
     directory: session.directory,
     properties: {
       sessionID: session.id,
-      error: outcome === "cancelled" ? { name: "MessageAbortedError" } : { name: "ClaudeRunFailed", message: "Claude run failed" },
+      error: outcome === "cancelled"
+        ? { name: "MessageAbortedError" }
+        : { name: claudeFailureName(reason), message: reason?.slice(0, 1_000) || "Claude run failed" },
     },
   });
 }
