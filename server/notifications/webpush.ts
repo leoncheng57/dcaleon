@@ -254,11 +254,28 @@ export function webPushConfig(env: NodeJS.ProcessEnv = process.env): WebPushConf
   return { publicKey, privateKey, subject };
 }
 
+/**
+ * The push service's own words, attributed to a platform family rather than an
+ * endpoint: an endpoint is a capability URL that no read API returns, while the
+ * reason is the entire value of the record that exists to answer "why was I
+ * never asked?". Apple refuses a key it does not recognise as `403
+ * BadJwtToken`, which without the status is indistinguishable from every other
+ * failure — and unlike `404`/`410` it never retires the subscription, so the
+ * device stays registered and silent.
+ */
+function describeFailure(endpoint: string, error: unknown): string {
+  const statusCode = error && typeof error === "object" ? (error as { statusCode?: unknown }).statusCode : undefined;
+  const body = error && typeof error === "object" ? (error as { body?: unknown }).body : undefined;
+  const reason = typeof body === "string" && body.trim() ? ` ${body.trim().slice(0, 200)}` : "";
+  const cause = statusCode === undefined ? (error instanceof Error ? error.message : String(error)) : String(statusCode);
+  return `${platformLabel(endpoint)}: ${cause}${reason}`;
+}
+
 export async function sendWebPush(
   subscriptions: PushSubscriptionRecord[],
   message: NotificationMessage,
   config = webPushConfig(),
-): Promise<{ sent: number; failed: number; expired: string[] }> {
+): Promise<{ sent: number; failed: number; expired: string[]; failures: string[] }> {
   if (!config) throw new Error("Web Push is not configured");
   webpush.setVapidDetails(config.subject, config.publicKey, config.privateKey);
   const click = typeof message.click === "string" && message.click.length <= 2048 ? message.click : undefined;
@@ -273,6 +290,7 @@ export async function sendWebPush(
   let sent = 0;
   let failed = 0;
   const expired: string[] = [];
+  const failures: string[] = [];
   await Promise.all(subscriptions.map(async (subscription) => {
     try {
       await webpush.sendNotification(subscription, payload, { TTL: 60, timeout: 10_000 });
@@ -281,7 +299,8 @@ export async function sendWebPush(
       failed += 1;
       const statusCode = error && typeof error === "object" ? (error as { statusCode?: unknown }).statusCode : undefined;
       if (statusCode === 404 || statusCode === 410) expired.push(subscription.endpoint);
+      failures.push(describeFailure(subscription.endpoint, error));
     }
   }));
-  return { sent, failed, expired };
+  return { sent, failed, expired, failures };
 }

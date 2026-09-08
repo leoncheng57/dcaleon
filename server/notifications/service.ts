@@ -705,10 +705,11 @@ export class NotificationService {
             failed: result.failed,
             expired: result.expired.length,
           });
+          const reasons = result.failures.length ? `: ${result.failures.join("; ")}` : "";
           return result.failed && result.sent
-            ? { state: "partial" as const, error: `${result.sent} sent; ${result.failed} failed` }
+            ? { state: "partial" as const, error: `${result.sent} sent; ${result.failed} failed${reasons}` }
             : result.failed
-              ? { state: "failed" as const, error: `${result.failed} subscription(s) failed` }
+              ? { state: "failed" as const, error: `${result.failed} subscription(s) failed${reasons}` }
             : { state: "sent" as const };
         }).catch((error: unknown) => ({ state: "failed" as const, error: error instanceof Error ? error.message : String(error) }))
         : Promise.resolve({ state: "off" as const }),

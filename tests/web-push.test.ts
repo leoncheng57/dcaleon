@@ -241,8 +241,33 @@ describe("Web Push delivery", () => {
       { event: "idle", title: "Done", body: "Waiting" },
       { ...vapid, subject: "mailto:owner@example.com", privateKey: vapid.privateKey, publicKey: vapid.publicKey },
     );
-    expect(result).toEqual({ sent: 0, failed: 1, expired: ["https://fcm.googleapis.com/expired"] });
+    expect(result).toEqual({
+      sent: 0,
+      failed: 1,
+      expired: ["https://fcm.googleapis.com/expired"],
+      failures: ["Google (Chrome or Android): 410"],
+    });
     expect(webpush.sendNotification).toHaveBeenCalledWith(expect.anything(), expect.any(String), expect.objectContaining({ timeout: 10_000 }));
+  });
+
+  it("attributes a provider's refusal to its platform without leaking the endpoint", async () => {
+    const vapid = webpush.generateVAPIDKeys();
+    // The failure that motivated this: Apple refuses an unrecognised key with a
+    // status that never retires the subscription, so the only visible symptom is
+    // a device that stays registered and receives nothing.
+    vi.spyOn(webpush, "sendNotification").mockRejectedValue(
+      Object.assign(new Error("Received unexpected response code"), { statusCode: 403, body: '{"reason":"BadJwtToken"}' }),
+    );
+    const endpoint = "https://web.push.apple.com/QDbJPmR6-secret-capability-path";
+    const result = await sendWebPush(
+      [{ endpoint, keys: { p256dh: "key", auth: "auth" } }],
+      { event: "idle", title: "Done", body: "Waiting" },
+      { ...vapid, subject: "mailto:owner@example.com" },
+    );
+
+    expect(result.failures).toEqual(['Apple (Safari or iOS): 403 {"reason":"BadJwtToken"}']);
+    expect(result.expired).toEqual([]);
+    expect(result.failures.join()).not.toContain("secret-capability-path");
   });
 
   it("delivers independently from ntfy and records the result", async () => {
