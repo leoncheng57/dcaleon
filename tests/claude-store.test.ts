@@ -145,6 +145,15 @@ describe("Claude session store", () => {
     expect(session.events.at(-1)).toMatchObject({ kind: "error", message: "Claude process exited before completing the turn (exit code 134): file system sandbox blocked open()" });
   });
 
+  it("marks an externally signalled process as interrupted and resumable", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "x");
+    instance.handleExit(session.id, { signal: "SIGTERM" });
+    expect(session).toMatchObject({ running: false, interrupted: true });
+    expect(session.events.at(-1)).toMatchObject({ kind: "status", label: "Claude turn interrupted" });
+  });
+
   it("persists only bounded run metadata, never prompt or output", async () => {
     const { instance, ledger } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
@@ -224,6 +233,18 @@ describe("Claude session store", () => {
     const interrupted = second.get(midTurn.id);
     // No process survives a restart, so a running session must not spin forever.
     expect(interrupted?.running).toBe(false);
+    expect(interrupted?.interrupted).toBe(true);
     expect(interrupted?.events.at(-1)).toMatchObject({ kind: "status", label: "Interrupted by a server restart" });
+  });
+
+  it("durably interrupts running turns during graceful shutdown", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    const finished = vi.fn();
+    instance.on("finished", finished);
+    instance.startRun(session, "long task");
+    expect(instance.interruptRunning()).toBe(1);
+    expect(session).toMatchObject({ running: false, interrupted: true });
+    expect(finished).toHaveBeenCalledWith(expect.objectContaining({ outcome: "interrupted" }));
   });
 });

@@ -37,7 +37,10 @@ emit({
   tools: ["Read", "Bash"],
 });
 
-if (prompt.includes("performance gallery")) {
+if (prompt.toLowerCase().includes("simulate an interrupted turn")) {
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "I started the requested work, but the process is about to be interrupted." }] } });
+  process.kill(process.pid, "SIGTERM");
+} else if (prompt.includes("performance gallery")) {
   emit({ type: "assistant", message: { content: [{ type: "text", text: "Historical reference: see `README.md#L1` for the original request." }] } });
   for (let index = 0; index < 230; index++) {
     emit({ type: "assistant", message: { content: [{ type: "text", text: `Step ${index + 1}: **Reviewing the implementation**\n\nThe bounded transcript keeps this conversation responsive.\n\n- Inspect the affected code\n- Verify the behavior with focused tests` }] } });

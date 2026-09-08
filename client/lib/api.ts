@@ -217,6 +217,7 @@ export interface ClaudeSessionSummary {
   createdAt: string;
   updatedAt: string;
   running: boolean;
+  interrupted?: boolean;
   tokenUsage?: ClaudeTokenUsage;
 }
 export interface ClaudeUsageBucket { utilization: number; resetsAt: string | null }

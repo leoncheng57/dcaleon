@@ -59,6 +59,15 @@ describe("Claude run notifications", () => {
     service.stop();
   });
 
+  it("distinguishes an interrupted turn from a runtime failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok", { status: 200 })));
+    const { bus, history, service } = start();
+    publishClaudeRunEvents(bus, session, "interrupted", "Claude turn interrupted because the BFF received SIGTERM");
+    await vi.waitFor(async () => expect(await history.list()).toHaveLength(1));
+    expect((await history.list())[0]).toMatchObject({ kind: "error", displayBody: "Stopped with an error: ClaudeRunInterrupted" });
+    service.stop();
+  });
+
   it("classifies bounded failure names without putting stderr in the notification title", () => {
     expect(claudeFailureName("Claude CLI version mismatch: expected 1, received 2")).toBe("ClaudeVersionMismatch");
     expect(claudeFailureName("Claude process exited before completing the turn (signal SIGTERM): secret-shaped stderr")).toBe("ClaudeSignalSIGTERM");
