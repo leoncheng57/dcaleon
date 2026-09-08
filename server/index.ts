@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import dotenv from "dotenv";
+import { errorLogger, logger, requestLogger } from "./logging.js";
 
 import { readOpencodeConfig, checkHealth, EXPECTED_SERVER_VERSION } from "./opencode/client.js";
 import { EventBus } from "./opencode/events.js";
@@ -62,11 +63,12 @@ const dsh = readDshConfig();
 const claude = readClaudeConfig();
 
 app.use(express.json({ limit: "20mb" }));
+app.use(requestLogger);
 
 // One upstream SSE subscription, fanned out to every browser client.
 const bus = new EventBus(opencode);
 bus.on("error", (error: unknown) => {
-  console.warn("[bus]", error instanceof Error ? error.message : error);
+  logger.warn({ errorType: error instanceof Error ? error.name : "unknown" }, "OpenCode event bus error");
 });
 const autoPermissions = new AutoPermissionService(
   opencode,
@@ -189,7 +191,9 @@ app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile("index.html", { root: clientDir });
 });
 
+app.use(errorLogger);
+
 app.listen(PORT, "0.0.0.0", () => {
   // 0.0.0.0 so the app is reachable over the tailnet from a phone.
-  console.log(`[bff] listening on :${PORT} -> opencode ${opencode.baseUrl}`);
+  logger.info({ port: PORT }, "BFF listening");
 });

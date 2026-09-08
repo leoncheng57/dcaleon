@@ -132,6 +132,41 @@ tokens in the repo-root `.env`, never in a plist. Keep that file mode `0600`.
 loads `.env` with dotenv because its plist sets `WorkingDirectory` to the repository
 root before starting `dist/server/index.js`.
 
+## Grafana Cloud Logs (Optional)
+
+The BFF emits one structured JSON line per completed request to its existing
+launchd stdout log. It records only the HTTP method, matched route, status,
+duration, and `x-request-id`; request URLs, query strings, headers, and bodies
+are deliberately excluded because they can contain workspace paths, OpenCode
+credentials, or agent instructions.
+
+This optional integration uses Grafana Alloy to tail
+`.state/logs/bff.launchd.*.log` and send it to Grafana Cloud Loki. It does not
+expose Grafana or Loki on the tailnet and does not add Docker to the runtime.
+
+1. Create a Grafana Cloud stack and add a Loki connection. Copy its HTTPS push
+   URL, numeric username, and access-policy token with `logs:write` scope.
+2. Install Alloy, for example with `brew install grafana/alloy/alloy`.
+3. Add `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USERNAME`, and
+   `GRAFANA_CLOUD_LOKI_TOKEN` to the mode-0600 repository `.env`.
+4. Run `npm run observability:install`.
+
+The installer writes the credential-bearing Alloy config to
+`.state/observability/grafana-alloy.config.alloy` with mode `0600`, then starts
+the `ai.custom-dca-opencode.alloy` LaunchAgent. It follows the existing BFF
+logs, so no BFF restart is required after installation.
+
+```bash
+npm run observability:status
+npm run observability:uninstall
+```
+
+`observability:uninstall` stops the collector but preserves its configuration.
+Remove `.state/observability/grafana-alloy.config.alloy` manually if its Grafana
+Cloud token must be removed from the machine. In Grafana Explore, select Loki
+and query `{job="custom-dca-opencode-bff"}`. Filter errors with
+`{job="custom-dca-opencode-bff", level="error"}`.
+
 ## OpenCode connection
 
 The BFF never starts OpenCode. It connects to the one server named by `OPENCODE_URL`
