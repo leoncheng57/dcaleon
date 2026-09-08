@@ -1,0 +1,504 @@
+openapi: 3.1.0
+info:
+  title: Persistent Side-Agent API
+  version: 0.1.0-proposed
+  summary: Proposed parent-scoped API for persistent specialist conversations.
+  description: |
+    PROPOSED, NOT IMPLEMENTED.
+
+    Named specialists are backed by parent-linked OpenCode child sessions. The BFF owns
+    durable FIFO question scheduling, transcript correlation, answer inbox state, and
+    explicit parent delivery. Every operation is directory-scoped. Mutations are
+    idempotent and revision checked. SSE is a refresh nudge; HTTP and transcript evidence
+    remain authoritative. Interrupted execution is never replayed automatically.
+  x-status: proposed
+servers:
+  - url: /
+    description: Same-origin Express BFF
+tags:
+  - name: Specialists
+  - name: Questions
+paths:
+  /api/sessions/{parentID}/side-agents:
+    parameters:
+      - $ref: "#/components/parameters/ParentID"
+      - $ref: "#/components/parameters/Directory"
+    get:
+      tags: [Specialists]
+      operationId: listSideAgents
+      summary: List specialists belonging to a parent session
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Bounded specialist page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialistPage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [Specialists]
+      operationId: createSideAgent
+      summary: Create a named persistent specialist
+      description: |
+        The server maps specialistType to an allowed agent and policy. The browser cannot
+        choose an arbitrary agent, child session, permission policy, or body parentID.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpecialistRequest"
+      responses:
+        "201":
+          description: Specialist and linked child created.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+            Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyReplayed" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialistResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /api/sessions/{parentID}/side-agents/{sideAgentID}:
+    parameters:
+      - $ref: "#/components/parameters/ParentID"
+      - $ref: "#/components/parameters/SideAgentID"
+      - $ref: "#/components/parameters/Directory"
+    get:
+      tags: [Specialists]
+      operationId: getSideAgent
+      summary: Get a parent-owned specialist
+      responses:
+        "200":
+          description: Current specialist representation.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialistResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    patch:
+      tags: [Specialists]
+      operationId: updateSideAgent
+      summary: Rename, activate, or archive a specialist
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpecialistRequest"
+      responses:
+        "200":
+          description: Updated specialist.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+            Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyReplayed" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialistResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [Specialists]
+      operationId: archiveSideAgent
+      summary: Archive a specialist without deleting its transcript
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Archived specialist.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialistResponse"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+  /api/sessions/{parentID}/side-agents/{sideAgentID}/questions:
+    parameters:
+      - $ref: "#/components/parameters/ParentID"
+      - $ref: "#/components/parameters/SideAgentID"
+      - $ref: "#/components/parameters/Directory"
+    get:
+      tags: [Questions]
+      operationId: listSideAgentQuestions
+      summary: List FIFO question and answer history
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Bounded question page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionPage"
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Questions]
+      operationId: createSideAgentQuestion
+      summary: Durably queue a specialist question
+      description: |
+        FIFO is per specialist. retryOfQuestionID always creates a new question and marker.
+        Submitting, running, cancelling, and interrupted records are never automatically replayed.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuestionRequest"
+      responses:
+        "202":
+          description: Question durably queued, not necessarily accepted by OpenCode.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+            Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyReplayed" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /api/sessions/{parentID}/side-agents/{sideAgentID}/questions/{questionID}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ParentID"
+      - $ref: "#/components/parameters/SideAgentID"
+      - $ref: "#/components/parameters/QuestionID"
+      - $ref: "#/components/parameters/Directory"
+    post:
+      tags: [Questions]
+      operationId: cancelSideAgentQuestion
+      summary: Cancel a queued or active question
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "202":
+          description: Cancellation completed locally or durably requested.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionResponse"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+  /api/sessions/{parentID}/side-agents/{sideAgentID}/questions/{questionID}/accept:
+    parameters:
+      - $ref: "#/components/parameters/ParentID"
+      - $ref: "#/components/parameters/SideAgentID"
+      - $ref: "#/components/parameters/QuestionID"
+      - $ref: "#/components/parameters/Directory"
+    post:
+      tags: [Questions]
+      operationId: acceptSideAgentAnswer
+      summary: Attach an inbox answer to the parent's next human prompt
+      description: Does not prompt, wake, resume, or modify the parent transcript.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Answer accepted into composer context.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionResponse"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+  /api/sessions/{parentID}/side-agents/{sideAgentID}/questions/{questionID}/dismiss:
+    parameters:
+      - $ref: "#/components/parameters/ParentID"
+      - $ref: "#/components/parameters/SideAgentID"
+      - $ref: "#/components/parameters/QuestionID"
+      - $ref: "#/components/parameters/Directory"
+    post:
+      tags: [Questions]
+      operationId: dismissSideAgentAnswer
+      summary: Dismiss an inbox or accepted answer
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Answer dismissed; child transcript retained.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionResponse"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+components:
+  parameters:
+    ParentID:
+      name: parentID
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/SessionID" }
+    SideAgentID:
+      name: sideAgentID
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/SideAgentID" }
+    QuestionID:
+      name: questionID
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/QuestionID" }
+    Directory:
+      name: directory
+      in: query
+      required: true
+      description: Canonical absolute path beneath a configured workspace root.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+        pattern: "^/"
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor bound to endpoint, scope, filters, and ordering.
+      schema: { type: string, minLength: 1, maxLength: 2048 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$"
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"[0-9]+"$' }
+  headers:
+    ETag:
+      description: Current resource revision as a quoted integer.
+      schema: { type: string, pattern: '^"[0-9]+"$' }
+    IdempotencyReplayed:
+      schema: { type: boolean }
+  responses:
+    BadRequest:
+      description: Invalid input, cursor, header, or directory.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource absent or ownership hidden as not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: State, idempotency, uniqueness, or concurrency conflict.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    PreconditionFailed:
+      description: If-Match revision is stale.
+      headers:
+        ETag: { $ref: "#/components/headers/ETag" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ServiceUnavailable:
+      description: OpenCode, store, or scheduler unavailable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+  schemas:
+    SessionID:
+      type: string
+      minLength: 1
+      maxLength: 256
+      pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    SideAgentID:
+      type: string
+      pattern: "^sa_[A-Za-z0-9_-]+$"
+    QuestionID:
+      type: string
+      pattern: "^sq_[A-Za-z0-9_-]+$"
+    Revision:
+      type: integer
+      minimum: 1
+    Timestamp:
+      type: string
+      format: date-time
+    SpecialistType:
+      type: string
+      enum: [architecture, research, test-review]
+      description: Read-oriented v1 server-owned specialist catalogue.
+    SpecialistState:
+      type: string
+      enum: [active, archived]
+    SpecialistHealth:
+      type: string
+      enum: [ready, busy, unavailable, orphaned]
+    QuestionState:
+      type: string
+      enum: [queued, submitting, running, answered, failed, cancelling, cancelled, interrupted]
+    DeliveryState:
+      type: string
+      enum: [inbox, accepted, delivering, delivered, dismissed]
+    CreateSpecialistRequest:
+      type: object
+      additionalProperties: false
+      required: [name, specialistType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, pattern: ".*\\S.*" }
+        specialistType: { $ref: "#/components/schemas/SpecialistType" }
+    UpdateSpecialistRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, pattern: ".*\\S.*" }
+        state: { $ref: "#/components/schemas/SpecialistState" }
+    CreateQuestionRequest:
+      type: object
+      additionalProperties: false
+      required: [prompt]
+      properties:
+        prompt: { type: string, minLength: 1, maxLength: 32768, pattern: ".*\\S.*" }
+        retryOfQuestionID:
+          oneOf:
+            - { $ref: "#/components/schemas/QuestionID" }
+            - { type: "null" }
+    Specialist:
+      type: object
+      additionalProperties: false
+      required: [id, directory, parentSessionID, childSessionID, name, specialistType, state, health, queueDepth, answerReadyCount, revision, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/SideAgentID" }
+        directory: { type: string }
+        parentSessionID: { $ref: "#/components/schemas/SessionID" }
+        childSessionID: { $ref: "#/components/schemas/SessionID" }
+        name: { type: string }
+        specialistType: { $ref: "#/components/schemas/SpecialistType" }
+        state: { $ref: "#/components/schemas/SpecialistState" }
+        health: { $ref: "#/components/schemas/SpecialistHealth" }
+        queueDepth: { type: integer, minimum: 0 }
+        answerReadyCount: { type: integer, minimum: 0 }
+        revision: { $ref: "#/components/schemas/Revision" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    AnswerSnapshot:
+      type: object
+      required: [text, childUserMessageID, childAssistantMessageID, completedAt]
+      properties:
+        text: { type: string, maxLength: 131072 }
+        childUserMessageID: { type: string }
+        childAssistantMessageID: { type: string }
+        completedAt: { $ref: "#/components/schemas/Timestamp" }
+    AnswerDelivery:
+      type: object
+      required: [state, updatedAt]
+      properties:
+        state: { $ref: "#/components/schemas/DeliveryState" }
+        parentMessageID: { type: [string, "null"] }
+        ambiguityCode: { type: [string, "null"], enum: [DELIVERY_OUTCOME_AMBIGUOUS, null] }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Question:
+      type: object
+      required: [id, sideAgentID, prompt, state, revision, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/QuestionID" }
+        sideAgentID: { $ref: "#/components/schemas/SideAgentID" }
+        prompt: { type: string, maxLength: 32768 }
+        state: { $ref: "#/components/schemas/QuestionState" }
+        retryOfQuestionID: { type: [string, "null"] }
+        childUserMessageID: { type: [string, "null"] }
+        answer:
+          oneOf:
+            - { $ref: "#/components/schemas/AnswerSnapshot" }
+            - { type: "null" }
+        delivery:
+          oneOf:
+            - { $ref: "#/components/schemas/AnswerDelivery" }
+            - { type: "null" }
+        failureCode: { type: [string, "null"] }
+        revision: { $ref: "#/components/schemas/Revision" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    SpecialistResponse:
+      type: object
+      required: [specialist]
+      properties:
+        specialist: { $ref: "#/components/schemas/Specialist" }
+    QuestionResponse:
+      type: object
+      required: [question]
+      properties:
+        question: { $ref: "#/components/schemas/Question" }
+    SpecialistPage:
+      type: object
+      required: [specialists, nextCursor, hasMore]
+      properties:
+        specialists:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/Specialist" }
+        nextCursor: { type: [string, "null"] }
+        hasMore: { type: boolean }
+    QuestionPage:
+      type: object
+      required: [questions, nextCursor, hasMore]
+      properties:
+        questions:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/Question" }
+        nextCursor: { type: [string, "null"] }
+        hasMore: { type: boolean }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string, maxLength: 2000 }
+            requestID: { type: [string, "null"] }
+            currentRevision: { type: [integer, "null"], minimum: 1 }
