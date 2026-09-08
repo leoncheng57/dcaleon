@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, Info, ListChecks, OctagonX, PersonStanding, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { ChevronDown, Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, Info, ListChecks, MessageSquareText, OctagonX, PersonStanding, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -35,6 +35,8 @@ import { useTranscriptFollow } from "../lib/useTranscriptFollow.js";
 import { useClaudeTranscript } from "../lib/useClaudeTranscript.js";
 import { ClaudeHistoryDrawer } from "../components/claude-history-drawer.js";
 import { MAX_IMAGE_ATTACHMENTS, readImageAttachment, selectImageFiles, type ImageAttachment } from "../lib/attachments.js";
+import { createComposerCollapseGuard } from "../lib/composerCollapse.js";
+import { composerEnterAction } from "../lib/composerKeys.js";
 
 function claudeModelCatalogue(modelIds: string[]): ModelCatalogue {
   return {
@@ -280,6 +282,9 @@ export function ClaudeConversationPage() {
   const [queuePaused, setQueuePaused] = useState(false);
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const composerCardRef = useRef<HTMLFormElement | null>(null);
+  const collapseGuard = useRef(createComposerCollapseGuard());
   useEffect(() => {
     setQueued([...(queuedPromptsBySession.get(id) ?? [])]);
     setQueuePaused(false);
@@ -308,6 +313,14 @@ export function ClaudeConversationPage() {
   useEffect(() => {
     if (session?.mode === "build") setPlanMode(false);
   }, [session?.mode]);
+
+  // The composer grows with its content instead of showing a resize grabber.
+  useLayoutEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [draft]);
 
   // Playbooks. Reminders are scoped by the session's cwd server-side (a
   // repository-scoped reminder only appears when this session's origin
@@ -436,11 +449,25 @@ export function ClaudeConversationPage() {
     setQueuePaused(false);
     void sendText(text, images);
   };
+  // Policy lives in composerKeys.ts so the coarse-pointer and IME branches are
+  // unit tested; this only wires it to the DOM event.
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      void send();
-    }
+    const action = composerEnterAction(
+      {
+        key: event.key,
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        isComposing: event.nativeEvent.isComposing,
+        keyCode: event.nativeEvent.keyCode,
+      },
+      {
+        coarsePointer: window.matchMedia("(pointer: coarse)").matches,
+        canSubmit: !!session && !worktreeClosed && !sending && draft.trim().length > 0,
+      },
+    );
+    if (action.preventDefault) event.preventDefault();
+    if (action.submit) void send();
   };
   const cancel = async () => {
     try {
@@ -598,6 +625,20 @@ export function ClaudeConversationPage() {
         draft,
         onDraftChange: setDraft,
         composerRef,
+        onFocus: () => {
+          setComposerCollapsed(false);
+          collapseGuard.current.markComposerFocus();
+        },
+        onBlur: () => {
+          requestAnimationFrame(() => {
+            if (collapseGuard.current.shouldCollapseOnBlur({
+              narrowViewport: window.matchMedia("(max-width: 639.98px)").matches,
+              focusInsideComposer: composerCardRef.current?.contains(document.activeElement) ?? false,
+            })) {
+              setComposerCollapsed(true);
+            }
+          });
+        },
         onPaste: (event) => {
           const images = [...event.clipboardData.items]
             .filter((item) => item.kind === "file")
@@ -611,6 +652,23 @@ export function ClaudeConversationPage() {
         onSubmit: () => void send(),
         submitLabel: session?.running ? "Queue" : "Send",
         submitDisabled: !draft.trim() || sending || !session || worktreeClosed,
+        wrapperRef: composerCardRef,
+        onControlsPointerDownCapture: () => collapseGuard.current.markControlInteraction(),
+        collapsedBar: composerCollapsed ? (
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[var(--color-border-default)] px-3 text-left text-sm text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)]"
+            onClick={() => {
+              setComposerCollapsed(false);
+              requestAnimationFrame(() => composerRef.current?.focus());
+            }}
+            data-testid="claude-composer-expand"
+          >
+            <MessageSquareText aria-hidden="true" className="h-4 w-4" />
+            <span className="min-w-0 flex-1 truncate">{draft.trim() || "Write a follow-up"}</span>
+            {attachments.length > 0 && <span className="text-xs">{attachments.length} attached</span>}
+          </button>
+        ) : undefined,
         modeControl: session ? (
           <AgentModeToggle
             mode={planMode ? "plan" : "build"}
@@ -630,6 +688,18 @@ export function ClaudeConversationPage() {
             midConversation={events.length > 0}
           />
         ) : null,
+        controlsRowEnd: (
+          <button
+            type="button"
+            className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)]"
+            onClick={() => setComposerCollapsed(true)}
+            aria-label="Collapse composer"
+            title="Collapse composer"
+            data-testid="claude-composer-collapse"
+          >
+            <ChevronDown aria-hidden="true" className="h-4 w-4" />
+          </button>
+        ),
         beforeTextarea: (
           <>
             {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
@@ -716,6 +786,7 @@ export function ClaudeConversationPage() {
                 setDraft(draftText);
                 setSelectedWorkflow(workflowID);
                 setActiveWorkflow(null);
+                setComposerCollapsed(false);
                 requestAnimationFrame(() => composerRef.current?.focus());
               }}
             />
