@@ -43,8 +43,9 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
   credential from the Keychain, the profile keeps HOME real and grants Keychain read — so
   Seatbelt confines workspace writes but does not isolate the credential store. The
   write-confinement is asserted on macOS in `tests/claude-seatbelt.test.ts`.
-  The read side includes Homebrew runtimes plus host Git configuration and SSH host
-  verification; `SSH_AUTH_SOCK` is forwarded as host Git authority without exposing a
+  The read side includes Homebrew runtimes, versioned Xcode bundles used by Apple's
+  developer-tool shims, plus host Git configuration and SSH host verification;
+  `SSH_AUTH_SOCK` is forwarded as host Git authority without exposing a
   private-key file. These reads do not widen the workspace write grant.
 - **Build writes:** a Build preset uses `permissionMode: "bypassPermissions"`. Headless
   `claude` denies a write that no rule pre-approves, so the permission prompt cannot be the

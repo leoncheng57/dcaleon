@@ -63,6 +63,7 @@ describe("Claude Seatbelt profile", () => {
     const stateRoot = path.join(root, "state");
     await run("/bin/mkdir", ["-p", workspace, stateRoot]);
     const profile = claudeSeatbeltProfile({ workspace, stateRoot, binaryPath: process.execPath, mode: "read-only" });
+    expect(profile).toContain('(subpath "/Applications")');
 
     const node = await underProfile(profile, `'${process.execPath}' --version >/dev/null`);
     expect(node).toEqual({ ok: true, stderr: "" });

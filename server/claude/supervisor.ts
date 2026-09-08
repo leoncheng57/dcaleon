@@ -81,7 +81,9 @@ export function claudeSeatbeltProfile(input: {
   const home = input.home ?? homedir();
   const runtimeRoot = path.dirname(input.binaryPath);
   const reads = [
-    "/System", "/usr", "/bin", "/sbin", "/opt", "/Library", "/private/etc", "/dev", "/private/var",
+    // Apple's /usr/bin developer-tool shims load the selected, versioned Xcode
+    // bundle from /Applications. This is deliberately a read-only grant.
+    "/System", "/usr", "/bin", "/sbin", "/opt", "/Applications", "/Library", "/private/etc", "/dev", "/private/var",
     path.join(home, ".claude"), path.join(home, ".claude.json"), path.join(home, ".config"), path.join(home, ".local"),
     path.join(home, ".gitconfig"), path.join(home, ".ssh/known_hosts"), path.join(home, ".ssh/config"),
     path.join(home, "Library/Keychains"), path.join(home, "Library/Preferences"), path.join(home, "Library/Caches"),
