@@ -34,6 +34,21 @@ describe("Web Push configuration", () => {
   });
 });
 
+describe("Web Push payloads", () => {
+  it("forwards the diagnostic marker only for test pushes", async () => {
+    const vapid = webpush.generateVAPIDKeys();
+    const send = vi.spyOn(webpush, "sendNotification").mockResolvedValue({ statusCode: 201, body: "", headers: {} });
+    const config = { publicKey: vapid.publicKey, privateKey: vapid.privateKey, subject: "mailto:owner@example.com" };
+    const subscriptions = [{ endpoint: "https://fcm.googleapis.com/device", keys: { p256dh: "key", auth: "auth" } }];
+
+    await sendWebPush(subscriptions, { event: "idle", title: "Test", body: "Probe", diag: true }, config);
+    await sendWebPush(subscriptions, { event: "idle", title: "Real", body: "Done" }, config);
+
+    expect(JSON.parse(String(send.mock.calls[0][1]))).toMatchObject({ diag: true });
+    expect(JSON.parse(String(send.mock.calls[1][1]))).not.toHaveProperty("diag");
+  });
+});
+
 describe("Web Push subscriptions", () => {
   it("persists, replaces, removes, and rejects malformed subscriptions", async () => {
     const file = path.join(os.tmpdir(), `dca-web-push-${process.pid}-${Date.now()}.json`);

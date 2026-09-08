@@ -14,6 +14,7 @@ export const NTFY_TEST_MESSAGE = {
 export const WEB_PUSH_TEST_MESSAGE = {
   ...NTFY_TEST_MESSAGE,
   body: "Your PWA push notification path is working.",
+  diag: true,
 };
 
 function queryString(value: unknown): string | undefined {

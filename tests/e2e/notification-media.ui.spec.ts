@@ -69,14 +69,16 @@ async function installPushStubs(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
     let subscription: {
       endpoint: string;
+      options: { applicationServerKey: BufferSource | null };
       toJSON(): { endpoint: string; keys: { p256dh: string; auth: string } };
       unsubscribe(): Promise<boolean>;
     } | null = null;
     const pushManager = {
       getSubscription: async () => subscription,
-      subscribe: async () => {
+      subscribe: async (options: PushSubscriptionOptionsInit) => {
         subscription = {
           endpoint: "https://fcm.googleapis.com/device",
+          options: { applicationServerKey: options.applicationServerKey as BufferSource },
           toJSON: () => ({ endpoint: "https://fcm.googleapis.com/device", keys: { p256dh: "key", auth: "auth" } }),
           unsubscribe: async () => { subscription = null; return true; },
         };
@@ -142,6 +144,7 @@ test.describe("notification sound and speech", () => {
     expect(saved.at(-1)).toMatchObject({ ntfy: { enabled: false }, webPush: { enabled: true } });
     await page.getByTestId("opencode-notifications-test-web-push").click();
     await expect(page.getByText("PWA push test sent", { exact: true })).toBeVisible();
+    expect(subscribed).toBe(2);
     expect(testedEndpoint).toBe("https://fcm.googleapis.com/device");
 
     await page.getByTestId("opencode-web-push-enabled").uncheck();

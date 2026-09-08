@@ -286,7 +286,8 @@ export async function sendWebPush(
     ? Number(message.badgeRevision)
     : undefined;
   const tag = typeof message.tag === "string" && message.tag.length <= 128 ? message.tag : undefined;
-  const payload = JSON.stringify({ title: message.title, body: message.body, click, badgeCount, badgeRevision, tag });
+  const diag = message.diag === true ? true : undefined;
+  const payload = JSON.stringify({ title: message.title, body: message.body, click, badgeCount, badgeRevision, tag, diag });
   let sent = 0;
   let failed = 0;
   const expired: string[] = [];
