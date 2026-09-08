@@ -198,6 +198,9 @@ export class ClaudeSupervisor extends EventEmitter {
       });
       return { command: "/usr/bin/sandbox-exec", args: ["-p", profile, this.config.binaryPath, ...cli] };
     }
+    // "host" (terminal parity) and "test-unsafe" run the binary directly: no Seatbelt
+    // wrapper, so the turn's authority is the user's own and the permission layer in
+    // the generated settings file is the only confinement left.
     return { command: this.config.binaryPath, args: cli };
   }
 
