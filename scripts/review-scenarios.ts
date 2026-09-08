@@ -15,6 +15,16 @@ export interface ReviewScenario {
 
 export const REVIEW_SCENARIOS: readonly ReviewScenario[] = [
   {
+    id: "claude-interrupted", title: "Claude — interrupted turn with explicit recovery", route: "/claude",
+    steps: [
+      { testId: "claude-create", action: "click" },
+      { testId: "claude-prompt", action: "fill", value: "Simulate an interrupted turn" },
+      { testId: "claude-send", action: "click" },
+      { testId: "claude-interrupted-banner", action: "text", value: "This turn was interrupted" },
+    ],
+    target: "claude-interrupted-banner",
+  },
+  {
     id: "claude-bounded-history", title: "Claude — bounded transcript and history navigation", route: "/claude",
     steps: [
       { testId: "claude-create", action: "click" },

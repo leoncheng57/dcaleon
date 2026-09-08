@@ -605,6 +605,13 @@ describe("normalizeMessage", () => {
     ]);
   });
 
+  it("extracts errors from newer nested OpenCode envelopes", () => {
+    const nested = normalizeMessage({ info: { id: "nested", role: "assistant", time: { created: 5 }, error: { data: { message: "provider quota exceeded" } } }, parts: [] });
+    const alternate = normalizeMessage({ info: { id: "alternate", role: "assistant", time: { created: 5 }, error: { error: "connection refused" } }, parts: [] });
+    expect(nested[0]).toMatchObject({ kind: "error", message: "provider quota exceeded" });
+    expect(alternate[0]).toMatchObject({ kind: "error", message: "connection refused" });
+  });
+
   it("produces ISO timestamps", () => {
     const [event] = normalizeMessage({
       info: { id: "m10", role: "user", time: { created: 1787000000000 } },

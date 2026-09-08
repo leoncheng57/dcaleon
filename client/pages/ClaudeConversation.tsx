@@ -633,6 +633,12 @@ export function ClaudeConversationPage() {
         beforeTextarea: (
           <>
             {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
+            {session?.interrupted && !session.running && (
+              <div className="mb-2 flex items-center gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-warning-muted)] px-3 py-2" data-testid="claude-interrupted-banner">
+                <p className="min-w-0 flex-1 text-xs">This turn was interrupted. Resume explicitly after checking whether its last tool action completed.</p>
+                <Button type="button" size="sm" variant="secondary" onClick={() => { setDraft("Continue the interrupted turn from where you left off. First verify the last tool action before repeating it."); composerRef.current?.focus(); }} data-testid="claude-resume">Resume</Button>
+              </div>
+            )}
             {queued.length > 0 && (
               <div className="mb-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-info-muted)] px-3 py-2" data-testid="claude-queued-banner">
                 <div className="text-[11px] font-medium text-[var(--color-text-info)]">

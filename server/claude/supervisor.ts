@@ -152,6 +152,7 @@ export class ClaudeSupervisor extends EventEmitter {
   private readonly children = new Map<string, ChildProcessByStdio<null, Readable, Readable>>();
   private readonly buffers = new Map<string, Buffer>();
   private readonly stderr = new Map<string, string>();
+  private observedCliVersion: string | undefined;
 
   constructor(private config: ClaudeConfig) {
     super();
@@ -305,23 +306,18 @@ export class ClaudeSupervisor extends EventEmitter {
       this.emit("diagnostic", "claude emitted malformed JSON");
       return;
     }
-    // Fail closed on binary drift: the init frame carries the CLI version, and a
-    // mismatch with the pin means the wire format is no longer trusted.
-    // When the .env has already been updated to match the new binary, accept
-    // the version without requiring a full server restart.
+    // Report binary drift, but do not kill a healthy stream solely because the
+    // CLI auto-updated. Parsing remains fail-closed at each malformed frame.
     if (parsed.type === "system" && parsed.subtype === "init") {
       const version = typeof parsed.claude_code_version === "string" ? parsed.claude_code_version : "";
+      this.observedCliVersion = version || undefined;
       if (version !== this.config.cliVersion) {
         const refreshed = this.reloadCliVersion();
         if (version === refreshed) {
           this.config = { ...this.config, cliVersion: refreshed };
         } else {
-          this.emit("frame", {
-            sessionId,
-            frame: { type: "error", subtype: "version_mismatch", expected: this.config.cliVersion, received: version },
-          });
-          this.children.get(sessionId)?.kill("SIGTERM");
-          return;
+          this.emit("diagnostic", `Claude CLI version drift: configured ${this.config.cliVersion}, observed ${version || "unknown"}; continuing while stream-json remains valid`);
+          this.emit("frame", { sessionId, frame: { type: "system", subtype: "version_drift", expected: this.config.cliVersion, received: version } });
         }
       }
     }
@@ -337,6 +333,13 @@ export class ClaudeSupervisor extends EventEmitter {
 
   isRunning(sessionId: string): boolean {
     return this.children.has(sessionId);
+  }
+
+  cliVersions(): { configured: string; observed?: string; matches?: boolean } {
+    return {
+      configured: this.config.cliVersion,
+      ...(this.observedCliVersion ? { observed: this.observedCliVersion, matches: this.observedCliVersion === this.config.cliVersion } : {}),
+    };
   }
 
   close(): void {

@@ -53,7 +53,9 @@ export function publishClaudeRunEvents(
       sessionID: session.id,
       error: outcome === "cancelled"
         ? { name: "MessageAbortedError" }
-        : { name: claudeFailureName(reason), message: reason?.slice(0, 1_000) || "Claude run failed" },
+        : outcome === "interrupted"
+          ? { name: "ClaudeRunInterrupted", message: reason?.slice(0, 1_000) || "Claude turn was interrupted" }
+          : { name: claudeFailureName(reason), message: reason?.slice(0, 1_000) || "Claude run failed" },
     },
   });
 }

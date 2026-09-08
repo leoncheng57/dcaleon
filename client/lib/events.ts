@@ -596,11 +596,25 @@ export function normalizeMessage(message: RawMessage): TranscriptEvent[] {
       message:
         typeof info.error === "string"
           ? info.error
-          : ((info.error as { message?: string })?.message ?? "The agent turn failed."),
+          : errorMessage(info.error),
     });
   }
 
   return events;
+}
+
+/** Extract actionable text across the error envelopes shipped by OpenCode versions. */
+function errorMessage(input: unknown): string {
+  if (!input || typeof input !== "object") return "The agent turn failed.";
+  const error = input as Record<string, unknown>;
+  for (const candidate of [error.message, error.error, (error.data as Record<string, unknown> | undefined)?.message]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  try {
+    const serialized = JSON.stringify(input);
+    if (serialized && serialized !== "{}") return serialized;
+  } catch { /* cyclic or otherwise unserializable upstream value */ }
+  return "The agent turn failed.";
 }
 
 /** Map a full transcript fetch. */

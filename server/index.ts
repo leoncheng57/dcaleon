@@ -46,6 +46,7 @@ import { readDshConfig } from "./dsh/config.js";
 import { dshRoutes } from "./routes/dsh.js";
 import { readClaudeConfig } from "./claude/config.js";
 import { ClaudeSessionStore } from "./claude/store.js";
+import { ClaudeSupervisor } from "./claude/supervisor.js";
 import { claudeRoutes } from "./routes/claude.js";
 import { getSessionMetadata, latestAssistantExcerpt } from "./opencode/sessions.js";
 import { isClaudeSessionId } from "./publicAppUrl.js";
@@ -85,6 +86,7 @@ webPushConfig(); // Fail at startup rather than exposing a half-configured chann
 // answer questions about a Claude session from this store instead of asking the
 // OpenCode server about an id it has never issued.
 const claudeStore = new ClaudeSessionStore(claude.ledgerFile, claude.sessionsFile);
+const claudeSupervisor = new ClaudeSupervisor(claude);
 const notificationService = new NotificationService(
   opencode,
   bus,
@@ -125,7 +127,7 @@ app.use("/api", modelPinRoutes());
 app.use("/api", recentRoutes(opencode));
 app.use("/api", memoryRoutes());
 app.use("/api", dshRoutes(dsh, undefined, undefined, undefined, bus));
-app.use("/api", claudeRoutes(claude, undefined, claudeStore, bus));
+app.use("/api", claudeRoutes(claude, claudeSupervisor, claudeStore, bus));
 const opencodePort = Number(new URL(opencode.baseUrl).port || 80);
 app.use("/api", previewRoutes(parseAllowedPorts(process.env.PREVIEW_ALLOWED_PORTS, [PORT, opencodePort])));
 
@@ -164,7 +166,7 @@ app.get("/api/health", async (_req, res) => {
       },
       events: { connected: bus.isConnected() },
       dsh: { enabled: dsh.enabled, configured: dsh.configured, sdkVersion: dsh.sdkVersion, sandbox: dsh.sandbox },
-      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, sandbox: claude.sandbox },
+      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions(), sandbox: claude.sandbox },
     });
   } catch (error) {
     res.status(503).json({
@@ -189,7 +191,24 @@ app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile("index.html", { root: clientDir });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   // 0.0.0.0 so the app is reachable over the tailnet from a phone.
   console.log(`[bff] listening on :${PORT} -> opencode ${opencode.baseUrl}`);
 });
+
+let shuttingDown = false;
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(); // stop accepting prompts before changing run state
+  const interrupted = claudeStore.interruptRunning(`Claude turn interrupted because the BFF received ${signal}`);
+  if (interrupted) console.warn(`[bff] ${interrupted} Claude turn(s) interrupted by ${signal}`);
+  await claudeStore.flush();
+  claudeSupervisor.close();
+  notificationService.stop();
+  autoPermissions.stop();
+  bus.stop();
+  process.exitCode = 0;
+}
+process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
+process.once("SIGINT", () => { void shutdown("SIGINT"); });

@@ -102,7 +102,7 @@ describe("Claude supervisor", () => {
     await vi.waitFor(async () => expect(access(attachments)).rejects.toThrow());
   });
 
-  it("fails the turn closed when the init frame version does not match the pin", async () => {
+  it("reports version drift but keeps a valid stream running", async () => {
     const { supervisor, workspace } = await harness(`
       process.stdout.write(JSON.stringify({ type: "system", subtype: "init", claude_code_version: "9.9.9" }) + "\\n");
       setTimeout(() => process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "nope" }] } }) + "\\n"), 200);
@@ -110,7 +110,9 @@ describe("Claude supervisor", () => {
     const frames: Array<Record<string, unknown>> = [];
     supervisor.on("frame", ({ frame }: { frame: Record<string, unknown> }) => frames.push(frame));
     await supervisor.run({ session: { id: "s2", sessionUuid: "u2", started: false }, preset, workspace, text: "hello" });
-    await vi.waitFor(() => expect(frames.some((f) => f.type === "error" && f.subtype === "version_mismatch")).toBe(true));
+    await vi.waitFor(() => expect(frames.some((f) => f.type === "assistant")).toBe(true));
+    expect(frames).toContainEqual(expect.objectContaining({ type: "system", subtype: "version_drift", expected: "2.1.257", received: "9.9.9" }));
+    expect(supervisor.cliVersions()).toEqual({ configured: "2.1.257", observed: "9.9.9", matches: false });
   });
 
   it("cancels a running child with SIGTERM", async () => {

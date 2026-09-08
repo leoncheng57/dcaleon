@@ -17,6 +17,15 @@ test.describe("Claude Code runtime", () => {
     await expect(page.getByTestId("claude-prompt")).toBeEnabled();
   });
 
+  test("offers an explicit safe resume after an interrupted process", async ({ page }) => {
+    await createSession(page);
+    await page.getByTestId("claude-prompt").fill("Simulate an interrupted turn");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("claude-interrupted-banner")).toBeVisible();
+    await page.getByTestId("claude-resume").click();
+    await expect(page.getByTestId("claude-prompt")).toHaveValue(/verify the last tool action/u);
+  });
+
   test("pastes an image into the composer and sends it to Claude", async ({ page }) => {
     await createSession(page);
     await page.getByTestId("claude-prompt").evaluate((textarea) => {

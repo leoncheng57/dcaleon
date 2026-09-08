@@ -60,6 +60,7 @@ export interface ClaudeSession {
   runStartedAt?: number;
   activeRunId?: string;
   sawResult?: boolean;
+  interrupted?: boolean;
   tokenUsage?: ClaudeTokenUsage;
 }
 
@@ -72,7 +73,7 @@ export interface ClaudeRunRecord {
   taskClass: "conversation";
   startedAt: number;
   endedAt?: number;
-  outcome: "running" | "completed" | "cancelled" | "failed";
+  outcome: "running" | "completed" | "cancelled" | "failed" | "interrupted";
   costUsd: number;
   interventions: number;
 }
@@ -124,18 +125,32 @@ export class ClaudeSessionStore extends EventEmitter {
     try {
       const parsed = JSON.parse(await readFile(this.sessionsFile, "utf8")) as Partial<SessionIndex>;
       if (parsed.version === 1 && Array.isArray(parsed.sessions)) {
+        const interrupted: ClaudeSession[] = [];
         for (const session of parsed.sessions) {
           // A session that was mid-turn when the BFF stopped has no process any
           // more. Say so rather than showing a spinner forever (decision 5's spirit).
           if (session.running) {
+            const activeRunId = session.activeRunId;
             session.running = false;
             session.started = true;
             session.activeRunId = undefined;
             session.runStartedAt = undefined;
+            session.interrupted = true;
             const id = `status-${randomUUID()}`;
             session.events.push({ id, messageId: id, timestamp: new Date().toISOString(), kind: "status", label: "Interrupted by a server restart" });
+            const record = [...this.ledger.records].reverse().find((item) => item.id === activeRunId || (item.sessionId === session.id && item.outcome === "running"));
+            if (record) {
+              record.outcome = "interrupted";
+              record.endedAt = Date.now();
+            }
+            interrupted.push(session);
           }
           this.sessions.set(session.id, session);
+        }
+        if (interrupted.length) {
+          this.persist();
+          this.persistSessions();
+          for (const session of interrupted) this.emit("finished", { session, outcome: "interrupted", reason: "Claude turn interrupted by a server restart" });
         }
       }
     } catch (error) {
@@ -217,6 +232,7 @@ export class ClaudeSessionStore extends EventEmitter {
     }
     const turnMode: "plan" | "build" = tags.plan ? "plan" : "build";
     session.running = true;
+    session.interrupted = false;
     session.sawResult = false;
     session.runStartedAt = now;
     session.updatedAt = new Date(now).toISOString();
@@ -294,6 +310,12 @@ export class ClaudeSessionStore extends EventEmitter {
       const id = `status-${randomUUID()}`;
       const tool = typeof frame.tool_name === "string" ? frame.tool_name : "tool";
       session.events.push({ id, messageId: id, timestamp: now, kind: "status", label: `Permission denied: ${tool}`, detail: typeof frame.message === "string" ? frame.message : undefined });
+    } else if (frame.type === "system" && frame.subtype === "version_drift") {
+      const id = `status-${randomUUID()}`;
+      session.events.push({
+        id, messageId: id, timestamp: now, kind: "status", label: "Claude CLI updated",
+        detail: `Configured ${String(frame.expected)}, running ${String(frame.received) || "unknown"}. The turn continued because stream-json remained valid.`,
+      });
     } else if (frame.type === "error") {
       const id = `error-${randomUUID()}`;
       const message = frame.subtype === "version_mismatch"
@@ -360,6 +382,15 @@ export class ClaudeSessionStore extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session || !session.running) return;
     if (session.sawResult) return;
+    if (details.signal) {
+      const message = `Claude process was interrupted (signal ${details.signal})`;
+      const id = `status-${randomUUID()}`;
+      session.events.push({ id, messageId: id, timestamp: new Date().toISOString(), kind: "status", label: "Claude turn interrupted", detail: message });
+      session.interrupted = true;
+      this.finish(session, "interrupted", { failureReason: message });
+      this.emit("update", session.id);
+      return;
+    }
     const suffix = details.signal
       ? ` (signal ${details.signal})`
       : details.code !== undefined && details.code !== null ? ` (exit code ${details.code})` : "";
@@ -379,6 +410,21 @@ export class ClaudeSessionStore extends EventEmitter {
     this.persistSessions();
     this.emit("update", session.id);
     return true;
+  }
+
+  /** Persist every live turn as interrupted before the BFF terminates its child. */
+  interruptRunning(reason = "Claude turn interrupted by a server shutdown"): number {
+    let count = 0;
+    for (const session of this.sessions.values()) {
+      if (!session.running) continue;
+      const id = `status-${randomUUID()}`;
+      session.events.push({ id, messageId: id, timestamp: new Date().toISOString(), kind: "status", label: "Interrupted by a server shutdown" });
+      session.interrupted = true;
+      this.finish(session, "interrupted", { failureReason: reason });
+      this.emit("update", session.id);
+      count += 1;
+    }
+    return count;
   }
 
   setPrUrl(session: ClaudeSession, url: string): void {
