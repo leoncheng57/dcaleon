@@ -15,6 +15,8 @@ export interface NotificationMessage {
    * foreground PWA and its own push do not both buzz for one record.
    */
   tag?: string;
+  /** Marks a test push so the worker can expose its running version. */
+  diag?: boolean;
 }
 
 export async function sendNtfy(

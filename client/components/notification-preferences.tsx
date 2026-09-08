@@ -147,6 +147,26 @@ export function NotificationPreferencesSection() {
     setMessage("Browser test triggered");
   };
 
+  const testWebPush = async () => {
+    if (!webPush.publicKey) return;
+    setError("");
+    setMessage("");
+    try {
+      // iOS may rotate a PWA's endpoint. Re-register the subscription visible
+      // to this worker immediately before the probe so a stale server record
+      // cannot make the provider report success while the phone receives
+      // nothing.
+      const subscription = await subscribeWebPush(webPush.publicKey);
+      setPushSubscribed(true);
+      setPushEndpoint(subscription.endpoint);
+      await api.testWebPush(subscription.endpoint);
+      await loadSubscriptions();
+      setMessage("PWA push test sent");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const removeSubscription = async (id: string) => {
     try {
       await api.removePushSubscriptionById(id);
@@ -444,7 +464,7 @@ export function NotificationPreferencesSection() {
             <Button disabled={savePending} onClick={() => void save()} data-testid="opencode-notifications-save">{savePending ? "Saving..." : "Save"}</Button>
             <Button variant="secondary" onClick={() => void testBrowser()} data-testid="opencode-notifications-test-browser">Test browser</Button>
             <Button variant="secondary" disabled={!preferences.ntfy.enabled || !preferences.ntfy.topic} onClick={() => void api.testNtfy().then(() => setMessage("ntfy test sent")).catch((e: Error) => setError(e.message))} data-testid="opencode-notifications-test-ntfy">Test ntfy</Button>
-            <Button variant="secondary" disabled={!preferences.webPush.enabled || !pushEndpoint} onClick={() => pushEndpoint && void api.testWebPush(pushEndpoint).then(() => setMessage("PWA push test sent")).catch((e: Error) => setError(e.message))} data-testid="opencode-notifications-test-web-push">Test PWA push</Button>
+            <Button variant="secondary" disabled={!preferences.webPush.enabled || !pushEndpoint || !webPush.publicKey} onClick={() => void testWebPush()} data-testid="opencode-notifications-test-web-push">Test PWA push</Button>
             {message && <span className="text-sm text-[var(--color-text-muted)]">{message}</span>}
           </div>
         </>
