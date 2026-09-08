@@ -86,6 +86,12 @@ const MAX_PATCH_FILES = 50;
 const FILE_TOOLS = new Set(["Read", "Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const MUTATION_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
+/** Reverse index search (ES2023 `findLastIndex` is unavailable under the server lib target). */
+function findLastIndex<T>(array: T[], predicate: (item: T) => boolean): number {
+  for (let i = array.length - 1; i >= 0; i--) if (predicate(array[i])) return i;
+  return -1;
+}
+
 function blocksOf(frame: ClaudeFrame): Array<Record<string, unknown>> {
   const message = frame.message as Record<string, unknown> | undefined;
   const content = message?.content;
@@ -269,8 +275,9 @@ export class ClaudeSessionStore extends EventEmitter {
       for (const block of blocksOf(frame)) {
         if (block.type === "text" && typeof block.text === "string" && block.text) {
           const id = `agent-${session.activeRunId}`;
-          const existing = session.events.find((item) => item.id === id);
-          if (existing?.kind === "agent") existing.text += `\n\n${block.text}`;
+          const existingIdx = session.events.findIndex((item) => item.id === id);
+          const existing = existingIdx >= 0 ? session.events[existingIdx] : undefined;
+          if (existing?.kind === "agent") session.events[existingIdx] = { ...existing, text: existing.text + `\n\n${block.text}` };
           else session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: block.text, metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending", ...(turnMode ? { mode: turnMode } : {}) });
         } else if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
           const id = `thought-${randomUUID()}`;
@@ -344,26 +351,26 @@ export class ClaudeSessionStore extends EventEmitter {
         contextWindow: typeof modelEntry?.contextWindow === "number" ? modelEntry.contextWindow : prev.contextWindow,
         costUsd: prev.costUsd + cost,
       };
-      const prose = [...session.events].reverse().find((item) => item.kind === "agent" && item.id === `agent-${session.activeRunId}`);
+      const proseIdx = findLastIndex(session.events, (item) => item.kind === "agent" && item.id === `agent-${session.activeRunId}`);
+      const prose = proseIdx >= 0 ? session.events[proseIdx] : undefined;
       if (prose?.kind === "agent") {
         const endedAt = Date.now();
-        prose.metricsStatus = "final";
-        prose.durationStatus = session.runStartedAt === undefined ? "unavailable" : "final";
-        if (session.runStartedAt !== undefined) prose.messageDurationMs = Math.max(0, endedAt - session.runStartedAt);
-        prose.costStatus = typeof frame.total_cost_usd === "number" ? "final" : "unavailable";
-        prose.cumulativeCostStatus = typeof frame.total_cost_usd === "number" ? "final" : "unavailable";
-        if (typeof frame.total_cost_usd === "number") {
-          prose.messageCost = frame.total_cost_usd;
-          prose.cumulativeCost = session.tokenUsage.costUsd;
-        }
-        if (usage) {
-          prose.inputTokens = typeof usage.input_tokens === "number" ? usage.input_tokens : undefined;
-          prose.outputTokens = typeof usage.output_tokens === "number" ? usage.output_tokens : undefined;
-          prose.cacheReadTokens = typeof usage.cache_read_input_tokens === "number" ? usage.cache_read_input_tokens : undefined;
-          prose.cacheWriteTokens = typeof usage.cache_creation_input_tokens === "number" ? usage.cache_creation_input_tokens : undefined;
-          const details = usage.output_tokens_details as Record<string, unknown> | undefined;
-          prose.reasoningTokens = typeof details?.thinking_tokens === "number" ? details.thinking_tokens : undefined;
-        }
+        session.events[proseIdx] = {
+          ...prose,
+          metricsStatus: "final" as const,
+          durationStatus: (session.runStartedAt === undefined ? "unavailable" : "final") as "final" | "unavailable",
+          ...(session.runStartedAt !== undefined ? { messageDurationMs: Math.max(0, endedAt - session.runStartedAt) } : {}),
+          costStatus: (typeof frame.total_cost_usd === "number" ? "final" : "unavailable") as "final" | "unavailable",
+          cumulativeCostStatus: (typeof frame.total_cost_usd === "number" ? "final" : "unavailable") as "final" | "unavailable",
+          ...(typeof frame.total_cost_usd === "number" ? { messageCost: frame.total_cost_usd, cumulativeCost: session.tokenUsage.costUsd } : {}),
+          ...(usage ? {
+            inputTokens: typeof usage.input_tokens === "number" ? usage.input_tokens : undefined,
+            outputTokens: typeof usage.output_tokens === "number" ? usage.output_tokens : undefined,
+            cacheReadTokens: typeof usage.cache_read_input_tokens === "number" ? usage.cache_read_input_tokens : undefined,
+            cacheWriteTokens: typeof usage.cache_creation_input_tokens === "number" ? usage.cache_creation_input_tokens : undefined,
+            reasoningTokens: (() => { const details = usage.output_tokens_details as Record<string, unknown> | undefined; return typeof details?.thinking_tokens === "number" ? details.thinking_tokens : undefined; })(),
+          } : {}),
+        };
       }
       this.finish(session, frame.is_error === true ? "failed" : "completed", {
         costUsd: cost,
@@ -445,13 +452,17 @@ export class ClaudeSessionStore extends EventEmitter {
   }
 
   private finish(session: ClaudeSession, outcome: ClaudeRunRecord["outcome"], options: { costUsd?: number; humanIntervention?: boolean; failureReason?: string } = {}): void {
-    const prose = [...session.events].reverse().find((item) => item.kind === "agent" && item.id === `agent-${session.activeRunId}`);
+    const proseIdx = findLastIndex(session.events, (item) => item.kind === "agent" && item.id === `agent-${session.activeRunId}`);
+    const prose = proseIdx >= 0 ? session.events[proseIdx] : undefined;
     if (prose?.kind === "agent" && prose.metricsStatus !== "final") {
-      prose.metricsStatus = "final";
-      prose.durationStatus = session.runStartedAt === undefined ? "unavailable" : "final";
-      if (session.runStartedAt !== undefined) prose.messageDurationMs = Math.max(0, Date.now() - session.runStartedAt);
-      prose.costStatus = "unavailable";
-      prose.cumulativeCostStatus = "unavailable";
+      session.events[proseIdx] = {
+        ...prose,
+        metricsStatus: "final" as const,
+        durationStatus: (session.runStartedAt === undefined ? "unavailable" : "final") as "final" | "unavailable",
+        ...(session.runStartedAt !== undefined ? { messageDurationMs: Math.max(0, Date.now() - session.runStartedAt) } : {}),
+        costStatus: "unavailable" as const,
+        cumulativeCostStatus: "unavailable" as const,
+      };
     }
     session.running = false;
     session.started = true;
