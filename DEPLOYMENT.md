@@ -62,6 +62,19 @@ external `service:install`, an external SIGTERM/SIGINT signal, or launchd's
 
 ## Reproducible production update
 
+```bash
+npm run deploy                 # origin/main on :3210
+npm run deploy -- --port=3211  # or another supervised port
+```
+
+`scripts/deploy.sh` performs the whole sequence below, refuses a dirty checkout,
+runs `npm ci` only when the update actually changes the dependency tree, and
+polls `/api/health` afterwards so a bootstrap that loads but never serves is
+reported as a failure instead of a success. It works from the repository root and
+from a worktree; `--help` lists the options.
+
+### The same update by hand
+
 Run these commands from the repository root. Do not deploy from a checkout with
 uncommitted changes: the build would include them even though they are not on the
 selected Git commit.
@@ -87,6 +100,26 @@ active OpenCode turns continue during an application update.
 
 If the checkout is dirty, preserve that work first. Commit it on its own branch or
 use a separate clean worktree; do not stash, discard, or deploy it accidentally.
+
+### The by-hand sequence fails silently in a worktree
+
+Git allows a branch in only one worktree at a time, so `git switch main` aborts
+with `fatal: 'main' is already checked out at ...` whenever another worktree holds
+it. Pasting the block as a whole is what makes this dangerous: the two `git`
+commands fail, then `npm ci` and `service:install` succeed anyway and deploy
+whichever commit was already on disk. The deploy looks like it worked, and the
+version label shows a commit nobody selected.
+
+Deploy the ref detached rather than switching to the branch:
+
+```bash
+git fetch origin
+git checkout --detach origin/main
+```
+
+`npm run deploy` does this unconditionally, and names the worktree holding the
+branch when there is one. Confirm which worktree holds what with
+`git worktree list`.
 
 ### Do not run `npm ci` while the BFF serves from the same checkout
 
