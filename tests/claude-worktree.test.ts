@@ -66,6 +66,32 @@ describe("Claude worktree isolation", () => {
     expect(existsSync(path.join(wt.directory, "node_modules"))).toBe(false);
   });
 
+  it("carries the project's gitignored env files into the worktree without overwriting tracked ones", async () => {
+    const { project: dir, root } = project();
+    writeFileSync(path.join(dir, ".gitignore"), ".env\n.env.local\n");
+    writeFileSync(path.join(dir, ".env"), "TOKEN=secret\n");
+    writeFileSync(path.join(dir, ".env.local"), "PORT=3000\n");
+    // Tracked, so `git worktree add` checks it out; the project's working copy
+    // has since drifted and must not clobber what git wrote.
+    writeFileSync(path.join(dir, ".env.example"), "TOKEN=\n");
+    git(dir, ["add", "-A"]);
+    git(dir, ["commit", "-q", "-m", "env"]);
+    writeFileSync(path.join(dir, ".env.example"), "LOCAL DRIFT\n");
+
+    const wt = await createWorktree(dir, root, "env");
+
+    expect(readFileSync(path.join(wt.directory, ".env"), "utf8")).toBe("TOKEN=secret\n");
+    expect(readFileSync(path.join(wt.directory, ".env.local"), "utf8")).toBe("PORT=3000\n");
+    expect(readFileSync(path.join(wt.directory, ".env.example"), "utf8")).toBe("TOKEN=\n");
+  });
+
+  it("creates a worktree for a project that has no env files", async () => {
+    const { project: dir, root } = project();
+    const wt = await createWorktree(dir, root, "no-env");
+    expect(existsSync(path.join(wt.directory, "README.md"))).toBe(true);
+    expect(existsSync(path.join(wt.directory, ".env"))).toBe(false);
+  });
+
   it("reports the worktree's changes against the base commit, including untracked files", async () => {
     const { project: dir, root } = project();
     const wt = await createWorktree(dir, root, "chg");

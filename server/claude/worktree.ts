@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { mkdir, readdir, realpath, rm, stat, symlink } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { copyFile, mkdir, readdir, realpath, rm, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -65,7 +66,42 @@ export async function createWorktree(project: string, root: string, sessionUuid:
   await git(project, ["worktree", "add", "-b", branch, directory, "HEAD"]);
   const resolved = await realpath(directory);
   await linkDependencies(project, resolved);
+  await copyLocalEnvironment(project, resolved);
   return { directory: resolved, branch, baseCommit, project };
+}
+
+/**
+ * Copy the project's root `.env*` files into the worktree.
+ *
+ * Local environment files are gitignored by convention, and `git worktree add`
+ * materialises tracked files only — so a fresh worktree of a repo that needs
+ * credentials starts without them, and the first command an agent runs fails on
+ * missing configuration before it can do any work. That is the same gap
+ * `linkDependencies` closes for `node_modules`.
+ *
+ * `COPYFILE_EXCL` makes "already there" a skip rather than an overwrite, which
+ * leaves anything tracked (`.env.example`) exactly as git checked it out.
+ *
+ * Best-effort for the same reason as `linkDependencies`: a session without
+ * local env is still a usable session, so failure must not fail creation.
+ */
+async function copyLocalEnvironment(project: string, worktree: string): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await readdir(project);
+  } catch {
+    return; // unreadable project root; the worktree is still usable
+  }
+  for (const entry of entries) {
+    if (!entry.startsWith(".env")) continue;
+    const source = path.join(project, entry);
+    try {
+      if (!(await stat(source)).isFile()) continue;
+      await copyFile(source, path.join(worktree, entry), fsConstants.COPYFILE_EXCL);
+    } catch {
+      // already present, or unreadable; each entry is independent
+    }
+  }
 }
 
 /**
