@@ -102,7 +102,7 @@ export function ClaudePage() {
                 </fieldset>
                 <label className="flex min-h-11 items-start gap-3 rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface-warning-muted)] p-3 text-sm" data-testid="claude-build-confirmation">
                   <input type="checkbox" checked={confirmedBuild} onChange={(event) => setConfirmedBuild(event.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" data-testid="claude-build-confirm" />
-                  <span>This session runs tools without pausing to ask (headless Claude has no approval prompt). {isolation === "worktree" ? "Writes are confined to the session's worktree and the project's git metadata." : "Writes are confined to the selected project."} Writes outside that workspace and Claude state remain blocked by macOS Seatbelt.</span>
+                  <span>This session can read and write anything the operator can. {isolation === "worktree" ? "By convention, writes target the session's worktree and the project's git metadata — but nothing enforces that boundary." : "Writes land directly in the selected project."} When approvals are enabled, each tool call waits for your answer; with auto permissions on, they are approved automatically.</span>
                 </label>
               </CardContent>
             )}

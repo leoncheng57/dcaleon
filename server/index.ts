@@ -89,6 +89,14 @@ webPushConfig(); // Fail at startup rather than exposing a half-configured chann
 const claudeStore = new ClaudeSessionStore(claude.ledgerFile, claude.sessionsFile);
 const claudeSupervisor = new ClaudeSupervisor(claude);
 const claudeApprovals = claude.approvals ? new ClaudeApprovalStore() : undefined;
+// Wire auto-permissions into the Claude approval store: when the toggle is ON
+// for a session's project directory, tool calls are approved without waiting.
+if (claudeApprovals) {
+  claudeApprovals.autoApprove = (sessionId) => {
+    const session = claudeStore.get(sessionId);
+    return Boolean(session && autoPermissions.isEnabled(session.projectDirectory));
+  };
+}
 const notificationService = new NotificationService(
   opencode,
   bus,

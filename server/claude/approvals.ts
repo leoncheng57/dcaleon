@@ -37,18 +37,17 @@ interface Waiter {
 /**
  * Pending permission checks for the Claude runtime, and the answers to them.
  *
- * The gate lives here rather than in the sandboxed child so a decision is made
- * by the BFF on the user's behalf. `ask()` is called by the in-session approver
- * over loopback HTTP and resolves only once someone replies, the standing rules
- * cover it, or it times out.
+ * The gate lives in the BFF so a decision is made on the user's behalf.
+ * `ask()` is called by the in-session approver over loopback HTTP and resolves
+ * only once someone replies, the standing rules cover it, the auto-permissions
+ * toggle is on for that directory, or it times out.
  *
- * Threat model, stated plainly: the session can reach the BFF (the profile
- * grants `network*`) and the API has no auth, so a deliberately hostile agent
- * could answer its own ask. `token` therefore is not a security boundary — it
- * only keeps unrelated local processes from injecting asks. What approvals do
- * buy is a gate against an *erring* agent, which is the actual risk here, and
- * that is strictly better than the `bypassPermissions` this replaces. Seatbelt
- * remains the containment boundary for the hostile case.
+ * Threat model, stated plainly: the session can reach the BFF and the API has
+ * no auth, so a deliberately hostile agent could answer its own ask. `token`
+ * therefore is not a security boundary — it only keeps unrelated local processes
+ * from injecting asks. What approvals buy is a gate against an *erring* agent,
+ * which is the actual risk here, and that is strictly better than the
+ * `bypassPermissions` this replaces.
  */
 export class ClaudeApprovalStore extends EventEmitter {
   private readonly waiting = new Map<string, Waiter>();
@@ -58,6 +57,15 @@ export class ClaudeApprovalStore extends EventEmitter {
   private readonly standing = new Map<string, Set<string>>();
   /** Identifies the approver to the BFF; see the class note on why this is not authz. */
   readonly token = randomBytes(32).toString("hex");
+
+  /**
+   * Optional callback: when set, `ask()` calls it with the session id before
+   * queuing a waiter. If it returns true, the tool call is auto-approved and
+   * the "asked" event is replaced with an "auto-approved" event so the
+   * notification lane can log it without prompting the user. This is the Claude
+   * equivalent of the OpenCode auto-permissions toggle.
+   */
+  autoApprove: ((sessionId: string) => boolean) | undefined;
 
   constructor(private readonly timeoutMs: number = DEFAULT_TIMEOUT_MS) {
     super();
@@ -76,6 +84,13 @@ export class ClaudeApprovalStore extends EventEmitter {
 
   ask(input: { sessionId: string; toolName: string; toolUseId: string; input: Record<string, unknown> }): Promise<ClaudeApprovalDecision> {
     if (this.standingAllows(input.sessionId, input.toolName)) {
+      return Promise.resolve({ behavior: "allow", updatedInput: input.input });
+    }
+    // Auto-permissions: the user toggled the directory's auto-approve switch in
+    // the UI, so every tool call is approved without waiting. The "auto-approved"
+    // event lets the notification lane log it as suppressed rather than prompting.
+    if (this.autoApprove?.(input.sessionId)) {
+      this.emit("auto-approved", { sessionId: input.sessionId, toolName: input.toolName, toolUseId: input.toolUseId });
       return Promise.resolve({ behavior: "allow", updatedInput: input.input });
     }
     // The CLI can re-issue an ask for a tool call already in flight (a dropped
