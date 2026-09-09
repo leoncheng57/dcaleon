@@ -755,14 +755,19 @@ export function ClaudeConversationPage() {
             {pendingApprovals.map((approval) => (
               <div key={approval.id} className="mb-2" data-testid="claude-approval-request">
                 <Alert variant="warning">
+                  {/* The text keeps a readable floor (basis-56) and the three actions
+                      drop to their own row on a phone rather than squeezing the path
+                      into a five-character column beside them. */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="min-w-0 flex-1 text-sm">
+                    <span className="min-w-0 flex-1 basis-56 text-sm">
                       <strong>{approval.toolName}</strong> needs your approval — Claude is paused until you answer.
                       {approval.detail && <code className="mt-1 block max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px]" data-testid="claude-approval-detail">{approval.detail}</code>}
                     </span>
-                    <Button size="sm" className="min-h-11 sm:min-h-8" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "once")} data-testid="claude-approval-once">{replyingApproval === approval.id ? "Answering..." : "Allow once"}</Button>
-                    <Button size="sm" className="min-h-11 sm:min-h-8" variant="secondary" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "always")} title={`Allow ${approval.toolName} for the rest of this session`} data-testid="claude-approval-always">Always</Button>
-                    <Button size="sm" className="min-h-11 sm:min-h-8" variant="danger" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "reject")} data-testid="claude-approval-reject">Reject</Button>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <Button size="sm" className="min-h-11 sm:min-h-8" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "once")} data-testid="claude-approval-once">{replyingApproval === approval.id ? "Answering..." : "Allow once"}</Button>
+                      <Button size="sm" className="min-h-11 sm:min-h-8" variant="secondary" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "always")} title={`Allow ${approval.toolName} for the rest of this session`} data-testid="claude-approval-always">Always</Button>
+                      <Button size="sm" className="min-h-11 sm:min-h-8" variant="danger" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "reject")} data-testid="claude-approval-reject">Reject</Button>
+                    </div>
                   </div>
                 </Alert>
               </div>
