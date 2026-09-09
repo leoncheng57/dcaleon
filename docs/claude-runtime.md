@@ -38,15 +38,21 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
   `__CF_USER_TEXT_ENCODING`, synthesized when absent), because macOS resolves the login
   Keychain by user — without `$USER`, even an un-sandboxed `claude` reports "Not logged
   in". Identity is not a credential.
-- **Filesystem:** macOS Seatbelt is the write authority. Read-only presets get no
-  workspace write; Build adds only the allowlisted workspace. Because `claude` reads its
-  credential from the Keychain, the profile keeps HOME real and grants Keychain read — so
-  Seatbelt confines workspace writes but does not isolate the credential store. The
-  write-confinement is asserted on macOS in `tests/claude-seatbelt.test.ts`.
-  The read side includes Homebrew runtimes, versioned Xcode bundles used by Apple's
-  developer-tool shims, plus host Git configuration and SSH host verification;
-  `SSH_AUTH_SOCK` is forwarded as host Git authority without exposing a
-  private-key file. These reads do not widen the workspace write grant.
+- **Filesystem:** macOS Seatbelt is the write authority, and *only* the write authority.
+  Read-only presets get no workspace write; Build adds only the allowlisted workspace.
+  Because `claude` reads its credential from the Keychain, the profile keeps HOME real and
+  grants Keychain read — so Seatbelt confines workspace writes but does not isolate the
+  credential store. The write-confinement is asserted on macOS in
+  `tests/claude-seatbelt.test.ts`.
+  **The read side is the whole disk** (`(allow file-read*)`). The per-path allowlist it
+  replaced had to grow an entry every time a session needed host state (Homebrew runtimes,
+  versioned Xcode bundles, Git config, SSH `known_hosts`, a sibling project, `~/.codex`
+  transcripts), and it was never the boundary this profile enforced. Deliberate cost: a
+  session of *either* mode can read every secret the user can — SSH private keys, `~/.aws`,
+  browser cookie stores — so the credential discipline below is now the only read boundary,
+  and a session's prompt should be treated as capable of exfiltrating host secrets.
+  `SSH_AUTH_SOCK` is forwarded as host Git authority. Reads do not widen the write grant;
+  `tests/claude-seatbelt.test.ts` probes a `$HOME` path for read and denies the write.
 - **Build writes:** a Build preset uses `permissionMode: "bypassPermissions"`. Headless
   `claude` denies a write that no rule pre-approves, so the permission prompt cannot be the
   gate here — Seatbelt is. Verified against the real binary: a read-only session is denied

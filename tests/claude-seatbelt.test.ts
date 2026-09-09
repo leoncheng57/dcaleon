@@ -28,8 +28,7 @@ describe("Claude Seatbelt profile", () => {
     temporary.push(root);
     const workspace = path.join(root, "workspace");
     const stateRoot = path.join(root, "state");
-    writeFileSync(path.join(root, "binary"), "");
-    const profile = claudeSeatbeltProfile({ workspace, stateRoot, binaryPath: path.join(root, "binary"), mode: "read-only" });
+    const profile = claudeSeatbeltProfile({ workspace, stateRoot, mode: "read-only" });
     // The workspace and state dirs must exist for the write attempt to reach the sandbox check.
     await run("/bin/mkdir", ["-p", workspace, stateRoot]);
 
@@ -47,8 +46,7 @@ describe("Claude Seatbelt profile", () => {
     temporary.push(root);
     const workspace = path.join(root, "workspace");
     const stateRoot = path.join(root, "state");
-    writeFileSync(path.join(root, "binary"), "");
-    const profile = claudeSeatbeltProfile({ workspace, stateRoot, binaryPath: path.join(root, "binary"), mode: "build" });
+    const profile = claudeSeatbeltProfile({ workspace, stateRoot, mode: "build" });
     await run("/bin/mkdir", ["-p", workspace, stateRoot]);
 
     const allowed = await underProfile(profile, `echo ok > '${path.join(workspace, "built.txt")}'`);
@@ -62,12 +60,35 @@ describe("Claude Seatbelt profile", () => {
     const workspace = path.join(root, "workspace");
     const stateRoot = path.join(root, "state");
     await run("/bin/mkdir", ["-p", workspace, stateRoot]);
-    const profile = claudeSeatbeltProfile({ workspace, stateRoot, binaryPath: process.execPath, mode: "read-only" });
-    expect(profile).toContain('(subpath "/Applications")');
+    const profile = claudeSeatbeltProfile({ workspace, stateRoot, mode: "read-only" });
+    expect(profile).toContain("(allow file-read*)");
 
     const node = await underProfile(profile, `'${process.execPath}' --version >/dev/null`);
     expect(node).toEqual({ ok: true, stderr: "" });
     const git = await underProfile(profile, `cd '${workspace}' && /usr/bin/git config --global --list >/dev/null`);
     expect(git).toEqual({ ok: true, stderr: "" });
+  });
+
+  it.runIf(onMac)("reads a home-directory path the old allowlist never named, and still cannot write it", async () => {
+    // The read grant is whole-disk, so host state outside the session (a sibling
+    // project, `~/.codex` transcripts) is readable without a profile edit. Probing
+    // under HOME is the point: no `$HOME/<dir>` beyond `~/.claude` was ever granted.
+    const outside = realpathSync(mkdtempSync(path.join(os.homedir(), ".claude-sb-read-")));
+    temporary.push(outside);
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "claude-sb-outside-")));
+    temporary.push(root);
+    const workspace = path.join(root, "workspace");
+    const stateRoot = path.join(root, "state");
+    await run("/bin/mkdir", ["-p", workspace, stateRoot]);
+    writeFileSync(path.join(outside, "transcript.jsonl"), "secret\n");
+    const profile = claudeSeatbeltProfile({ workspace, stateRoot, mode: "build" });
+
+    const read = await underProfile(profile, `/bin/cat '${path.join(outside, "transcript.jsonl")}' >/dev/null`);
+    expect(read).toEqual({ ok: true, stderr: "" });
+
+    // Whole-disk READ only: Build still writes nowhere but its own workspace.
+    const write = await underProfile(profile, `echo x > '${path.join(outside, "escape.txt")}'`);
+    expect(write.ok).toBe(false);
+    expect(existsSync(path.join(outside, "escape.txt"))).toBe(false);
   });
 });

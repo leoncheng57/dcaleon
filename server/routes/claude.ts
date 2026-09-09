@@ -39,10 +39,10 @@ function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
   };
 }
 
-/** Worktree sessions need to read the project and write its shared `.git`. */
-function sandboxExtras(session: ReturnType<ClaudeSessionStore["create"]>): { reads: string[]; writes: string[] } | undefined {
+/** Worktree sessions need to write the project's shared `.git`; reads are whole-disk. */
+function sandboxExtras(session: ReturnType<ClaudeSessionStore["create"]>): { writes: string[] } | undefined {
   if (!session.worktree) return undefined;
-  return { reads: [session.projectDirectory], writes: [path.join(session.projectDirectory, ".git")] };
+  return { writes: [path.join(session.projectDirectory, ".git")] };
 }
 
 export function claudeRoutes(

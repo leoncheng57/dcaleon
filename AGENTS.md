@@ -1139,12 +1139,23 @@ several decisions below.
       launchd-minimal env lacks them. Measured the hard way: without `$USER`, even an
       un-sandboxed `claude` reports "Not logged in", because macOS resolves the login
       Keychain by user. Identity is not a credential; forwarding it is not brokering auth.
-    - **Seatbelt is the write authority, but not a credential boundary.** Unlike the DSH
-      profile it keeps HOME real and must grant read of `~/Library/Keychains` plus the
-      securityd family, or subscription auth breaks — so the sandbox confines workspace
-      *writes* (read-only presets get none; Build adds only the allowlisted workspace) and
+    - **Seatbelt is the write authority, and nothing else.** Unlike the DSH profile it
+      keeps HOME real and must grant read of `~/Library/Keychains` plus the securityd
+      family, or subscription auth breaks — so the sandbox confines workspace *writes*
+      (read-only presets get none; Build adds only the allowlisted workspace) and
       deliberately does not isolate the credential store. Verified on macOS in
       `tests/claude-seatbelt.test.ts`, which the `host-contract-macos` CI job runs.
+    - **Reads are whole-disk on purpose** (`(allow file-read*)`). The per-path read
+      allowlist that preceded it had to grow an entry for every piece of host state a
+      session touched — Homebrew runtimes, Xcode bundles, `~/.gitconfig`, SSH
+      `known_hosts`, a sibling project, `~/.codex` transcripts — while never being the
+      boundary the profile actually enforced, and a missing entry surfaced as an opaque
+      `Operation not permitted` mid-turn. The accepted cost is real and not narrow: a
+      session of either mode can read every secret the user can (SSH private keys,
+      `~/.aws`, cookie stores), so the credential discipline above is the only remaining
+      read boundary. If read confinement is ever wanted back, it belongs in a profile
+      whose HOME is redirected (the DSH shape), not in an allowlist bolted onto a
+      real-HOME profile.
     - **The pin is enforced at runtime, DSH-style.** `CLAUDE_CLI_VERSION` is validated into
       `errors[]` and re-asserted against the `system/init` frame's `claude_code_version`;
       a mismatch fails the turn. The binary auto-updates, so this is not optional — the
@@ -1155,7 +1166,7 @@ several decisions below.
     never inside the project — `server/claude/worktree.ts`). Worktrees keep metadata and
     objects in the shared `.git`, so the worktree profile grants `<project>/.git` write; it
     is inherent to git worktrees and is the only Seatbelt write that reaches outside the
-    session's own directory. Rules that cost a real test each:
+    session's own directory (reads need no counterpart — the profile grants the whole disk). Rules that cost a real test each:
     - **Merge refuses a dirty project.** A merge must never be confused with the human's
       own in-progress edits; `mergeWorktree` checks `isDirty(project)` first and also
       refuses a branch with nothing to merge. Uncommitted worktree work is committed before
