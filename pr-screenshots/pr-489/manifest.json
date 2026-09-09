@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "prNumber": 489,
-  "sourceSha": "6e32716172b46dfb1c3e77a4a41f4b7340e0881c",
-  "capturedAt": "2026-09-09T00:36:47.696Z",
+  "sourceSha": "00e90c21f42a883f02a1056fde6cbc5bf860bf0a",
+  "capturedAt": "2026-09-09T01:02:03.786Z",
   "screenshots": [
     {
       "requestedRoute": "/opencode?directory=/tmp/mock-project",
@@ -16,7 +16,7 @@
             "height": 281
           },
           "bytes": 18008,
-          "sha256": "ef343c8fbd5fc7c7ec81392d938eaff4e24cd41054dead59789b07ef3f8ab34a"
+          "sha256": "97b65ac0059d60f1f87ba3f6a85567125c045b81e1382fccf5efe228544fbd3d"
         },
         "mobile": {
           "filename": "01-opencode-directory-tmp-mock-project-c65e4a9d--mobile.png",
@@ -24,8 +24,8 @@
             "width": 358,
             "height": 269
           },
-          "bytes": 16533,
-          "sha256": "04166e8578c7f359d04bc16870d1ea55ef19d650b5209ea74b752af0b837c787"
+          "bytes": 16538,
+          "sha256": "027c020e507378011d628166895e163f67cfe41fee44cd708f150628230168c1"
         }
       }
     },
