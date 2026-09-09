@@ -20,9 +20,15 @@
 import { Router } from "express";
 
 import { requireWorkspaceDirectory } from "../paths.js";
+import { isClaudeSessionId } from "../publicAppUrl.js";
 import { ProjectPinStore } from "../projects.js";
-import { listSessionsAcross } from "../opencode/sessions.js";
+import { listSessionsAcross, type SessionSummary } from "../opencode/sessions.js";
 import type { OpencodeConfig } from "../opencode/client.js";
+
+/** Minimal read interface so the recents route can resolve Claude sessions. */
+export interface ClaudeSessionLookup {
+  get(id: string): { id: string; title: string; projectDirectory: string; running: boolean; createdAt: string; updatedAt: string } | undefined;
+}
 
 /** Upper bound on directories fanned out to, after dedupe. */
 export const RECENT_DIRECTORY_LIMIT = 40;
@@ -108,7 +114,7 @@ export async function resolveRecentDirectories(
   return resolved;
 }
 
-export function recentRoutes(config: OpencodeConfig, store = new ProjectPinStore()): Router {
+export function recentRoutes(config: OpencodeConfig, claudeSessionLookup?: ClaudeSessionLookup, store = new ProjectPinStore()): Router {
   const router = Router();
 
   router.get("/recent-sessions", async (req, res) => {
@@ -132,6 +138,30 @@ export function recentRoutes(config: OpencodeConfig, store = new ProjectPinStore
       const pool = await listSessionsAcross(config, directories, {
         perDirectoryLimit: RECENT_SESSION_CONTEXT_LIMIT,
       });
+
+      // Resolve Claude sessions from the in-process store so notification
+      // rows can show running/idle instead of always-unknown (#505).
+      if (claudeSessionLookup) {
+        for (const id of lookupIDs) {
+          if (!isClaudeSessionId(id)) continue;
+          const cs = claudeSessionLookup.get(id);
+          if (!cs) continue;
+          const summary: SessionSummary = {
+            id: cs.id,
+            title: cs.title,
+            directory: cs.projectDirectory,
+            childCount: 0,
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+            createdAt: cs.createdAt,
+            updatedAt: cs.updatedAt,
+            archived: false,
+            running: cs.running,
+          };
+          pool.push(summary);
+        }
+      }
+
       // Two panels, two selections, one fan-out. "Recently active" wants the
       // newest few; "recently opened" wants specific sessions the browser
       // remembers, which are usually NOT the newest. Sending only the newest
