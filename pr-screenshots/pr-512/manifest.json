@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "prNumber": 512,
-  "sourceSha": "068ed871dafb5cb0103c1c8f1040991e6fc3b79a",
-  "capturedAt": "2026-09-09T16:45:30.030Z",
+  "sourceSha": "fdcb6ee51f961e9d24d4ac6d3c9115751292687b",
+  "capturedAt": "2026-09-09T18:14:04.939Z",
   "screenshots": [
     {
       "requestedRoute": "/opencode?directory=/tmp/mock-project",
