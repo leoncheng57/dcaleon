@@ -107,6 +107,27 @@ describe("Claude runtime configuration", () => {
     expect(unknown.errors.join(" ")).toContain("mode=read-only|build");
   });
 
+  it("runs unconfined at terminal parity only when CLAUDE_SANDBOX asks for it", async () => {
+    const item = await fixture();
+    const host = readClaudeConfig({ ...coreEnv(item), CLAUDE_SANDBOX: "host" });
+    expect(host.configured).toBe(true);
+    expect(host.errors).toEqual([]);
+    expect(host.sandbox).toBe("host");
+    // An explicit "seatbelt" is the same as saying nothing at all.
+    expect(readClaudeConfig({ ...coreEnv(item), CLAUDE_SANDBOX: "seatbelt" }).sandbox).toBe(
+      readClaudeConfig(coreEnv(item)).sandbox,
+    );
+  });
+
+  it("fails closed on an unrecognised CLAUDE_SANDBOX rather than quietly confining", async () => {
+    const item = await fixture();
+    for (const value of ["none", "off", "Host", "seatbelt "]) {
+      const config = readClaudeConfig({ ...coreEnv(item), CLAUDE_SANDBOX: value });
+      expect(config.configured).toBe(false);
+      expect(config.errors.join(" ")).toContain("CLAUDE_SANDBOX must be");
+    }
+  });
+
   it("refuses the unsafe path outside an explicit test process", async () => {
     const item = await fixture();
     for (const nodeEnv of ["production", "development"]) {

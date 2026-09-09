@@ -49,7 +49,7 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
   versioned Xcode bundles, Git config, SSH `known_hosts`, a sibling project, `~/.codex`
   transcripts), and it was never the boundary this profile enforced. Deliberate cost: a
   session of *either* mode can read every secret the user can — SSH private keys, `~/.aws`,
-  browser cookie stores — so the credential discipline below is now the only read boundary,
+  browser cookie stores — so the credential discipline above is now the only read boundary,
   and a session's prompt should be treated as capable of exfiltrating host secrets.
   `SSH_AUTH_SOCK` is forwarded as host Git authority. Reads do not widen the write grant;
   `tests/claude-seatbelt.test.ts` probes a `$HOME` path for read and denies the write.

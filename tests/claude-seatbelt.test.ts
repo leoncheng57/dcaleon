@@ -91,4 +91,18 @@ describe("Claude Seatbelt profile", () => {
     expect(write.ok).toBe(false);
     expect(existsSync(path.join(outside, "escape.txt"))).toBe(false);
   });
+
+  it("lets a session signal its own children but nothing else", () => {
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "claude-sb-")));
+    temporary.push(root);
+    const profile = claudeSeatbeltProfile({
+      workspace: path.join(root, "ws"),
+      stateRoot: path.join(root, "state"),
+      mode: "build",
+    });
+    // A test runner's worker pool terminates workers, and `process*` does not
+    // cover `signal`; the BFF that supervises the session must stay untouchable.
+    expect(profile).toContain("(allow signal (target children))");
+    expect(profile).not.toContain("(allow signal)");
+  });
 });

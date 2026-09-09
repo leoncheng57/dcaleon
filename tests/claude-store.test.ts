@@ -237,6 +237,52 @@ describe("Claude session store", () => {
     expect(interrupted?.events.at(-1)).toMatchObject({ kind: "status", label: "Interrupted by a server restart" });
   });
 
+  it("replaces the agent event object on text append so the transcript index detects the change", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "hello");
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "text", text: "first part" }] } });
+
+    // Cache the transcript index entry (simulates a mid-turn client fetch).
+    const index = instance.transcript(session);
+    const firstRead = index.read();
+    const cachedAgent = firstRead.events.find((event) => event.kind === "agent");
+    expect(cachedAgent).toMatchObject({ text: "first part" });
+    const cursor = firstRead.page.cursor;
+
+    // A second assistant frame appends text.
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "text", text: "second part" }] } });
+
+    // The delta after the cursor must surface the updated agent event.
+    const delta = instance.transcript(session).read({ since: cursor });
+    const updatedAgent = delta.events.find((event) => event.kind === "agent");
+    expect(updatedAgent).toBeDefined();
+    expect(updatedAgent!).toMatchObject({ text: "first part\n\nsecond part" });
+  });
+
+  it("replaces the agent event object when stamping result metrics so the transcript index detects the change", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "hello");
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "text", text: "done" }] } });
+
+    // Cache the transcript index entry before result arrives.
+    const index = instance.transcript(session);
+    const firstRead = index.read();
+    const cursor = firstRead.page.cursor;
+    const preProse = firstRead.events.find((event) => event.kind === "agent");
+    expect(preProse).toMatchObject({ metricsStatus: "pending" });
+
+    // Result frame stamps metrics.
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0.05, usage: { input_tokens: 100, output_tokens: 50 } });
+
+    // The delta must surface the metrics update.
+    const delta = instance.transcript(session).read({ since: cursor });
+    const updatedProse = delta.events.find((event) => event.kind === "agent");
+    expect(updatedProse).toBeDefined();
+    expect(updatedProse!).toMatchObject({ metricsStatus: "final", messageCost: 0.05 });
+  });
+
   it("durably interrupts running turns during graceful shutdown", async () => {
     const { instance } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });

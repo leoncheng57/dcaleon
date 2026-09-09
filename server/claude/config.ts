@@ -43,7 +43,7 @@ export interface ClaudeConfig {
    * time (real projects), in addition to the static allowlist. Null disables discovery.
    */
   projectsRoot: string | null;
-  sandbox: "seatbelt" | "test-unsafe";
+  sandbox: "seatbelt" | "test-unsafe" | "host";
   /** Models offered in the mid-session switcher (preset models are always included). */
   models: string[];
   presets: ClaudePreset[];
@@ -82,14 +82,25 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
   // silently downgrading to Seatbelt.
   const testUnsafeRequested = env.CLAUDE_TEST_UNSAFE === "true";
   const testUnsafe = testUnsafeRequested && env.NODE_ENV === "test";
-  const sandbox = testUnsafe ? "test-unsafe" : "seatbelt";
+  // Terminal parity. `CLAUDE_SANDBOX=host` drops the Seatbelt wrapper so a session
+  // holds exactly the authority `claude` has in a terminal: no write confinement, so
+  // a read-only turn keeps only its tool-layer denies and a Build turn can write
+  // anywhere the user can. Opt-in and never silent -- the mode is reported on
+  // /api/status. An unrecognised value fails closed rather than quietly sandboxing
+  // a session the operator meant to run unconfined.
+  const sandboxRequest = env.CLAUDE_SANDBOX || "seatbelt";
+  const hostRequested = sandboxRequest === "host";
+  if (sandboxRequest !== "seatbelt" && !hostRequested) {
+    errors.push('CLAUDE_SANDBOX must be "seatbelt" (default) or "host"');
+  }
+  const sandbox = testUnsafe ? "test-unsafe" : hostRequested ? "host" : "seatbelt";
   if (testUnsafeRequested && !testUnsafe) {
     errors.push("CLAUDE_TEST_UNSAFE is test-only and requires NODE_ENV=test");
   }
   if (enabled && !/^\d+\.\d+\.\d+(?:[A-Za-z0-9.-]+)?$/.test(cliVersion)) {
     errors.push("CLAUDE_CLI_VERSION must pin one exact CLI version");
   }
-  if (enabled && process.platform !== "darwin" && !testUnsafe) {
+  if (enabled && process.platform !== "darwin" && !testUnsafe && !hostRequested) {
     errors.push("Claude runtime V1 requires macOS Seatbelt; non-macOS launch is test-only");
   }
 

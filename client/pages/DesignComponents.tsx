@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Globe2, MessageSquareText, TerminalSquare } from "lucide-react";
+import { ChevronDown, Globe2, MessageSquareText, Send, TerminalSquare } from "lucide-react";
 import { Button, buttonClasses } from "../ds/button.js";
 import { Badge } from "../ds/badge.js";
 import { Alert } from "../ds/alert.js";
@@ -34,6 +34,9 @@ export function DesignComponentsPage() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [reconnected, setReconnected] = useState(false);
   const [feedback, setFeedback] = useState("Try an action to see its feedback.");
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const [composerDraft, setComposerDraft] = useState("");
+  const [composerMode, setComposerMode] = useState<"plan" | "build">("plan");
   const active = destinations.find((option) => option.id === destination)!;
   return <main className="h-full overflow-y-auto" data-testid="opencode-design-components">
     <div className="mx-auto max-w-6xl space-y-10 px-4 py-7 sm:px-8 sm:py-12">
@@ -101,6 +104,65 @@ export function DesignComponentsPage() {
               action={state.kind === "disconnected" ? <Button variant="secondary" data-testid="design-reconnect" onClick={() => setReconnected(!reconnected)}>{reconnected ? "Reset example" : "Reconnect"}</Button> : undefined} />
           </div>)}
         </div>
+      </Example>
+
+      <Example title="05 · Composer" detail="The shared message input across all runtime islands. Collapses on mobile to reclaim transcript space.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Expanded composer */}
+          <div className="space-y-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-3" data-testid="design-composer-expanded">
+            <Badge variant="info">Expanded</Badge>
+            <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2" data-testid="design-composer-controls">
+              <div className="flex rounded-md border border-[var(--color-border-default)]" role="group" aria-label="Agent mode">
+                <button type="button" aria-pressed={composerMode === "plan"} className={`min-h-10 rounded-l-md px-3 text-sm font-medium ${composerMode === "plan" ? "bg-[var(--color-background-action-primary)] text-[var(--color-text-on-action-primary)]" : "text-[var(--color-text-muted)]"}`} onClick={() => setComposerMode("plan")} data-testid="design-composer-plan">Plan</button>
+                <button type="button" aria-pressed={composerMode === "build"} className={`min-h-10 rounded-r-md px-3 text-sm font-medium ${composerMode === "build" ? "bg-[var(--color-background-action-primary)] text-[var(--color-text-on-action-primary)]" : "text-[var(--color-text-muted)]"}`} onClick={() => setComposerMode("build")} data-testid="design-composer-build">Build</button>
+              </div>
+              <Button variant="secondary" size="sm" className="min-h-10 text-sm" data-testid="design-composer-model">claude-sonnet-4</Button>
+              <button type="button" className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)]" onClick={() => setComposerCollapsed(true)} aria-label="Collapse composer" title="Collapse composer" data-testid="design-composer-collapse">
+                <ChevronDown aria-hidden="true" className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-w-0 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] transition-colors focus-within:border-[var(--color-border-focus)]" data-testid="design-composer-card">
+              <textarea
+                className="thin-scrollbar block max-h-64 min-h-24 w-full resize-none border-0 bg-transparent p-3 text-base text-[var(--color-text-default)] outline-none placeholder:text-[var(--color-text-muted)] sm:min-h-16 sm:p-2.5 sm:text-sm"
+                value={composerDraft}
+                onChange={(event) => setComposerDraft(event.target.value)}
+                placeholder="Send a follow-up..."
+                rows={1}
+                data-testid="design-composer-textarea"
+              />
+              <div className="flex min-w-0 items-center gap-2 border-t border-[var(--color-border-default)] px-2 py-2 sm:py-1">
+                <span className="inline-flex min-h-11 shrink-0 items-center rounded-md px-2.5 text-xs font-semibold text-[var(--color-text-muted)] sm:min-h-8">Attach</span>
+                <span className="inline-flex min-h-11 shrink-0 items-center rounded-md px-2.5 text-xs font-semibold text-[var(--color-text-muted)] sm:min-h-8">+ reminder</span>
+                <span className="inline-flex min-h-11 shrink-0 items-center rounded-md px-2.5 text-xs font-semibold text-[var(--color-text-muted)] sm:min-h-8">Workflows</span>
+                <span className="flex-1" aria-hidden="true" />
+                <Button size="sm" className="min-h-11 shrink-0 sm:min-h-8" disabled={!composerDraft.trim()} data-testid="design-composer-send">
+                  <Send aria-hidden="true" size={14} className="mr-1" /> Send
+                </Button>
+              </div>
+            </div>
+            <p className="text-[11px] text-[var(--color-text-muted)]">Desktop: Enter sends, Shift+Enter newline. Mobile: Enter inserts newline, Cmd/Ctrl+Enter sends.</p>
+          </div>
+
+          {/* Collapsed composer */}
+          <div className="space-y-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-3" data-testid="design-composer-collapsed">
+            <Badge variant="info">Collapsed (mobile)</Badge>
+            <p className="text-sm text-[var(--color-text-muted)]">On phones, the composer collapses when focus leaves the textarea, reclaiming screen space for the transcript. Tap to expand.</p>
+            <button
+              type="button"
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[var(--color-border-default)] px-3 text-left text-sm text-[var(--color-text-muted)] hover:bg-[var(--hh-row-hover)] hover:text-[var(--color-text-default)]"
+              onClick={() => setComposerCollapsed(false)}
+              data-testid="design-composer-expand"
+            >
+              <MessageSquareText aria-hidden="true" className="h-4 w-4" />
+              <span className="min-w-0 flex-1 truncate">{composerDraft.trim() || "Write a follow-up"}</span>
+            </button>
+            <div className="space-y-1 text-[11px] text-[var(--color-text-muted)]">
+              <p>Collapse triggers: blur on narrow viewport (&lt; 640px), manual chevron button.</p>
+              <p>Expand triggers: tap the bar, focus the textarea, apply a workflow.</p>
+            </div>
+          </div>
+        </div>
+        {composerCollapsed && <Alert variant="info" data-testid="design-composer-collapsed-feedback">Composer collapsed. In the real app, only the compact bar is visible. Tap the bar above to expand.</Alert>}
       </Example>
     </div>
   </main>;
