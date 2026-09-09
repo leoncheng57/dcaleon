@@ -150,15 +150,25 @@ export function SessionShell({ testIds, browserSessionID, header, banners, promp
         )}
       </header>
 
-      <div className="max-h-[25%] shrink-0 overflow-y-auto">
-        {banners}
-      </div>
-      {/* Own scrollport so the question's sticky action bar anchors to a window
-          it is the first thing inside of; bounded so the transcript keeps some
-          room, in dvh so a phone URL bar cannot shrink it below the bar. */}
-      {prompts && (
-        <div className="max-h-[45dvh] shrink-0 overflow-y-auto overscroll-contain" data-testid={`${testIds.root}-prompts`}>
-          {prompts}
+      {prompts ? (
+        // Two scrollports, one budget. The question needs its own scrollport so
+        // its sticky action bar anchors to a window it is the first thing inside
+        // of — but it must not be *additive* to the banners cap, or three
+        // permission asks plus a question leave the transcript and inspector
+        // with no height at all. Both children shrink (min-h-0) inside the same
+        // 25% column the banners already had and scroll independently, so this
+        // reorganises the region without taking a pixel from the transcript.
+        <div className="flex max-h-[25%] shrink-0 flex-col">
+          <div className="min-h-0 flex-[0_1_auto] overflow-y-auto">
+            {banners}
+          </div>
+          <div className="min-h-0 flex-[0_1_auto] overflow-y-auto overscroll-contain" data-testid={`${testIds.root}-prompts`}>
+            {prompts}
+          </div>
+        </div>
+      ) : (
+        <div className="max-h-[25%] shrink-0 overflow-y-auto">
+          {banners}
         </div>
       )}
 
