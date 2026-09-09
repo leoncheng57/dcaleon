@@ -18,7 +18,7 @@ test.describe("appearance", () => {
     await expect(page.getByTestId("opencode-appearance-system")).toBeChecked();
     await expect(page.getByTestId("opencode-appearance-status")).toHaveText("Selected: System (Dark)");
     await expect(page.locator("html")).toHaveClass(/dark/);
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#16181d");
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0a0a0b");
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
 
     await page.emulateMedia({ colorScheme: "light" });

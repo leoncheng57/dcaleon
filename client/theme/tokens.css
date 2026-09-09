@@ -70,7 +70,11 @@
   /* ── Source syntax
    * Code syntax is its own semantic family: these colors distinguish language
    * roles, not application statuses. Keep every foreground readable against
-   * the editor surface in both appearances. */
+   * the editor surface in both appearances.
+   *
+   * workspace-files.ui.spec.ts gates every rendered token at 4.5:1 against
+   * --color-background-surface, so darkening a surface can push the dimmest
+   * token (comment) under the bar — re-check the ratios when either moves. */
   --color-syntax-comment: #5f6b7a;
   --color-syntax-keyword: #6d28d9;
   --color-syntax-name: #0369a1;
@@ -123,23 +127,23 @@
   --color-purple-100: #4c1d95;
   --color-purple-700: #ddd6fe;
 
-  --color-background-surface: #16181d;
-  --color-background-surface-neutral-muted: #22252c;
-  --color-background-surface-info-muted: #172554;
-  --color-background-surface-success-muted: #052e1d;
-  --color-background-surface-warning-muted: #3b2a06;
-  --color-background-surface-danger-muted: #3f1414;
+  --color-background-surface: #0a0a0b;
+  --color-background-surface-neutral-muted: #141516;
+  --color-background-surface-info-muted: #0c1a3d;
+  --color-background-surface-success-muted: #031a11;
+  --color-background-surface-warning-muted: #271c04;
+  --color-background-surface-danger-muted: #2a0e0e;
   --color-background-surface-danger: #ef4444;
   --color-text-on-danger: #1a0505;
-  --color-background-overlay: rgb(0 0 0 / 0.75);
+  --color-background-overlay: rgb(0 0 0 / 0.82);
   --color-background-qr: #ffffff;
   --color-foreground-qr: #000000;
-  --color-browser-chrome: #16181d;
+  --color-browser-chrome: #0a0a0b;
 
-  --color-background-surface-plan-muted: #3b2a06;
+  --color-background-surface-plan-muted: #271c04;
   --color-border-plan: #fbbf24;
   --color-text-plan: #fcd34d;
-  --color-background-surface-build-muted: #172554;
+  --color-background-surface-build-muted: #0c1a3d;
   --color-border-build: #60a5fa;
   --color-text-build: #93c5fd;
 
@@ -147,45 +151,45 @@
   --color-background-action-primary-hover: #16a34a;
   --color-background-action-info: #3b82f6;
   --color-background-action-info-hover: #2563eb;
-  --color-background-action-ghost-hover: #22252c;
+  --color-background-action-ghost-hover: #1a1b1d;
   --color-text-action-ghost: #d1d5db;
 
-  --color-text-default: #e8eaed;
-  --color-text-muted: #9aa0a6;
+  --color-text-default: #ececed;
+  --color-text-muted: #8b8d91;
   --color-text-info: #93c5fd;
   --color-text-success: #6ee7a8;
   --color-text-warning: #fcd34d;
   --color-text-danger: #fca5a5;
 
-  --color-syntax-comment: #aab4c3;
+  --color-syntax-comment: #7f858f;
   --color-syntax-keyword: #d8b4fe;
   --color-syntax-name: #7dd3fc;
   --color-syntax-string: #86efac;
   --color-syntax-number: #fcd34d;
-  --color-syntax-punctuation: #d1d5db;
+  --color-syntax-punctuation: #9ca3af;
 
-  --color-border-default: #2c3038;
+  --color-border-default: #1f2023;
   --color-border-focus: #22c55e;
   --color-border-danger: #7f1d1d;
-  --color-border-overlay: #4b525f;
-  --color-background-muted: color-mix(in oklab, var(--color-text-default) 10%, transparent);
+  --color-border-overlay: #363840;
+  --color-background-muted: color-mix(in oklab, var(--color-text-default) 8%, transparent);
 
   --hh-border: var(--color-border-default);
-  --hh-row-hover: #1c1f25;
+  --hh-row-hover: #111213;
 
-  --playbooks-paper: #101815;
-  --playbooks-surface: #16221d;
+  --playbooks-paper: #080e0b;
+  --playbooks-surface: #0d1610;
   --playbooks-ink: #e5f4e9;
   --playbooks-muted: #abc4b2;
   --playbooks-line: #9cd6b3;
   --playbooks-accent: #52d88f;
-  --playbooks-accent-soft: #173d2c;
+  --playbooks-accent-soft: #0f2a1e;
   --playbooks-shadow: #9cd6b3;
-  --playbooks-terminal: #071c15;
+  --playbooks-terminal: #040f0a;
   --playbooks-terminal-ink: #eafff0;
   --playbooks-terminal-muted: #93c5aa;
   --playbooks-terminal-line: #44c881;
-  --playbooks-overlay: rgb(0 0 0 / 62%);
+  --playbooks-overlay: rgb(0 0 0 / 72%);
 }
 
 /* Utility referenced by ds/card.tsx. */
