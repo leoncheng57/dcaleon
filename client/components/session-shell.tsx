@@ -39,6 +39,16 @@ export interface SessionShellProps {
 
   banners?: ReactNode;
 
+  /**
+   * Blocking requests the turn cannot continue without (agent questions).
+   * Rendered in their own scrollport beneath `banners`, not inside it: the
+   * banners window is capped at 25% and shared with passive notices, and a
+   * sticky action bar can never rise above its own containing block, so a
+   * question that started near or below that window's fold had its Submit
+   * button clipped with no visible way to reach it (#508).
+   */
+  prompts?: ReactNode;
+
   transcript: {
     virtualized?: boolean;
     items: DisplayItem[];
@@ -103,7 +113,7 @@ export interface SessionShellProps {
   overlays?: ReactNode;
 }
 
-export function SessionShell({ testIds, browserSessionID, header, banners, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
+export function SessionShell({ testIds, browserSessionID, header, banners, prompts, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
   const TranscriptView = transcript.virtualized ? VirtualTranscript : Transcript;
   const [toolsOpen, setToolsOpen] = useState(false);
   const [browserNavigation, setBrowserNavigation] = useState<{ id: number; url: string; sessionID: string }>();
@@ -140,9 +150,27 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
         )}
       </header>
 
-      <div className="max-h-[25%] shrink-0 overflow-y-auto">
-        {banners}
-      </div>
+      {prompts ? (
+        // Two scrollports, one budget. The question needs its own scrollport so
+        // its sticky action bar anchors to a window it is the first thing inside
+        // of — but it must not be *additive* to the banners cap, or three
+        // permission asks plus a question leave the transcript and inspector
+        // with no height at all. Both children shrink (min-h-0) inside the same
+        // 25% column the banners already had and scroll independently, so this
+        // reorganises the region without taking a pixel from the transcript.
+        <div className="flex max-h-[25%] shrink-0 flex-col">
+          <div className="min-h-0 flex-[0_1_auto] overflow-y-auto">
+            {banners}
+          </div>
+          <div className="min-h-0 flex-[0_1_auto] overflow-y-auto overscroll-contain" data-testid={`${testIds.root}-prompts`}>
+            {prompts}
+          </div>
+        </div>
+      ) : (
+        <div className="max-h-[25%] shrink-0 overflow-y-auto">
+          {banners}
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-h-0 min-w-0 flex-1">

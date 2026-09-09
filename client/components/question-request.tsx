@@ -54,7 +54,13 @@ export function QuestionRequest({
   };
 
   return (
-    <div className="max-h-[40dvh] shrink-0 overflow-y-auto overscroll-contain px-4 pt-3" data-testid="opencode-question-request">
+    // No scroll container of its own: SessionShell renders questions in a
+    // dedicated `prompts` scrollport, and the sticky button bar below anchors
+    // to *that* window's bottom edge. A nested overflow-y-auto here would
+    // become the nearest scrollport instead and, whenever the question fit
+    // inside its own cap but not the outer one, the buttons would stick to
+    // nothing and stay clipped (#508).
+    <div className="shrink-0 px-4 pt-3" data-testid="opencode-question-request">
       <Alert variant="warning">
         <div className="space-y-4">
           {request.questions.map((question, questionIndex) => (
@@ -104,9 +110,11 @@ export function QuestionRequest({
             </fieldset>
           ))}
           {error && <p className="text-sm" role="alert">{error}</p>}
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button className="min-h-11" variant="danger" disabled={submitting} onClick={() => void reject()} data-testid="opencode-question-reject">Reject</Button>
-            <Button className="min-h-11" disabled={submitting || !valid} onClick={() => void submit()} data-testid="opencode-question-submit">Submit answers</Button>
+          <div className="sticky bottom-0 -mx-4 -mb-4 rounded-b-[var(--border-radius-8)] bg-[var(--color-background-surface-warning-muted)] px-4 pb-4 pt-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button className="min-h-11" variant="danger" disabled={submitting} onClick={() => void reject()} data-testid="opencode-question-reject">Reject</Button>
+              <Button className="min-h-11" disabled={submitting || !valid} onClick={() => void submit()} data-testid="opencode-question-submit">Submit answers</Button>
+            </div>
           </div>
         </div>
       </Alert>
