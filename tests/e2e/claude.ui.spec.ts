@@ -453,6 +453,54 @@ test.describe("Claude Code runtime", () => {
     }
   });
 
+  // #452: a poll that fails after a prior success must not blank the indicator
+  // or replace the figures with a bare warning icon. The last good reading stays
+  // on screen, marked stale, so the user still knows roughly where usage stands.
+  test("keeps the last successful usage reading through a failed refresh", async ({ page }) => {
+    let calls = 0;
+    await page.route("**/api/claude/usage", (route) => {
+      calls += 1;
+      if (calls === 1) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            available: true,
+            session: { utilization: 42, resetsAt: null },
+            weekly: { utilization: 17, resetsAt: null },
+            weeklyByModel: {},
+            subscriptionType: "max",
+            rateLimitTier: null,
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ available: false, reason: "HTTP 429" }),
+      });
+    });
+    await page.clock.install();
+    await createSession(page);
+    // Fake timers also hold the page's own load/refresh debounces; let them run.
+    await page.clock.runFor(1_000);
+
+    const trigger = page.getByTestId("claude-usage-trigger");
+    await expect(trigger).toContainText("42%");
+
+    // Advance past the 60s poll so the second (failing) response lands.
+    await page.clock.runFor(61_000);
+    await expect.poll(() => calls).toBeGreaterThanOrEqual(2);
+
+    // The figure survives; the popover says why it may be out of date.
+    await expect(trigger).toContainText("42%");
+    await trigger.click();
+    const popover = page.getByTestId("claude-usage-popover");
+    await expect(popover).toContainText("Current session");
+    await expect(page.getByTestId("claude-usage-stale")).toContainText("HTTP 429");
+    await expect(page.getByTestId("claude-usage-freshness")).toContainText("Updated every 60 seconds");
+  });
+
   test("opens a transcript file reference in the Files drawer", async ({ page }) => {
     await createSession(page);
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");
