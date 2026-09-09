@@ -92,6 +92,20 @@ describe("Claude Seatbelt profile", () => {
     expect(existsSync(path.join(outside, "escape.txt"))).toBe(false);
   });
 
+  it.runIf(onMac)("allows pgrep to enumerate processes via sysmond", async () => {
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "claude-sb-pgrep-")));
+    temporary.push(root);
+    const workspace = path.join(root, "workspace");
+    const stateRoot = path.join(root, "state");
+    await run("/bin/mkdir", ["-p", workspace, stateRoot]);
+    const profile = claudeSeatbeltProfile({ workspace, stateRoot, mode: "read-only" });
+
+    // pgrep links libsysmon → com.apple.sysmond.  Before the sysmond mach-lookup
+    // grant this failed with "sysmond service not found".
+    const pgrep = await underProfile(profile, "/usr/bin/pgrep -l launchd");
+    expect(pgrep.ok).toBe(true);
+  });
+
   it("lets a session signal its own children but nothing else", () => {
     const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "claude-sb-")));
     temporary.push(root);

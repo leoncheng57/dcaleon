@@ -109,7 +109,11 @@ export function claudeSeatbeltProfile(input: {
     "(allow file-read-metadata)",
     "(allow ipc-posix-shm*)",
     "(allow user-preference-read)",
-    '(allow mach-lookup (global-name-regex #"^com\\.apple\\.(SecurityServer|securityd|securityd\\.xpc|trustd|trustd\\.agent|system\\.opendirectoryd\\..*|coreservices\\..*|CoreServices\\..*)"))',
+    // sysmond: pgrep/pkill link libsysmon.dylib which connects to the
+    // com.apple.sysmond mach service for process enumeration.  Without this,
+    // `pgrep` fails with "sysmond service not found".  ps/top are setuid and
+    // blocked by AMFI regardless; pgrep is the lightest surviving tool.
+    '(allow mach-lookup (global-name-regex #"^com\\.apple\\.(SecurityServer|securityd|securityd\\.xpc|trustd|trustd\\.agent|system\\.opendirectoryd\\..*|coreservices\\..*|CoreServices\\..*|sysmond)"))',
     // Whole-disk read: the allowlist this replaced had to grow a path every time
     // a session needed host state (Homebrew runtimes, Xcode bundles, git config),
     // and read confinement was never what this profile enforced.
