@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 497,
+  "sourceSha": "06434bc12acad23ef048630c0a519fc4dbade481",
+  "capturedAt": "2026-09-09T04:30:40.173Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/claude",
+      "fullPage": false,
+      "captures": {
+        "desktop": {
+          "filename": "01-claude-065edbf8--desktop.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 67873,
+          "sha256": "11ae0744cba92e15afe6d4300107cbd512806e755dddf13e3ec1c33b73f5d564"
+        },
+        "mobile": {
+          "filename": "01-claude-9754c109--mobile.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 62744,
+          "sha256": "9dd90d72a39e4633dccd77c98adffc6af07bb22bd01864a385782f302b3af3ad"
+        }
+      }
+    },
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project",
+      "fullPage": true,
+      "captures": {
+        "desktop": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-383588eb--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 86621,
+          "sha256": "d1f184f0e3d6b359f856e86861744e4ee50e4d9a11ccf8f224e94ff1702ae2d5"
+        },
+        "mobile": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-f1b9b001--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 47412,
+          "sha256": "5c49576eeabffcccc61b9b95aea58a7afca851ebe28d34bbf8d17f2094958af3"
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "reason": "Author override from the screenshots block (an empty block explicitly skips capture).",
+    "needsLocalReview": false
+  }
+}
