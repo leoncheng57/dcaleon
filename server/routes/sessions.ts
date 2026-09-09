@@ -509,6 +509,18 @@ export function sessionRoutes(
     }),
   );
 
+  const ownedSession = async (directory: string, sessionID: string) => {
+    let session;
+    try {
+      session = await getSession(config, directory, sessionID);
+    } catch (error) {
+      if (error instanceof OpencodeError && error.status >= 500) throw new HttpError(404, "session not found");
+      throw error;
+    }
+    if (session.directory !== directory) throw new HttpError(404, "session not found");
+    return session;
+  };
+
   router.patch(
     "/sessions/:id",
     sessionRoute(async (req, res) => {
@@ -523,23 +535,15 @@ export function sessionRoutes(
       if (!title || title.length > SESSION_TITLE_LIMIT) {
         throw new HttpError(400, `title must be a non-empty string of at most ${SESSION_TITLE_LIMIT} characters`);
       }
+      // Same cross-directory guard share/unshare use: `?directory=` selects
+      // the project, so without it a caller could retitle another project's
+      // session by id.
+      await ownedSession(directory, sessionID);
       await renameSession(config, directory, sessionID, title);
       const session = await getSession(config, directory, sessionID);
       res.json({ session });
     }),
   );
-
-  const ownedSession = async (directory: string, sessionID: string) => {
-    let session;
-    try {
-      session = await getSession(config, directory, sessionID);
-    } catch (error) {
-      if (error instanceof OpencodeError && error.status >= 500) throw new HttpError(404, "session not found");
-      throw error;
-    }
-    if (session.directory !== directory) throw new HttpError(404, "session not found");
-    return session;
-  };
 
   router.post(
     "/sessions/:id/share",
