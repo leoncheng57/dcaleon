@@ -1139,34 +1139,36 @@ several decisions below.
       launchd-minimal env lacks them. Measured the hard way: without `$USER`, even an
       un-sandboxed `claude` reports "Not logged in", because macOS resolves the login
       Keychain by user. Identity is not a credential; forwarding it is not brokering auth.
-    - **Seatbelt is the write authority, and nothing else.** Unlike the DSH profile it
-      keeps HOME real and must grant read of `~/Library/Keychains` plus the securityd
-      family, or subscription auth breaks — so the sandbox confines workspace *writes*
-      (read-only presets get none; Build adds only the allowlisted workspace) and
-      deliberately does not isolate the credential store. Verified on macOS in
-      `tests/claude-seatbelt.test.ts`, which the `host-contract-macos` CI job runs.
-    - **Reads are whole-disk on purpose** (`(allow file-read*)`). The per-path read
-      allowlist that preceded it had to grow an entry for every piece of host state a
-      session touched — Homebrew runtimes, Xcode bundles, `~/.gitconfig`, SSH
-      `known_hosts`, a sibling project, `~/.codex` transcripts — while never being the
-      boundary the profile actually enforced, and a missing entry surfaced as an opaque
-      `Operation not permitted` mid-turn. The accepted cost is real and not narrow: a
-      session of either mode can read every secret the user can (SSH private keys,
-      `~/.aws`, cookie stores), so the credential discipline above is the only remaining
-      read boundary. If read confinement is ever wanted back, it belongs in a profile
-      whose HOME is redirected (the DSH shape), not in an allowlist bolted onto a
-      real-HOME profile.
+    - **There is no OS-level boundary: a session runs at terminal parity.** The Seatbelt
+      wrapper was removed — `claude` is spawned directly, so a turn holds exactly the
+      authority the operator holds in a terminal. The generated settings file
+      (`claudeSettings`) is the *only* confinement: read-only denies the mutation tools
+      by name, and a gated Build routes every check to the approver. The removal was
+      deliberate — the profile had already been narrowed to write-confinement only (reads
+      were whole-disk), it could not confine a `Bash` call that writes outside the
+      workspace under `bypassPermissions`, and it cost a steady stream of opaque
+      `Operation not permitted` failures: setuid binaries (`ps`, `top`) could not exec at
+      all, `pgrep` could not reach `com.apple.sysmond`, and build tools tripped over
+      ungranted temp paths.
+    - **The accepted cost is broad and must not be understated.** An ungated Build turn
+      can write anywhere the user can, and a session of either mode can read every secret
+      the user owns (SSH private keys, `~/.aws`, cookie stores) — a session's prompt should
+      be treated as capable of both exfiltrating and overwriting host state. The credential
+      discipline above (never forward a credential var; identity only) and `CLAUDE_APPROVALS`
+      are the only boundaries left. If confinement is ever wanted back it belongs in a
+      profile whose HOME is redirected (the DSH shape), not in a write-only allowlist
+      bolted onto a real-HOME profile.
     - **The pin is enforced at runtime, DSH-style.** `CLAUDE_CLI_VERSION` is validated into
       `errors[]` and re-asserted against the `system/init` frame's `claude_code_version`;
       a mismatch fails the turn. The binary auto-updates, so this is not optional — the
       wire format is undocumented and a silent upgrade must fail closed, not mis-parse.
-34a. **Real Claude sessions isolate by git worktree, and Seatbelt's one outward grant is
-    the project's `.git`.** A Build session chooses *direct* (edits land in the project) or
+34a. **Real Claude sessions isolate by git worktree — now a workflow boundary, not an
+    enforced one.** A Build session chooses *direct* (edits land in the project) or
     *worktree* (`git worktree add` on `claude/<uuid>` under `CLAUDE_STATE_DIR/worktrees`,
     never inside the project — `server/claude/worktree.ts`). Worktrees keep metadata and
-    objects in the shared `.git`, so the worktree profile grants `<project>/.git` write; it
-    is inherent to git worktrees and is the only Seatbelt write that reaches outside the
-    session's own directory (reads need no counterpart — the profile grants the whole disk). Rules that cost a real test each:
+    objects in the shared `.git`, which the session must write to commit; with Seatbelt gone
+    that write needs no grant, and nothing stops a session from writing outside its worktree
+    either. Isolation is now a convention the session is trusted to honour. Rules that cost a real test each:
     - **Merge refuses a dirty project.** A merge must never be confused with the human's
       own in-progress edits; `mergeWorktree` checks `isDirty(project)` first and also
       refuses a branch with nothing to merge. Uncommitted worktree work is committed before

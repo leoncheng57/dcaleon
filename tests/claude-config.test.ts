@@ -33,10 +33,10 @@ function coreEnv(item: Awaited<ReturnType<typeof fixture>>): NodeJS.ProcessEnv {
   };
 }
 
-// Seatbelt is macOS-only, so a non-darwin CI run must declare itself a test to
-// configure at all — mirrors the DSH config tests. sandbox is then "test-unsafe".
+// The Claude runtime no longer wraps a session in Seatbelt, so it configures on
+// any platform and a non-darwin CI run needs no escape hatch to reach it.
 function baseEnv(item: Awaited<ReturnType<typeof fixture>>): NodeJS.ProcessEnv {
-  return { ...coreEnv(item), NODE_ENV: "test", CLAUDE_TEST_UNSAFE: "true" };
+  return { ...coreEnv(item), NODE_ENV: "test" };
 }
 
 describe("Claude runtime configuration", () => {
@@ -58,11 +58,11 @@ describe("Claude runtime configuration", () => {
     expect(config.workspaces[0]).toMatchObject({ id: "ws", label: "Workspace" });
   });
 
-  it.runIf(process.platform === "darwin")("defaults to the seatbelt sandbox on macOS", async () => {
+  it("configures on any platform now that no Seatbelt wrapper is required", async () => {
     const item = await fixture();
     const config = readClaudeConfig(coreEnv(item));
     expect(config.configured).toBe(true);
-    expect(config.sandbox).toBe("seatbelt");
+    expect(config.errors).toEqual([]);
   });
 
   it("fails closed when the pinned CLI version is absent", async () => {
@@ -107,37 +107,8 @@ describe("Claude runtime configuration", () => {
     expect(unknown.errors.join(" ")).toContain("mode=read-only|build");
   });
 
-  it("runs unconfined at terminal parity only when CLAUDE_SANDBOX asks for it", async () => {
-    const item = await fixture();
-    const host = readClaudeConfig({ ...coreEnv(item), CLAUDE_SANDBOX: "host" });
-    expect(host.configured).toBe(true);
-    expect(host.errors).toEqual([]);
-    expect(host.sandbox).toBe("host");
-    // An explicit "seatbelt" is the same as saying nothing at all.
-    expect(readClaudeConfig({ ...coreEnv(item), CLAUDE_SANDBOX: "seatbelt" }).sandbox).toBe(
-      readClaudeConfig(coreEnv(item)).sandbox,
-    );
-  });
 
-  it("fails closed on an unrecognised CLAUDE_SANDBOX rather than quietly confining", async () => {
-    const item = await fixture();
-    for (const value of ["none", "off", "Host", "seatbelt "]) {
-      const config = readClaudeConfig({ ...coreEnv(item), CLAUDE_SANDBOX: value });
-      expect(config.configured).toBe(false);
-      expect(config.errors.join(" ")).toContain("CLAUDE_SANDBOX must be");
-    }
-  });
 
-  it("refuses the unsafe path outside an explicit test process", async () => {
-    const item = await fixture();
-    for (const nodeEnv of ["production", "development"]) {
-      const config = readClaudeConfig({ ...coreEnv(item), CLAUDE_TEST_UNSAFE: "true", NODE_ENV: nodeEnv });
-      expect(config.configured).toBe(false);
-      expect(config.sandbox).toBe("seatbelt");
-      expect(config.errors.join(" ")).toContain("CLAUDE_TEST_UNSAFE is test-only");
-    }
-    expect(readClaudeConfig({ ...coreEnv(item), CLAUDE_TEST_UNSAFE: "true", NODE_ENV: "test" }).sandbox).toBe("test-unsafe");
-  });
 
   it("rejects a state directory that overlaps a workspace", async () => {
     const item = await fixture();

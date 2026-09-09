@@ -53,7 +53,7 @@ export function ClaudePage() {
               <Sparkles aria-hidden="true" size={18} />
               <Badge variant="neutral">Local binary runtime</Badge>
               {selectedPreset && <Badge variant="neutral">{selectedPreset.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>}
-              {config && <Badge variant="neutral">CLI {config.cliVersion} · {config.sandbox}</Badge>}
+              {config && <Badge variant="neutral">CLI {config.cliVersion}</Badge>}
             </div>
             <h1 className="text-3xl font-semibold tracking-tight">Claude Code lab</h1>
             <p className="mt-2 max-w-2xl text-sm text-[var(--color-text-muted)]">

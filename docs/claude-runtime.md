@@ -38,25 +38,20 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
   `__CF_USER_TEXT_ENCODING`, synthesized when absent), because macOS resolves the login
   Keychain by user — without `$USER`, even an un-sandboxed `claude` reports "Not logged
   in". Identity is not a credential.
-- **Filesystem:** macOS Seatbelt is the write authority, and *only* the write authority.
-  Read-only presets get no workspace write; Build adds only the allowlisted workspace.
-  Because `claude` reads its credential from the Keychain, the profile keeps HOME real and
-  grants Keychain read — so Seatbelt confines workspace writes but does not isolate the
-  credential store. The write-confinement is asserted on macOS in
-  `tests/claude-seatbelt.test.ts`.
-  **The read side is the whole disk** (`(allow file-read*)`). The per-path allowlist it
-  replaced had to grow an entry every time a session needed host state (Homebrew runtimes,
-  versioned Xcode bundles, Git config, SSH `known_hosts`, a sibling project, `~/.codex`
-  transcripts), and it was never the boundary this profile enforced. Deliberate cost: a
-  session of *either* mode can read every secret the user can — SSH private keys, `~/.aws`,
-  browser cookie stores — so the credential discipline above is now the only read boundary,
-  and a session's prompt should be treated as capable of exfiltrating host secrets.
-  `SSH_AUTH_SOCK` is forwarded as host Git authority. Reads do not widen the write grant;
-  `tests/claude-seatbelt.test.ts` probes a `$HOME` path for read and denies the write.
+- **Filesystem: there is no OS-level boundary.** The `claude` binary is spawned directly,
+  with no Seatbelt wrapper, so a session holds exactly the authority `claude` holds in a
+  terminal. The generated settings file is the only confinement: a read-only preset denies
+  `Write`/`Edit`/`MultiEdit`/`NotebookEdit` by name at the tool layer, and nothing behind
+  that deny stops a `Bash` call from writing wherever the operator can. A session of either
+  mode can also read every secret the user owns — SSH private keys, `~/.aws`, browser cookie
+  stores — so a session's prompt should be treated as capable of both exfiltrating and
+  overwriting host state. `SSH_AUTH_SOCK` is forwarded as host Git authority.
+  The credential discipline above and `CLAUDE_APPROVALS` are the boundaries that remain.
 - **Build writes:** a Build preset uses `permissionMode: "bypassPermissions"`. Headless
-  `claude` denies a write that no rule pre-approves, so the permission prompt cannot be the
-  gate here — Seatbelt is. Verified against the real binary: a read-only session is denied
-  a workspace write; a Build session writes, and only inside the workspace.
+  `claude` denies a write that no rule pre-approves, so an ungated Build must name the
+  mutation tools in its settings — and with no sandbox behind that, an ungated Build turn is
+  as privileged as the operator. Set `CLAUDE_APPROVALS=true` to route each check to a human
+  instead; that gate, not the filesystem, is what makes a Build turn reviewable.
 - **Version:** `CLAUDE_CLI_VERSION` is pinned and re-asserted against the `system/init`
   frame; a mismatch fails the turn. The binary auto-updates and the wire format is
   undocumented, so drift must fail closed rather than mis-parse.
@@ -81,9 +76,10 @@ Beyond the read-only experiment, the lane runs real writable coding sessions:
 - **Per-session isolation, chosen when a Build session starts.**
   - *Isolated worktree*: `git worktree add` on a `claude/<uuid>` branch off the project's HEAD,
     placed under `CLAUDE_STATE_DIR/worktrees` — never inside the project. The session's cwd is
-    the worktree. Seatbelt grants the worktree plus the project's `.git` (worktrees keep their
-    metadata and objects in the shared `.git`; commits from inside the worktree write there).
-    The project's own working tree is untouched until you **Merge**.
+    the worktree (worktrees keep their metadata and objects in the shared `.git`; commits from
+    inside the worktree write there, which needs no grant now that no sandbox is applied).
+    The project's own working tree is untouched until you **Merge** — a convention the session
+    is trusted to honour, not a boundary anything enforces.
   - *Direct*: edits land in the project's working tree immediately; you review with git.
 - **Changes drawer.** `GET /claude/sessions/:id/changes` reads git each time (never cached):
   direct sessions diff the working tree against HEAD; worktree sessions diff against the

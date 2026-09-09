@@ -119,7 +119,6 @@ const claudeConfig: ClaudeConfigResponse = {
   enabled: true,
   configured: true,
   cliVersion: "2.1.257",
-  sandbox: "seatbelt",
   presets: [{ id: CLAUDE_PRESET_ID, label: "Preview preset", model: "sim-preview-v1", effort: "high", permissionMode: "default", mode: "read-only" }],
   workspaces: [{ id: CLAUDE_WORKSPACE_ID, label: "Preview workspace" }],
   models: ["sim-preview-v1"],

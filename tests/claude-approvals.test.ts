@@ -130,7 +130,7 @@ async function spawned(input: { approvals?: { url: string; token: string } }) {
   const config = {
     enabled: true, configured: true, binaryPath: bin, cliVersion: "2.1.263",
     sessionRoot, ledgerFile: path.join(root, "ledger.json"),
-    sandbox: "test-unsafe", approvals: Boolean(input.approvals), presets: [build], workspaces: [workspace], errors: [],
+    approvals: Boolean(input.approvals), presets: [build], workspaces: [workspace], errors: [],
   } as unknown as ClaudeConfig;
   const supervisor = new ClaudeSupervisor(config);
   let argv: string[] = [];

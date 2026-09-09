@@ -3,7 +3,7 @@ import { registerResourceProcess } from "../resource-processes.js";
 import { EventEmitter } from "node:events";
 import type { Readable } from "node:stream";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, userInfo } from "node:os";
+import { userInfo } from "node:os";
 import path from "node:path";
 
 import type { ClaudeConfig, ClaudePreset, ClaudeWorkspace } from "./config.js";
@@ -32,11 +32,9 @@ export interface ClaudeFrame {
 const SAFE_ENV = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "__CF_USER_TEXT_ENCODING", "SSH_AUTH_SOCK"] as const;
 
 /**
- * `temporaryDirectory` overrides the inherited `TMPDIR`. The host value points
- * into `/var/folders/...`, which the Seatbelt profile does not grant, so
- * anything reaching for `os.tmpdir()` (`mkdtemp`, most test harnesses, many
- * build tools) fails with EPERM. Pointing it inside the state root — already
- * writable — makes the ordinary temp-file path work.
+ * `temporaryDirectory` overrides the inherited `TMPDIR`, keeping a turn's temp
+ * files inside the state root so they are removed with the session rather than
+ * accumulating in the host's `/var/folders/...`.
  */
 export function claudeSupervisorEnvironment(source: NodeJS.ProcessEnv = process.env, temporaryDirectory?: string): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
@@ -56,87 +54,22 @@ export function claudeSupervisorEnvironment(source: NodeJS.ProcessEnv = process.
   return environment;
 }
 
-function seatbeltLiteral(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-}
-
 /**
- * Seatbelt profile for the `claude` binary. Verified empirically on macOS: a
- * deny-default profile that keeps subscription auth working must, unlike the
- * DSH profile, grant read of the login Keychain and the securityd family —
- * `claude` reads its OAuth credential from the Keychain, not a file. HOME is
- * NOT redirected for the same reason.
- *
- * Seatbelt is the write-confinement authority and ONLY that: reads are granted
- * whole-disk (`(allow file-read*)`), so a session can read anything the user
- * can — host tool caches, sibling projects, `~/.codex` transcripts — without a
- * profile edit per path. The workspace is writable only in build mode. This
- * deliberately exposes every home-directory secret the user owns (SSH private
- * keys, `~/.aws`, browser cookie stores) to a session of either mode; the
- * credential boundary the BFF honours is code discipline — it never reads the
- * credential itself — and that discipline is now the only read boundary.
- */
-export function claudeSeatbeltProfile(input: {
-  workspace: string;
-  stateRoot: string;
-  mode: ClaudePreset["mode"];
-  home?: string;
-  /**
-   * Worktree isolation: the worktree is `workspace`, but git keeps the shared
-   * object store and worktree metadata in the PROJECT's `.git`, so a Build
-   * session must write its `.git`. Inherent to git worktrees; it is the one
-   * write that reaches outside the session dir. Reads need no counterpart —
-   * the profile grants read of the whole disk.
-   */
-  extraWrites?: string[];
-}): string {
-  const home = input.home ?? homedir();
-  const writes = [
-    input.stateRoot, path.join(home, ".claude"), path.join(home, "Library/Keychains"), "/private/tmp", "/tmp",
-    ...(input.mode === "build" ? [input.workspace, ...(input.extraWrites ?? [])] : []),
-  ].map((item) => `(subpath "${seatbeltLiteral(item)}")`).join(" ");
-  return [
-    "(version 1)",
-    "(deny default)",
-    '(import "system.sb")',
-    "(allow process*)",
-    // Scoped to descendants: a session must be able to manage its own child
-    // processes (a test runner's worker pool terminates workers, and `process*`
-    // does not cover `signal`), but must not be able to signal the BFF that
-    // supervises it or anything else on the host.
-    "(allow signal (target children))",
-    "(allow network*)",
-    "(allow file-read-metadata)",
-    "(allow ipc-posix-shm*)",
-    "(allow user-preference-read)",
-    // sysmond: pgrep/pkill link libsysmon.dylib which connects to the
-    // com.apple.sysmond mach service for process enumeration.  Without this,
-    // `pgrep` fails with "sysmond service not found".  ps/top are setuid and
-    // blocked by AMFI regardless; pgrep is the lightest surviving tool.
-    '(allow mach-lookup (global-name-regex #"^com\\.apple\\.(SecurityServer|securityd|securityd\\.xpc|trustd|trustd\\.agent|system\\.opendirectoryd\\..*|coreservices\\..*|CoreServices\\..*|sysmond)"))',
-    // Whole-disk read: the allowlist this replaced had to grow a path every time
-    // a session needed host state (Homebrew runtimes, Xcode bundles, git config),
-    // and read confinement was never what this profile enforced.
-    "(allow file-read*)",
-    `(allow file-write* ${writes})`,
-  ].join("\n");
-}
-
-/**
- * The generated Claude settings file. Read-only mode denies the file-mutation
- * tools at the permission layer too (Seatbelt is the hard backstop). `ask` is
- * never emitted: a rule that would ask is answered by the permission prompt
- * tool when `approvals` is set, and denied outright when it is not, because a
- * lane with no answerer must not fall back to allowing.
+ * The generated Claude settings file. This is now the ONLY confinement a turn
+ * has: with no Seatbelt wrapper, a session holds the authority `claude` holds in
+ * a terminal, so read-only mode's tool-layer denies have no OS-level backstop
+ * behind them. `ask` is never emitted: a rule that would ask is answered by the
+ * permission prompt tool when `approvals` is set, and denied outright when it is
+ * not, because a lane with no answerer must not fall back to allowing.
  */
 export function claudeSettings(preset: ClaudePreset, approvals = false): Record<string, unknown> {
   const mutation = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
   const readOnly = preset.mode === "read-only";
   // Headless `claude` denies a mutation tool that no rule explicitly allows, even
-  // under `acceptEdits` — so an ungated Build must allow them by name (Seatbelt still
-  // confines the writes to the workspace). A gated Build must NOT: naming them here
-  // pre-approves them, and the prompt tool would never be consulted. Read-only denies
-  // them at the tool layer either way, with Seatbelt as the hard backstop.
+  // under `acceptEdits` — so an ungated Build must allow them by name. A gated Build
+  // must NOT: naming them here pre-approves them, and the prompt tool would never be
+  // consulted. Read-only denies them at the tool layer either way — and that deny is
+  // the whole boundary now, so it must not be relaxed.
   return {
     permissions: {
       defaultMode: preset.permissionMode,
@@ -157,8 +90,6 @@ interface RunInput {
   preset: ClaudePreset;
   /** The session's working directory: the project, or its isolated worktree. */
   workspace: Pick<ClaudeWorkspace, "directory">;
-  /** Worktree isolation grant: the project `.git` write. */
-  sandboxExtras?: { writes: string[] };
   /** Per-turn model override (validated against configured presets by the route). */
   model?: string;
   /** Explicit per-turn mode: "plan" for read-only planning, "build" for writing. */
@@ -169,7 +100,7 @@ interface RunInput {
   /**
    * Loopback approval gate. When set, a Build turn runs under `default` and
    * routes every permission check to the in-session approver; when absent the
-   * turn stays pre-approved and Seatbelt is the only confinement.
+   * turn runs pre-approved with no confinement at all.
    */
   approvals?: { url: string; token: string };
 }
@@ -205,7 +136,6 @@ export class ClaudeSupervisor extends EventEmitter {
     const { preset, workspace, session, text } = input;
     const gated = isGated(input);
     const permissionMode = input.turnMode === "plan" ? "plan" : gated ? "default" : "bypassPermissions";
-    const effectiveMode: ClaudePreset["mode"] = input.turnMode === "plan" ? "read-only" : "build";
     const cli = [
       "-p", text,
       "--output-format", "stream-json",
@@ -219,18 +149,10 @@ export class ClaudeSupervisor extends EventEmitter {
       ...(preset.effort ? ["--effort", preset.effort] : []),
       ...(preset.maxBudgetUsd ? ["--max-budget-usd", String(preset.maxBudgetUsd)] : []),
     ];
-    if (this.config.sandbox === "seatbelt") {
-      const profile = claudeSeatbeltProfile({
-        workspace: workspace.directory,
-        stateRoot: this.config.sessionRoot,
-        mode: effectiveMode,
-        extraWrites: input.sandboxExtras?.writes,
-      });
-      return { command: "/usr/bin/sandbox-exec", args: ["-p", profile, this.config.binaryPath, ...cli] };
-    }
-    // "host" (terminal parity) and "test-unsafe" run the binary directly: no Seatbelt
-    // wrapper, so the turn's authority is the user's own and the permission layer in
-    // the generated settings file is the only confinement left.
+    // The binary runs directly, at terminal parity: a turn's authority is the
+    // user's own and the permission layer in the generated settings file is the
+    // only confinement. Nothing stops a Bash call from writing outside the
+    // workspace, so an ungated Build turn is as privileged as the operator.
     return { command: this.config.binaryPath, args: cli };
   }
 

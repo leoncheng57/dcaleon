@@ -21,7 +21,7 @@ function config(root: string, projectsRoot: string | null, workspaces: ClaudeCon
     enabled: true, configured: true, binaryPath: "/bin/claude", cliVersion: "1.0.0",
     sessionRoot: path.join(root, "state", "sessions"), ledgerFile: path.join(root, "state", "ledger.json"),
     sessionsFile: path.join(root, "state", "sessions.json"), worktreeRoot: path.join(root, "state", "worktrees"),
-    projectsRoot, sandbox: "test-unsafe", presets: [], workspaces, errors: [],
+    projectsRoot, presets: [], workspaces, errors: [],
   };
 }
 
