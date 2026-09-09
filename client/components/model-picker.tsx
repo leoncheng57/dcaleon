@@ -182,7 +182,7 @@ export function ModelPicker({
       aria-expanded={open}
       value={value ? modelKey(value) : ""}
     >
-      <span className="min-w-0 flex-1 truncate">{details ? details.name : value ? `${value.providerID}/${value.modelID} [unknown]` : catalogue ? "Select a model" : "Loading models..."}{value?.variant ? ` · ${value.variant}` : ""}</span>
+      <span className="min-w-0 flex-1 truncate">{details ? details.name : value ? `${value.providerID}/${value.modelID} [unknown]` : catalogue ? "Select a model" : disabled ? "Select a project first" : "Loading models..."}{value?.variant ? ` · ${value.variant}` : ""}</span>
       <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--color-text-muted)]" />
     </button>
     {open && createPortal(
