@@ -147,7 +147,7 @@ app.use("/api", appConfigRoutes(publicAppUrl, dsh.enabled, dsh.configured, claud
 app.use("/api", projectRoutes());
 app.use("/api", observabilityRoutes(opencode, PORT));
 app.use("/api", modelPinRoutes());
-app.use("/api", recentRoutes(opencode));
+app.use("/api", recentRoutes(opencode, claudeStore));
 app.use("/api", memoryRoutes());
 app.use("/api", dshRoutes(dsh, undefined, undefined, undefined, bus));
 app.use("/api", claudeRoutes(claude, claudeSupervisor, claudeStore, bus, claudeApprovals ? { store: claudeApprovals, port: PORT } : undefined, autoPermissions));

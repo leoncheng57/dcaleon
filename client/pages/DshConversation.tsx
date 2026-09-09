@@ -81,6 +81,10 @@ export function DshConversationPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (session?.title) document.title = `${session.title} | DCA`;
+  }, [session?.title]);
+
   const items = useMemo(() => collapseActionGroups(events), [events]);
   const running = session?.running === true;
 

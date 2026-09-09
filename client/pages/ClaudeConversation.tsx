@@ -310,6 +310,9 @@ export function ClaudeConversationPage() {
   }, [id]);
   useEffect(() => { if (session) setSending(false); }, [session]);
   useEffect(() => {
+    if (session?.title) document.title = `${session.title} | DCA`;
+  }, [session?.title]);
+  useEffect(() => {
     if (!session?.running) return;
     const timer = setInterval(() => setNow(Date.now()), 5_000);
     return () => clearInterval(timer);
