@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "prNumber": 497,
-  "sourceSha": "06434bc12acad23ef048630c0a519fc4dbade481",
-  "capturedAt": "2026-09-09T04:30:40.173Z",
+  "sourceSha": "62b6e3b35290ca2db8e6c2527794689b4a0b7fec",
+  "capturedAt": "2026-09-09T04:38:14.324Z",
   "screenshots": [
     {
       "requestedRoute": "/claude",
@@ -14,8 +14,8 @@
             "width": 1280,
             "height": 800
           },
-          "bytes": 67873,
-          "sha256": "11ae0744cba92e15afe6d4300107cbd512806e755dddf13e3ec1c33b73f5d564"
+          "bytes": 67897,
+          "sha256": "c7707097aa7a0179b927656c66c16766a7f1b4eee36547a200011ba575a6c60b"
         },
         "mobile": {
           "filename": "01-claude-9754c109--mobile.png",
@@ -38,8 +38,8 @@
             "width": 1280,
             "height": 800
           },
-          "bytes": 86621,
-          "sha256": "d1f184f0e3d6b359f856e86861744e4ee50e4d9a11ccf8f224e94ff1702ae2d5"
+          "bytes": 86670,
+          "sha256": "bc1b645bb9973033fd26cf5fffa547d38a126462c3a820137acc9d0f3b65e2b7"
         },
         "mobile": {
           "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-f1b9b001--mobile--full.png",
@@ -47,8 +47,8 @@
             "width": 390,
             "height": 740
           },
-          "bytes": 47412,
-          "sha256": "5c49576eeabffcccc61b9b95aea58a7afca851ebe28d34bbf8d17f2094958af3"
+          "bytes": 47574,
+          "sha256": "6e71dafb71811baef7f17be2864524c6a38023812911418e1ce34418568b59c1"
         }
       }
     }
