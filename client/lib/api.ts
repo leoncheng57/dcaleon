@@ -840,6 +840,12 @@ export const api = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   }).then((r) => json<{ accepted: boolean }>(r)),
+  renameDsh: (id: string, title: string) =>
+    fetch(`/api/dsh/sessions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }).then((r) => json<{ session: DshSessionSummary }>(r)),
   cancelDsh: (id: string) => fetch(`/api/dsh/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
   dshEventsUrl: (id: string) => `/api/dsh/events?${new URLSearchParams({ sessionId: id })}`,
@@ -872,6 +878,12 @@ export const api = {
   }).then((r) => json<{ accepted: boolean }>(r)),
   /** Reminders visible to this session, scoped server-side by the session's own cwd. */
   claudeReminders: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/reminders`).then((r) => json<{ reminders: ReminderSummary[] }>(r)),
+  renameClaude: (id: string, title: string) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }).then((r) => json<{ session: ClaudeSessionSummary }>(r)),
   cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
   claudeEventsUrl: (id: string) => `/api/claude/events?${new URLSearchParams({ sessionId: id })}`,
@@ -1095,6 +1107,13 @@ export const api = {
     fetch(scoped(`/sessions/${encodeURIComponent(id)}`, directory), { method: "DELETE" }).then((r) =>
       json<void>(r),
     ),
+
+  renameSession: (directory: string, id: string, title: string) =>
+    fetch(scoped(`/sessions/${encodeURIComponent(id)}`, directory), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }).then((r) => json<{ session: SessionSummary }>(r)),
 
   settings: () => fetch("/api/settings").then((r) => json<{ settings: AppSettings }>(r)),
   saveSettings: (settings: AppSettings) =>

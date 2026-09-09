@@ -547,6 +547,10 @@ export function ConversationPage() {
           </Link>
         ),
         title: session?.title ?? "Session",
+        onRenameTitle: directory ? async (newTitle) => {
+          const result = await api.renameSession(directory, id, newTitle);
+          setSession(result.session);
+        } : undefined,
         badges: (
           <>
           {/* A validated Managed Child was authorized by a human; an ordinary

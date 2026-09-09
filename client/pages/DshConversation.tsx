@@ -134,6 +134,10 @@ export function DshConversationPage() {
           </Link>
         ),
         title: session?.title ?? "Conversation",
+        onRenameTitle: async (newTitle) => {
+          const result = await api.renameDsh(id, newTitle);
+          setSession(result.session);
+        },
         badges: (
           <>
             <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>

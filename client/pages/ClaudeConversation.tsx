@@ -549,6 +549,10 @@ export function ClaudeConversationPage() {
       header={{
         backLink: <Link to="/claude" className="hidden shrink-0 text-sm underline sm:inline" data-testid="claude-back">← Claude lab</Link>,
         title: session?.title ?? "Conversation",
+        onRenameTitle: async (newTitle) => {
+          await api.renameClaude(id, newTitle);
+          refresh();
+        },
         badges: (
           <>
             <Badge variant="neutral">{session?.mode === "build" ? "Build · may edit files" : "Read only"}</Badge>

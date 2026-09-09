@@ -438,6 +438,13 @@ export class ClaudeSessionStore extends EventEmitter {
     return count;
   }
 
+  rename(session: ClaudeSession, title: string): void {
+    session.title = title;
+    session.updatedAt = new Date().toISOString();
+    this.persistSessions();
+    this.emit("update", session.id);
+  }
+
   setPrUrl(session: ClaudeSession, url: string): void {
     session.prUrl = url;
     session.updatedAt = new Date().toISOString();

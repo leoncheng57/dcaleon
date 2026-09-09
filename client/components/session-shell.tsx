@@ -1,7 +1,8 @@
 import { useCallback, useState, type ClipboardEvent, type FocusEvent, type ReactNode, type RefObject, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ArrowDown, Globe } from "lucide-react";
+import { ArrowDown, Globe, PenLine } from "lucide-react";
 
 import { Button } from "../ds/button.js";
+import { RenameSessionDialog } from "./rename-session-dialog.js";
 import { SessionActionBar } from "./session-action-bar.js";
 import { ResourceIndicator } from "./resource-indicator.js";
 import { RightToolsPanel } from "./right-tools-panel.js";
@@ -32,6 +33,7 @@ export interface SessionShellProps {
   header: {
     backLink: ReactNode;
     title: string;
+    onRenameTitle?: (newTitle: string) => Promise<void>;
     badges?: ReactNode;
     stats?: ReactNode;
     actions: ReactNode;
@@ -106,6 +108,7 @@ export interface SessionShellProps {
 export function SessionShell({ testIds, browserSessionID, header, banners, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
   const TranscriptView = transcript.virtualized ? VirtualTranscript : Transcript;
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
   const [browserNavigation, setBrowserNavigation] = useState<{ id: number; url: string; sessionID: string }>();
   const openTranscriptBrowser = useCallback((url: string) => {
     setBrowserNavigation((previous) => ({ id: (previous?.id ?? 0) + 1, url, sessionID: browserSessionID }));
@@ -119,6 +122,17 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
           <h1 className="min-w-0 flex-1 truncate text-sm font-semibold sm:text-base" data-testid={testIds.title}>
             {header.title}
           </h1>
+          {header.onRenameTitle && (
+            <button
+              type="button"
+              onClick={() => setRenameOpen(true)}
+              aria-label="Rename session"
+              data-testid="session-rename-trigger"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-background-surface-neutral-muted)] hover:text-[var(--color-text-default)]"
+            >
+              <PenLine size={14} aria-hidden="true" />
+            </button>
+          )}
           {header.badges}
         </div>
         {(header.stats || header.actions || browserSessionID) && (
@@ -252,6 +266,13 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
       </footer>
 
       {overlays}
+      {renameOpen && header.onRenameTitle && (
+        <RenameSessionDialog
+          currentTitle={header.title}
+          onRename={header.onRenameTitle}
+          onClose={() => setRenameOpen(false)}
+        />
+      )}
     </main>
   );
 }

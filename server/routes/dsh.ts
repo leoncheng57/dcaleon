@@ -231,6 +231,22 @@ export function dshRoutes(
     }
   });
 
+  router.patch("/dsh/sessions/:id", (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "DSH session not found");
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.title !== "string") {
+      return error(res, 400, "body must contain { title: string }");
+    }
+    const title = body.title.trim();
+    if (!title || title.length > 160) {
+      return error(res, 400, "title must be a non-empty string of at most 160 characters");
+    }
+    store.rename(session, title);
+    res.json({ session: store.get(session.id) });
+  });
+
   router.post("/dsh/sessions/:id/cancel", async (req, res) => {
     if (!requireEnabled(res)) return;
     const session = store.get(req.params.id);
