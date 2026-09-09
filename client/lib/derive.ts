@@ -29,7 +29,11 @@ function fingerprint(event: TranscriptEvent): string {
     case "user":
       return `${event.mode ?? ""}|${event.text}|${event.reminders.map((reminder) => `${reminder.name}:${reminder.body}`).join("|")}|${event.workflows.map((workflow) => `${workflow.name}:${workflow.body}`).join("|")}`;
     case "agent":
-      return `${event.mode ?? ""}|${event.text}`;
+      // Metrics arrive AFTER the prose: the row is created on the first text
+      // frame with `metricsStatus: "pending"` and stamped final by the result
+      // frame with the same text. Leaving them out here kept the client's copy
+      // of the row frozen at "cost pending" until the page was remounted.
+      return `${event.mode ?? ""}|${event.model ?? ""}|${event.metricsStatus ?? ""}|${event.messageCost ?? ""}|${event.cumulativeCost ?? ""}|${event.messageDurationMs ?? ""}|${event.text}`;
     case "thought":
       return event.text;
     case "patch":

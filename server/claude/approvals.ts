@@ -138,7 +138,7 @@ export class ClaudeApprovalStore extends EventEmitter {
     }
     return this.finish(id, reply === "reject"
       ? { behavior: "deny", message: message || "denied by dcaleon: the user rejected this tool call" }
-      : { behavior: "allow", updatedInput: waiter.request.input });
+      : { behavior: "allow", updatedInput: waiter.request.input }, reply);
   }
 
   /** Refuse everything still pending for a session whose turn is over. */
@@ -153,14 +153,18 @@ export class ClaudeApprovalStore extends EventEmitter {
     this.standing.delete(sessionId);
   }
 
-  private finish(id: string, decision: ClaudeApprovalDecision): boolean {
+  /**
+   * `reply` is present only when a human answered; a timeout or a cancelled
+   * turn settles without one, and listeners word the transcript row from that.
+   */
+  private finish(id: string, decision: ClaudeApprovalDecision, reply?: ClaudeApprovalReply): boolean {
     const waiter = this.waiting.get(id);
     if (!waiter) return false;
     clearTimeout(waiter.timer);
     this.waiting.delete(id);
     this.byToolUse.delete(waiter.request.toolUseId);
     waiter.settle(decision);
-    this.emit("settled", { request: waiter.request, decision });
+    this.emit("settled", { request: waiter.request, decision, ...(reply ? { reply } : {}) });
     return true;
   }
 }

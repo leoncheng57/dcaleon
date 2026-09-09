@@ -49,6 +49,8 @@ import { ClaudeSessionStore } from "./claude/store.js";
 import { ClaudeSupervisor } from "./claude/supervisor.js";
 import { claudeRoutes } from "./routes/claude.js";
 import { ClaudeApprovalStore } from "./claude/approvals.js";
+import { bindClaudeApprovalEvents } from "./claude/approvalBridge.js";
+import { listPermissions } from "./opencode/permissions.js";
 import { getSessionMetadata, latestAssistantExcerpt } from "./opencode/sessions.js";
 import { isClaudeSessionId } from "./publicAppUrl.js";
 import { parseLiveBrowserConfig } from "./browser/policy.js";
@@ -96,6 +98,10 @@ if (claudeApprovals) {
     const session = claudeStore.get(sessionId);
     return Boolean(session && autoPermissions.isEnabled(session.projectDirectory));
   };
+  // Asks and answers become the bus events the notification lane and the
+  // session SSE already react to. Without this the gate was silent: a gated
+  // call sat for the full timeout with no ping and no row (decision 34c).
+  bindClaudeApprovalEvents(bus, claudeApprovals, claudeStore);
 }
 const notificationService = new NotificationService(
   opencode,
@@ -115,6 +121,13 @@ const notificationService = new NotificationService(
     const session = claudeStore.get(sessionID);
     const last = session?.events.filter((event) => event.kind === "agent").at(-1);
     return last && last.kind === "agent" ? last.text : undefined;
+  },
+  // The parked escalation asks "is it still waiting?" against the store that
+  // actually holds the ask: OpenCode's `/permission` for its sessions, the
+  // BFF's approval store for Claude's.
+  async (directory, pending) => {
+    if (isClaudeSessionId(pending.sessionID)) return claudeApprovals?.list(pending.sessionID).some((item) => item.id === pending.id) ?? false;
+    return (await listPermissions(opencode, directory)).some((item) => item.id === pending.id);
   },
 );
 notificationService.start();
@@ -137,7 +150,7 @@ app.use("/api", modelPinRoutes());
 app.use("/api", recentRoutes(opencode));
 app.use("/api", memoryRoutes());
 app.use("/api", dshRoutes(dsh, undefined, undefined, undefined, bus));
-app.use("/api", claudeRoutes(claude, claudeSupervisor, claudeStore, bus, claudeApprovals ? { store: claudeApprovals, port: PORT } : undefined));
+app.use("/api", claudeRoutes(claude, claudeSupervisor, claudeStore, bus, claudeApprovals ? { store: claudeApprovals, port: PORT } : undefined, autoPermissions));
 const opencodePort = Number(new URL(opencode.baseUrl).port || 80);
 app.use("/api", previewRoutes(parseAllowedPorts(process.env.PREVIEW_ALLOWED_PORTS, [PORT, opencodePort])));
 

@@ -18,16 +18,31 @@ const POLL_MS = 3_000;
  */
 type AutoPermissionsVariant = "block" | "compact" | "pill";
 
+/**
+ * Where the switch reads and writes. The default is the directory-scoped
+ * `/api/auto-approve?directory=` pair. A Claude conversation cannot use that —
+ * the browser never learns a Claude session's path — so it supplies the
+ * session-scoped routes instead; the switch it renders is the same directory
+ * toggle by another handle, never a second policy.
+ */
+export interface AutoPermissionsSource {
+  read: () => Promise<AutoPermissionStatus>;
+  write: (enabled: boolean) => Promise<AutoPermissionStatus>;
+}
+
 export function AutoPermissionsControl({
   directory,
   testId,
   variant = "block",
   trailing,
+  source,
 }: {
+  /** Scope key: the project directory, or any stable id when `source` is supplied. */
   directory: string;
   testId: string;
   variant?: AutoPermissionsVariant;
   trailing?: ReactNode;
+  source?: AutoPermissionsSource;
 }) {
   const [status, setStatus] = useState<AutoPermissionStatus | null>(null);
   const [saving, setSaving] = useState(false);
@@ -40,7 +55,8 @@ export function AutoPermissionsControl({
     setRequestError(null);
     if (!directory) return;
     let cancelled = false;
-    const refresh = () => void api.autoPermissions(directory).then((next) => {
+    const read = source?.read ?? (() => api.autoPermissions(directory));
+    const refresh = () => void read().then((next) => {
       if (!cancelled) {
         setStatus(next);
         setRequestError(null);
@@ -54,14 +70,14 @@ export function AutoPermissionsControl({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [directory]);
+  }, [directory, source]);
 
   const toggle = async () => {
     if (!directory || !status || saving) return;
     setSaving(true);
     setRequestError(null);
     try {
-      const next = await api.setAutoPermissions(directory, !status.enabled);
+      const next = await (source ? source.write(!status.enabled) : api.setAutoPermissions(directory, !status.enabled));
       setStatus(next);
       if (!next.enabled) setShowDetails(false);
     } catch (error) {

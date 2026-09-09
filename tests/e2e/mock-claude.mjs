@@ -38,35 +38,35 @@ emit({
 });
 
 if (prompt.toLowerCase().includes("simulate an interrupted turn")) {
-  emit({ type: "assistant", message: { content: [{ type: "text", text: "I started the requested work, but the process is about to be interrupted." }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: "I started the requested work, but the process is about to be interrupted." }] } });
   process.kill(process.pid, "SIGTERM");
 } else if (prompt.includes("performance gallery")) {
-  emit({ type: "assistant", message: { content: [{ type: "text", text: "Historical reference: see `README.md#L1` for the original request." }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: "Historical reference: see `README.md#L1` for the original request." }] } });
   for (let index = 0; index < 230; index++) {
-    emit({ type: "assistant", message: { content: [{ type: "text", text: `Step ${index + 1}: **Reviewing the implementation**\n\nThe bounded transcript keeps this conversation responsive.\n\n- Inspect the affected code\n- Verify the behavior with focused tests` }] } });
+    emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: `Step ${index + 1}: **Reviewing the implementation**\n\nThe bounded transcript keeps this conversation responsive.\n\n- Inspect the affected code\n- Verify the behavior with focused tests` }] } });
   }
-  emit({ type: "assistant", message: { content: [{ type: "tool_use", id: "perf-tool", name: "Bash", input: { command: "npm test" } }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "tool_use", id: "perf-tool", name: "Bash", input: { command: "npm test" } }] } });
   emit({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "perf-tool", content: "All tests passed." }] } });
-  emit({ type: "assistant", message: { content: [{ type: "text", text: "Performance fixture complete. Earlier messages remain available through history and search." }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: "Performance fixture complete. Earlier messages remain available through history and search." }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.0123 });
 } else if (prompt.includes("queue fixture: navigation")) {
   await new Promise((resolve) => setTimeout(resolve, 15000));
-  emit({ type: "assistant", message: { content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
 } else if (prompt.includes("The user attached the following images")) {
   const match = prompt.match(/^- (".*")$/m);
   const imagePath = match ? JSON.parse(match[1]) : "";
   const bytes = readFileSync(imagePath);
-  emit({ type: "assistant", message: { content: [{ type: "text", text: `Inspected attached image (${bytes.length} bytes)` }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: `Inspected attached image (${bytes.length} bytes)` }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
 } else if (prompt.includes("queue fixture: initial")) {
   // Long enough for the UI to enqueue several follow-ups while this turn is
   // authoritatively running. Later queue-fixture prompts complete immediately.
   await new Promise((resolve) => setTimeout(resolve, 1500));
-  emit({ type: "assistant", message: { content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
 } else if (prompt.includes("queue fixture:")) {
-  emit({ type: "assistant", message: { content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: `Queue echo: ${prompt}` }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
 } else if (prompt.includes("stay running")) {
   // Slow mode: stay alive until the supervisor sends SIGTERM (the cancel test).
@@ -75,31 +75,61 @@ if (prompt.toLowerCase().includes("simulate an interrupted turn")) {
   // Playbook echo: name which trusted sentinel blocks reached the binary, so
   // the e2e can prove injection happened server-side without leaking bodies.
   const names = [...prompt.matchAll(/<(reminder|workflow) name="([^"]+)">/g)].map(([, kind, name]) => `${kind}=${name}`);
-  emit({ type: "assistant", message: { content: [{ type: "text", text: `Injected: ${names.join(" ")}` }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: `Injected: ${names.join(" ")}` }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.001, stop_reason: "end_turn" });
+} else if (prompt.includes("gate fixture")) {
+  // Gated Build: do what the real CLI does for a tool no rule pre-approves —
+  // hand the check to the permission prompt tool. The MCP approver the BFF
+  // generated is addressed from `--mcp-config`; this fixture posts the same
+  // request that approver would, then honours the decision. `PRIVATE FILE
+  // BODY` must never reach the browser: only the path is a legitimate detail.
+  const mcpIndex = argv.indexOf("--mcp-config");
+  const mcp = mcpIndex >= 0 ? JSON.parse(readFileSync(argv[mcpIndex + 1], "utf8")) : null;
+  const env = mcp?.mcpServers?.dcaleon_approvals?.env ?? {};
+  const target = path.join(process.cwd(), "gated.txt");
+  const input = { file_path: target, content: "PRIVATE FILE BODY" };
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "tool_use", id: "tu_gate_1", name: "Write", input }] } });
+  let decision = { behavior: "deny", message: "denied by dcaleon: the approval gate was unreachable (fetch failed)" };
+  try {
+    const response = await fetch(env.DCALEON_APPROVAL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Dcaleon-Approval-Token": env.DCALEON_APPROVAL_TOKEN },
+      body: JSON.stringify({ sessionId: env.DCALEON_SESSION_ID, toolName: "Write", toolUseId: "tu_gate_1", input }),
+    });
+    if (response.ok) decision = await response.json();
+  } catch { /* fail closed, exactly like the generated approver */ }
+  if (decision.behavior === "allow") {
+    writeFileSync(target, `gated write at ${Date.now()}\n`);
+    emit({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_gate_1", is_error: false, content: "File written" }] } });
+    emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: "Wrote gated.txt after approval." }] } });
+  } else {
+    emit({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_gate_1", is_error: true, content: decision.message }] } });
+    emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: "The write was refused, so nothing changed." }] } });
+  }
+  emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.003, stop_reason: "end_turn" });
 } else if (prompt.includes("write a file")) {
   // Build mode: really write into cwd (the session's project or worktree), so the
   // Changes drawer, merge and discard flows have a real diff to work with. Unique
   // content so a later session always produces a change even if the file exists.
   const target = path.join(process.cwd(), "claude-e2e.txt");
   writeFileSync(target, `written by mock claude at ${Date.now()}\n`);
-  emit({ type: "assistant", message: { content: [
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [
     { type: "tool_use", id: "tu_write_1", name: "Write", input: { file_path: target, content: "PRIVATE FILE BODY" } },
   ] } });
   emit({ type: "user", message: { content: [
     { type: "tool_result", tool_use_id: "tu_write_1", is_error: false, content: "File written" },
   ] } });
-  emit({ type: "assistant", message: { content: [{ type: "text", text: "Wrote claude-e2e.txt" }] } });
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [{ type: "text", text: "Wrote claude-e2e.txt" }] } });
   emit({ type: "result", subtype: "success", is_error: false, session_id: sessionId, total_cost_usd: 0.002, stop_reason: "end_turn" });
 } else {
-  emit({ type: "assistant", message: { content: [
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [
     { type: "thinking", thinking: "Looking at the allowlisted workspace." },
     { type: "tool_use", id: "tu_mock_1", name: "Read", input: { file: "readme.txt", note: "PRIVATE TOOL INPUT" } },
   ] } });
   emit({ type: "user", message: { content: [
     { type: "tool_result", tool_use_id: "tu_mock_1", is_error: false, content: "workspace file contents" },
   ] } });
-  emit({ type: "assistant", message: { content: [
+  emit({ type: "assistant", message: { model: "mock-claude-4-20260101", content: [
     // The inline `README.md#L1` reference is what the file-reference wiring turns
     // into a clickable button (the e2e project fixture has a README.md at root).
     // The git `#L` line form is used rather than `README.md:1`: the shared

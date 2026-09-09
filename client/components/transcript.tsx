@@ -54,8 +54,18 @@ function formatMessageCost(cost: number): string {
   return `$${cost.toFixed(cost < 1 ? 4 : 2)}`;
 }
 
+/**
+ * The model id as a glanceable label: the provider prefix and a trailing
+ * release date carry nothing a reader scanning a transcript needs, and the
+ * full id stays in the tooltip and the expanded diagram.
+ */
+export function shortModelLabel(model: string): string {
+  const bare = model.includes("/") ? model.slice(model.lastIndexOf("/") + 1) : model;
+  return bare.replace(/[-_]?\d{8}$/u, "");
+}
+
 function MessageMetrics({ event }: { event: AgentEvent }) {
-  if (!event.metricsStatus && event.messageCost === undefined && event.cumulativeCost === undefined) return null;
+  if (!event.metricsStatus && event.messageCost === undefined && event.cumulativeCost === undefined && !event.model) return null;
   const pending = event.metricsStatus === "pending";
   const duration = event.messageDurationMs === undefined ? null : formatDurationMs(event.messageDurationMs);
   const cost = event.messageCost === undefined ? "cost unavailable" : `${formatMessageCost(event.messageCost)} message`;
@@ -66,6 +76,12 @@ function MessageMetrics({ event }: { event: AgentEvent }) {
     <details className="group text-[10px] tabular-nums text-[var(--color-text-muted)] opacity-70" data-testid="opencode-message-metrics">
       <summary className="cursor-pointer list-none whitespace-nowrap [&::-webkit-details-marker]:hidden">
         <span className="sr-only">Message metrics: </span>
+        {event.model && (
+          <>
+            <span title={`Model: ${event.model}`} data-testid="opencode-message-model">{shortModelLabel(event.model)}</span>
+            <span aria-hidden> · </span>
+          </>
+        )}
         <span title="Total agent turn duration">{durationLabel}</span><span aria-hidden> · </span>
         <span title="Cost of this agent message">{pending ? "cost pending" : cost}</span>
         <span aria-hidden> · </span>
@@ -77,6 +93,7 @@ function MessageMetrics({ event }: { event: AgentEvent }) {
    +-> ${pending ? "cost pending" : cost}
        +-> ${pending ? "session total pending" : cumulative}
 
+model:  ${event.model ?? "unavailable"}
 tokens: ${event.inputTokens ?? "unavailable"} in + ${event.outputTokens ?? "unavailable"} out + ${event.reasoningTokens ?? "unavailable"} reasoning
 cache:  ${event.cacheReadTokens ?? "unavailable"} read + ${event.cacheWriteTokens ?? "unavailable"} write
 status: ${status}`}</pre>

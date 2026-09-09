@@ -136,6 +136,31 @@ describe("Claude session store", () => {
     expect(status).toMatchObject({ kind: "status", label: "Permission denied: Bash" });
   });
 
+  it("names the model on the prose row from the assistant frame, keeping the first one it saw", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "b", workspaceId: "ws", workspaceLabel: "WS", mode: "build", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "x");
+    instance.applyFrame(session.id, { type: "assistant", message: { model: "claude-opus-4-1-20250805", content: [{ type: "text", text: "Hello" }] } });
+    instance.applyFrame(session.id, { type: "assistant", message: { model: "claude-haiku-4-5", content: [{ type: "text", text: "again" }] } });
+    const prose = session.events.find((event) => event.kind === "agent");
+    expect(prose).toMatchObject({ kind: "agent", text: "Hello\n\nagain", model: "claude-opus-4-1-20250805" });
+    // A frame without a model (the mock, an older CLI) leaves the row unlabelled rather than inventing one.
+    const other = instance.create({ presetId: "b", workspaceId: "ws", workspaceLabel: "WS", mode: "build", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(other, "y");
+    instance.applyFrame(other.id, { type: "assistant", message: { content: [{ type: "text", text: "Hi" }] } });
+    expect(other.events.find((event) => event.kind === "agent")).not.toHaveProperty("model");
+  });
+
+  it("nudges SSE subscribers for a known session without persisting anything", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "b", workspaceId: "ws", workspaceLabel: "WS", mode: "build", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    const updates: string[] = [];
+    instance.on("update", (id: string) => updates.push(id));
+    instance.nudge(session.id);
+    instance.nudge("claude-unknown");
+    expect(updates).toEqual([session.id]);
+  });
+
   it("fails a running turn closed when the process exits with no result", async () => {
     const { instance } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });

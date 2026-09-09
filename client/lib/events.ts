@@ -352,6 +352,19 @@ function exactMode(value: unknown): MessageMode | undefined {
  * through to the agent rather than being treated as a disqualification. When
  * both fields are recognized and disagree, neither wins.
  */
+/**
+ * The model an assistant message names about itself. OpenCode 1.18 puts it on
+ * `info.modelID` (with `info.providerID`); older captures nest it under
+ * `info.model`. The provider is kept when present so `anthropic/claude-opus-5`
+ * and a same-named model on another provider stay distinguishable.
+ */
+export function messageModel(info: RawMessageInfo): string | undefined {
+  const modelID = nonEmptyString(info.modelID) ?? nonEmptyString(info.model?.modelID) ?? nonEmptyString(info.model?.id);
+  if (!modelID) return undefined;
+  const providerID = nonEmptyString(info.providerID) ?? nonEmptyString(info.model?.providerID);
+  return providerID ? `${providerID}/${modelID}` : modelID;
+}
+
 export function messageMode(info: RawMessageInfo): MessageMode | undefined {
   const agent = exactMode(info.agent);
   // A user prompt's mode is the primary agent it selected. `info.mode` is not
@@ -427,6 +440,7 @@ function normalizePart(
           ...(mode ? { mode } : {}),
         };
       }
+      const model = messageModel(info);
       return {
         kind: "agent",
         id,
@@ -434,6 +448,7 @@ function normalizePart(
         timestamp: iso(created, created),
         text,
         ...(mode ? { mode } : {}),
+        ...(model ? { model } : {}),
       };
     }
 

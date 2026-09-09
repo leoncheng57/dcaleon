@@ -8,7 +8,7 @@ import type { DshPresetMode } from "./config.js";
 
 export type DshTranscriptEvent =
   | { id: string; messageId: string; timestamp: string; kind: "user"; text: string; reminders: []; workflows: []; attachments: [] }
-  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string; metricsStatus: "pending" | "final"; costStatus: "pending" | "unavailable"; cumulativeCostStatus: "pending" | "unavailable"; durationStatus: "pending" | "final" | "unavailable"; messageDurationMs?: number; inputTokens?: number; outputTokens?: number; reasoningTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
+  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string; /** The preset's model at the time the turn was sent; DSH frames do not name it themselves. */ model?: string; metricsStatus: "pending" | "final"; costStatus: "pending" | "unavailable"; cumulativeCostStatus: "pending" | "unavailable"; durationStatus: "pending" | "final" | "unavailable"; messageDurationMs?: number; inputTokens?: number; outputTokens?: number; reasoningTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
   | { id: string; messageId: string; timestamp: string; kind: "status"; label: string; detail?: string }
   | { id: string; messageId: string; timestamp: string; kind: "error"; message: string };
 
@@ -24,6 +24,8 @@ export interface DshSession {
   running: boolean;
   events: DshTranscriptEvent[];
   runStartedAt?: number;
+  /** Model the active turn was sent on (from the preset); stamped onto its agent rows. */
+  runModel?: string;
   activeRunId?: string;
   lastAssistantRunId?: string;
 }
@@ -155,11 +157,12 @@ export class DshSessionStore extends EventEmitter {
     await this.writeChain;
   }
 
-  startRun(session: DshSession, text: string): ExperimentRecord {
+  startRun(session: DshSession, text: string, options: { model?: string } = {}): ExperimentRecord {
     const now = Date.now();
     const messageId = `user-${randomUUID()}`;
     session.running = true;
     session.runStartedAt = now;
+    session.runModel = options.model;
     session.updatedAt = new Date(now).toISOString();
     session.events.push({
       id: messageId, messageId, timestamp: session.updatedAt, kind: "user", text,
@@ -193,14 +196,14 @@ export class DshSessionStore extends EventEmitter {
           const id = `agent-live-${session.activeRunId}`;
           const existing = session.events.find((item) => item.id === id && item.kind === "agent");
           if (existing?.kind === "agent") existing.text += text;
-          else session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text, metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending" });
+          else session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text, ...(session.runModel ? { model: session.runModel } : {}), metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending" });
         }
       } else if (rawType === "assistant/message") {
         const text = textFrom(rawEvent?.data);
         if (text) {
           session.events = session.events.filter((item) => item.id !== `agent-live-${session.activeRunId}`);
           const id = `agent-${randomUUID()}`;
-          session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text, metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending", ...usageFrom(rawEvent?.data && typeof rawEvent.data === "object" ? (rawEvent.data as Record<string, unknown>).usage : undefined) });
+          session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text, ...(session.runModel ? { model: session.runModel } : {}), metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending", ...usageFrom(rawEvent?.data && typeof rawEvent.data === "object" ? (rawEvent.data as Record<string, unknown>).usage : undefined) });
           session.lastAssistantRunId = session.activeRunId;
         }
       } else if (/tool|compaction|subagent/i.test(rawType)) {
@@ -212,7 +215,7 @@ export class DshSessionStore extends EventEmitter {
         session.events.some((item) => item.id === `agent-live-${session.activeRunId}`);
       if (!hasAssistant && event.finalResponse) {
         const id = `agent-${randomUUID()}`;
-        session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: event.finalResponse, metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending" });
+        session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: event.finalResponse, ...(session.runModel ? { model: session.runModel } : {}), metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending" });
       }
       const outcome = event.finishReason === "completed" ? "completed" : event.finishReason === "aborted" ? "cancelled" : "failed";
       this.finish(session, outcome);

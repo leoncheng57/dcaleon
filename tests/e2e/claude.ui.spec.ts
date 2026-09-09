@@ -11,10 +11,18 @@ test.describe("Claude Code runtime", () => {
   test("creates a read-only session and renders streamed output", async ({ page }) => {
     await createSession(page);
     await expect(page.getByText("Read only", { exact: true }).first()).toBeVisible();
+    // A read-only preset never asks anyone, so neither permission control renders.
+    await expect(page.getByTestId("claude-auto-permissions")).toHaveCount(0);
+    await expect(page.getByTestId("claude-permission-lane")).toHaveCount(0);
     await page.getByTestId("claude-prompt").fill("Inspect this fixture");
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Hello from mock claude");
     await expect(page.getByTestId("claude-prompt")).toBeEnabled();
+    // The model the CLI named on the assistant frame sits beside the cost figures.
+    const metrics = page.getByTestId("opencode-message-metrics");
+    await expect(metrics.getByTestId("opencode-message-model")).toHaveText("mock-claude-4");
+    await expect(metrics.locator("summary")).toContainText("mock-claude-4 · ");
+    await expect(metrics.locator("summary")).toContainText("$0.0123 message");
   });
 
   test("offers an explicit safe resume after an interrupted process", async ({ page }) => {
@@ -139,7 +147,7 @@ test.describe("Claude Code runtime", () => {
     await page.goto("/claude");
     await page.getByTestId("claude-preset").selectOption("e2e-build");
     await expect(page.getByText("Build · may edit files", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("claude-build-confirmation")).toContainText("Writes outside that workspace");
+    await expect(page.getByTestId("claude-build-confirmation")).toContainText("nothing enforces that boundary");
     await expect(page.getByTestId("claude-create")).toBeDisabled();
     await page.getByTestId("claude-build-confirm").check();
     await expect(page.getByTestId("claude-create")).toBeEnabled();
@@ -218,6 +226,13 @@ test.describe("Claude Code runtime", () => {
     await page.getByTestId("claude-create").click();
     await expect(page).toHaveURL(/\/claude\/sessions\/claude-/u);
     await expect(page.getByTestId("claude-branch")).toHaveCount(0);
+    // CLAUDE_APPROVALS is on in this fixture, so a Build session carries the
+    // real directory switch (OFF until someone flips it), not a decorative one.
+    await expect(page.getByTestId("claude-auto-permissions-state")).toHaveText("OFF");
+    await expect(page.getByTestId("claude-permission-lane")).toHaveCount(0);
+    await page.getByTestId("claude-auto-permissions-info").click();
+    await expect(page.getByTestId("claude-auto-permissions-safety-sheet")).toContainText("same switch as the OpenCode toggle");
+    await page.getByTestId("claude-auto-permissions-safety-close").click();
     await page.getByTestId("claude-open-changes").click();
     await expect(page.getByTestId("claude-changes")).toBeVisible();
     await expect(page.getByTestId("claude-merge")).toHaveCount(0);
@@ -336,6 +351,54 @@ test.describe("Claude Code runtime", () => {
     await page.getByTestId("claude-send").click();
     await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Injected: workflow=goal");
     await expect(page.getByTestId("claude-transcript")).not.toContainText('<workflow name=');
+  });
+
+  async function createGatedBuildSession(page: import("@playwright/test").Page) {
+    await page.goto("/claude");
+    await page.getByTestId("claude-preset").selectOption("e2e-build");
+    await page.getByTestId("claude-isolation-worktree").check();
+    await page.getByTestId("claude-build-confirm").check();
+    await page.getByTestId("claude-create").click();
+    await expect(page).toHaveURL(/\/claude\/sessions\/claude-/u);
+  }
+
+  test("a gated tool call pauses on an answerable row, is notified, and proceeds once allowed", async ({ page }) => {
+    await createGatedBuildSession(page);
+    const bell = page.getByTestId("opencode-nav-notifications");
+    await page.getByTestId("claude-prompt").fill("gate fixture: please write");
+    await page.getByTestId("claude-send").click();
+    // The ask reaches the page through the session SSE, not a poll.
+    const request = page.getByTestId("claude-approval-request");
+    await expect(request).toBeVisible();
+    await expect(request).toContainText("Write");
+    await expect(request).toContainText("paused until you answer");
+    await expect(page.getByTestId("claude-approval-detail")).toContainText("gated.txt");
+    await expect(page.getByTestId("claude-conversation")).not.toContainText("PRIVATE FILE BODY");
+    // The same ask is filed with the notification lane, titled for Claude.
+    await expect(bell).toHaveAttribute("aria-label", /unresolved/u);
+    const history = await page.request.get("/api/notifications/history?kind=permission&limit=200");
+    const records = (await history.json()) as { records: Array<{ kind: string; sessionID?: string; title: string; displayBody: string }> };
+    const sessionId = page.url().match(/claude-[0-9a-f-]+/u)![0];
+    expect(records.records.some((record) => record.kind === "permission" && record.sessionID === sessionId && record.title === "Claude needs permission" && record.displayBody === "Needs approval to run Write")).toBe(true);
+
+    await page.getByTestId("claude-approval-once").click();
+    await expect(request).toHaveCount(0);
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("Wrote gated.txt after approval.");
+    // The decision is on the transcript for a later reader.
+    await expect(page.getByTestId("claude-transcript")).toContainText("Approved Write once");
+    await expect(page.getByTestId("claude-prompt")).toBeEnabled();
+  });
+
+  test("rejecting a gated tool call refuses it with the reason on the transcript", async ({ page }) => {
+    await createGatedBuildSession(page);
+    await page.getByTestId("claude-prompt").fill("gate fixture: please write");
+    await page.getByTestId("claude-send").click();
+    await expect(page.getByTestId("claude-approval-request")).toBeVisible();
+    await page.getByTestId("claude-approval-reject").click();
+    await expect(page.getByTestId("claude-approval-request")).toHaveCount(0);
+    await expect(page.getByTestId("opencode-agent-message-body")).toContainText("The write was refused, so nothing changed.");
+    await expect(page.getByTestId("claude-transcript")).toContainText("Denied Write");
+    await expect(page.getByTestId("claude-transcript")).toContainText("the user rejected this tool call");
   });
 
   test("a finished Claude turn raises a notification like an OpenCode idle does", async ({ page }) => {

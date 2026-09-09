@@ -79,6 +79,21 @@ describe("mergeEvents", () => {
     expect((merged[0] as { text: string }).text).toBe("again");
   });
 
+  it("replaces a prose row whose metrics or model changed under identical text", () => {
+    // The Claude store creates the row with pending metrics on the first text
+    // frame and stamps cost/model later with the SAME text; a text-only
+    // fingerprint kept the client at "cost pending" until a remount.
+    const pending = { ...agent("a", "done"), metricsStatus: "pending" as const };
+    const final = { ...agent("a", "done"), metricsStatus: "final" as const, messageCost: 0.01, cumulativeCost: 0.05, messageDurationMs: 1200 };
+    const merged = mergeEvents([pending], [final]);
+    expect(merged[0]).toMatchObject({ metricsStatus: "final", messageCost: 0.01 });
+    const labelled = mergeEvents([final], [{ ...final, model: "claude-opus-4-1" }]);
+    expect(labelled[0]).toMatchObject({ model: "claude-opus-4-1" });
+    // An identical row is still the same reference, so memos hold.
+    const stable = [final];
+    expect(mergeEvents(stable, [{ ...final }])).toBe(stable);
+  });
+
   // The bug this guards against: OpenCode tool parts mutate in place. Treating
   // "is the id new?" as "did anything change?" freezes chips at `running`.
   it("detects a tool transitioning running -> completed", () => {

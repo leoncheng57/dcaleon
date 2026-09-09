@@ -4,6 +4,7 @@ import fixture from "./fixtures/session-messages.json" with { type: "json" };
 import {
   detectInterrupted,
   messageMode,
+  messageModel,
   normalizeMessage,
   normalizeTranscript,
   PATCH_FILE_METADATA_LIMITS,
@@ -42,6 +43,17 @@ describe("normalizeTranscript", () => {
     expect(agent.map((e) => (e as { text: string }).text)).toEqual([
       "I'll add the route now. Review: https://github.com/acme/demo/pull/7 closes https://github.com/acme/demo/issues/12 spec https://www.notion.so/Route-Spec-0123456789abcdef0123456789abcdef",
     ]);
+  });
+
+  it("names the model on the agent row, provider-qualified, from the live 1.18 info shape", () => {
+    const agent = events.find((e) => e.kind === "agent") as AgentEvent;
+    expect(agent.model).toBe("anthropic/claude-opus-5");
+    // Older captures nest it; a message with neither leaves the row unlabelled.
+    expect(messageModel({ model: { providerID: "openai", modelID: "gpt-5" } })).toBe("openai/gpt-5");
+    expect(messageModel({ modelID: "bare-model" })).toBe("bare-model");
+    expect(messageModel({ role: "assistant" })).toBeUndefined();
+    const [row] = normalizeMessage({ info: { id: "m", role: "assistant", time: { created: 1 } }, parts: [{ id: "p", messageID: "m", type: "text", text: "hi" }] });
+    expect(row).not.toHaveProperty("model");
   });
 
   it("emits step-start and step-finish as bookkeeping, never as rows", () => {
@@ -527,7 +539,7 @@ describe("frozen contract", () => {
   const ALLOWED: Record<string, string[]> = {
     user: ["kind", "id", "messageId", "timestamp", "text", "reminders", "workflows", "attachments", "mode"],
     agent: [
-      "kind", "id", "messageId", "timestamp", "text", "mode",
+      "kind", "id", "messageId", "timestamp", "text", "mode", "model",
       "metricsStatus", "costStatus", "cumulativeCostStatus", "durationStatus",
       "messageCost", "cumulativeCost", "messageDurationMs", "inputTokens", "outputTokens",
       "reasoningTokens", "cacheReadTokens", "cacheWriteTokens",
