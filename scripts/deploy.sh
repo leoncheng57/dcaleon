@@ -273,36 +273,62 @@ say "building and reloading ${LABEL}"
 install_args=("--port=${port}")
 [ "$force_active_claude" -eq 1 ] && install_args+=("--force-active-claude")
 install_log="$(mktemp -t dcaleon-service-install.XXXXXX)"
-trap 'rm -f "$install_log"' EXIT
+# Keep the log on failure so the operator can inspect it.
+keep_install_log=0
+cleanup_install_log() { [ "$keep_install_log" -eq 0 ] && rm -f "$install_log"; }
+trap cleanup_install_log EXIT
 if ! npm run service:install -- "${install_args[@]}" 2>&1 | tee "$install_log"; then
   # macOS occasionally returns bootstrap error 5 immediately after bootout,
   # even though the newly written plist is valid. At that point install has
   # already removed the old service, so exiting here leaves localhost down.
   # Retry only this exact terminal failure: never turn a build, config or
   # active-session refusal into an implicit service start.
+  #
+  # The sentinel is a substring match (grep -Fq), not exact whole-line
+  # (grep -Fxq), because tsx wraps the error in a stack trace.
   recovered=0
-  if grep -Fxq "launchctl bootstrap failed" "$install_log" &&
-    [ -f "$PLIST" ] &&
-    ! launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
-    warn "launchd rejected the first bootstrap — retrying without rebuilding"
-    for attempt in 1 2 3; do
-      sleep "$attempt"
-      if launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1 ||
-        launchctl bootstrap "gui/$(id -u)" "$PLIST"; then
-        if launchctl print "gui/$(id -u)/${LABEL}" >/dev/null; then
-          ok "LaunchAgent loaded on bootstrap retry ${attempt}"
+  if grep -Fq "launchctl bootstrap failed" "$install_log" && [ -f "$PLIST" ]; then
+    domain="gui/$(id -u)"
+    target="${domain}/${LABEL}"
+    if launchctl print "$target" >/dev/null 2>&1; then
+      # Service IS loaded despite error 5 — poll for health rather than
+      # retrying bootstrap (which would fail on an already-loaded service).
+      warn "bootstrap returned an error but the service is loaded — checking health"
+      for attempt in $(seq 1 10); do
+        if /usr/bin/curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+          ok "service healthy after bootstrap error (health poll ${attempt})"
           recovered=1
           break
         fi
+        sleep 1
+      done
+      if [ "$recovered" -eq 0 ]; then
+        warn "service is loaded but never became healthy"
       fi
-      warn "bootstrap retry ${attempt} failed"
-    done
+    else
+      # Service is NOT loaded — retry bootstrap.
+      warn "launchd rejected the first bootstrap — retrying without rebuilding"
+      for attempt in 1 2 3; do
+        sleep "$attempt"
+        if launchctl bootstrap "$domain" "$PLIST" 2>/dev/null ||
+          launchctl print "$target" >/dev/null 2>&1; then
+          if launchctl print "$target" >/dev/null 2>&1; then
+            ok "LaunchAgent loaded on bootstrap retry ${attempt}"
+            recovered=1
+            break
+          fi
+        fi
+        warn "bootstrap retry ${attempt} failed"
+      done
+    fi
   fi
   if [ "$recovered" -eq 0 ]; then
-    die "service:install failed" \
+    keep_install_log=1
+    die "service:install failed (log preserved: ${install_log})" \
       "The LaunchAgent may have been replaced without being loaded. Check:" \
       "  launchctl print gui/$(id -u)/${LABEL}" \
-      "  npm run service:logs"
+      "  npm run service:logs" \
+      "  cat ${install_log}"
   fi
 fi
 rm -f "$install_log"
