@@ -4,6 +4,7 @@ import { realpath, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import type { ClaudeConfig, ClaudePreset } from "../claude/config.js";
+import type { ClaudeApprovalStore } from "../claude/approvals.js";
 import { ClaudeSupervisor } from "../claude/supervisor.js";
 import { ClaudeSessionStore, type ClaudeIsolation } from "../claude/store.js";
 import { listClaudeWorkspaces, resolveClaudeWorkspace, type ResolvedWorkspace } from "../claude/workspaces.js";
@@ -51,6 +52,8 @@ export function claudeRoutes(
   store = new ClaudeSessionStore(config.ledgerFile, config.sessionsFile),
   /** The app's OpenCode event bus; a finished turn is announced on it so the notification lane hears Claude too. */
   bus?: Pick<EventEmitter, "emit">,
+  /** Present only when the operator enabled approvals; `port` addresses this BFF over loopback. */
+  approvals?: { store: ClaudeApprovalStore; port: number },
 ): Router {
   const router = Router();
   let loadError: Error | null = null;
@@ -61,7 +64,12 @@ export function claudeRoutes(
   // One child per session, so a frame is trusted to belong to its session; the
   // route still guards that the session is known and running before applying.
   supervisor.on("frame", ({ sessionId, frame }) => store.applyFrame(sessionId, frame));
-  supervisor.on("exit", ({ sessionId, code, signal, stderr }) => store.handleExit(sessionId, { code, signal, stderr }));
+  supervisor.on("exit", ({ sessionId, code, signal, stderr }) => {
+    // Nothing can answer a check whose turn is over, so refuse what is left
+    // rather than leaving a row in the UI that can never be actioned.
+    approvals?.store.cancelSession(sessionId);
+    store.handleExit(sessionId, { code, signal, stderr });
+  });
   supervisor.on("diagnostic", (detail) => console.warn("[claude]", detail));
   store.on("error", (detail) => console.warn("[claude-ledger]", detail));
   if (bus) store.on("finished", ({ session, outcome, reason }) => publishClaudeRunEvents(bus, session, outcome, reason));
@@ -98,6 +106,7 @@ export function claudeRoutes(
       configured: config.configured,
       cliVersion: config.cliVersion,
       sandbox: config.sandbox,
+      approvals: config.approvals,
       presets: config.presets.map(({ id, label, model, effort, permissionMode, mode }) => ({ id, label, model, effort, permissionMode, mode })),
       workspaces: workspaces.map(({ id, label, source }) => ({ id, label, source })),
       models: config.models,
@@ -252,6 +261,7 @@ export function claudeRoutes(
         sandboxExtras: sandboxExtras(session),
         ...(requestedModel ? { model: requestedModel } : {}),
         turnMode: plan ? "plan" : "build",
+        ...(approvals ? { approvals: { url: `http://127.0.0.1:${approvals.port}/api/claude/internal/approvals`, token: approvals.store.token } } : {}),
         text: composed.text,
         ...(staged.directory ? { cleanupDirectory: staged.directory } : {}),
       });
@@ -264,10 +274,51 @@ export function claudeRoutes(
     }
   });
 
+  // The in-session approver's own endpoint. It may only ASK: there is no way to
+  // supply a decision through it, so the token the sandbox necessarily holds
+  // cannot be turned into a self-approval. Held open until someone answers.
+  router.post("/claude/internal/approvals", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    if (!approvals) return error(res, 404, "Claude approvals are disabled");
+    if (req.get("X-Dcaleon-Approval-Token") !== approvals.store.token) return error(res, 403, "invalid approval token");
+    const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : "";
+    const toolName = typeof req.body?.toolName === "string" ? req.body.toolName : "";
+    const toolUseId = typeof req.body?.toolUseId === "string" ? req.body.toolUseId : "";
+    if (!store.get(sessionId)) return error(res, 404, "Claude session not found");
+    if (!toolName || !toolUseId) return error(res, 400, "toolName and toolUseId are required");
+    const raw = req.body?.input;
+    const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+    res.json(await approvals.store.ask({ sessionId, toolName, toolUseId, input }));
+  });
+
+  router.get("/claude/sessions/:id/approvals", (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    res.set("Cache-Control", "private, no-store");
+    res.json({ approvals: approvals?.store.list(session.id) ?? [] });
+  });
+
+  router.post("/claude/sessions/:id/approvals/:approvalId/reply", (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (!approvals) return error(res, 404, "Claude approvals are disabled");
+    const reply = req.body?.reply;
+    if (reply !== "once" && reply !== "always" && reply !== "reject") {
+      return error(res, 400, "reply must be 'once', 'always' or 'reject'");
+    }
+    const pending = approvals.store.list(session.id).some((item) => item.id === req.params.approvalId);
+    if (!pending) return error(res, 404, "approval request not found for this session");
+    const message = typeof req.body?.message === "string" ? req.body.message : undefined;
+    res.json({ replied: approvals.store.reply(req.params.approvalId, reply, message) });
+  });
+
   router.post("/claude/sessions/:id/cancel", (req, res) => {
     if (!requireEnabled(res)) return;
     const session = store.get(req.params.id);
     if (!session) return error(res, 404, "Claude session not found");
+    approvals?.store.cancelSession(session.id);
     supervisor.cancel(session.id);
     const cancelled = store.cancel(session);
     res.json({ cancelled });

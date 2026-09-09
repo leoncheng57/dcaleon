@@ -7,6 +7,7 @@ import { homedir, userInfo } from "node:os";
 import path from "node:path";
 
 import type { ClaudeConfig, ClaudePreset, ClaudeWorkspace } from "./config.js";
+import { APPROVER_PROMPT_TOOL, APPROVER_SOURCE, claudeApproverConfig } from "./approver.js";
 
 export const CLAUDE_MAX_LINE_BYTES = 4 * 1024 * 1024;
 
@@ -120,24 +121,31 @@ export function claudeSeatbeltProfile(input: {
 /**
  * The generated Claude settings file. Read-only mode denies the file-mutation
  * tools at the permission layer too (Seatbelt is the hard backstop). `ask` is
- * never emitted — a headless lane has no answerer, so a policy that would ask
- * must deny instead.
+ * never emitted: a rule that would ask is answered by the permission prompt
+ * tool when `approvals` is set, and denied outright when it is not, because a
+ * lane with no answerer must not fall back to allowing.
  */
-export function claudeSettings(preset: ClaudePreset): Record<string, unknown> {
+export function claudeSettings(preset: ClaudePreset, approvals = false): Record<string, unknown> {
   const mutation = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
   const readOnly = preset.mode === "read-only";
   // Headless `claude` denies a mutation tool that no rule explicitly allows, even
-  // under `acceptEdits` — so Build must allow them by name (Seatbelt still confines
-  // the writes to the workspace). Read-only denies them at the tool layer too, with
-  // Seatbelt as the hard backstop.
+  // under `acceptEdits` — so an ungated Build must allow them by name (Seatbelt still
+  // confines the writes to the workspace). A gated Build must NOT: naming them here
+  // pre-approves them, and the prompt tool would never be consulted. Read-only denies
+  // them at the tool layer either way, with Seatbelt as the hard backstop.
   return {
     permissions: {
       defaultMode: preset.permissionMode,
-      allow: readOnly ? [] : mutation,
+      allow: readOnly || approvals ? [] : mutation,
       deny: readOnly ? mutation : [],
       ask: [],
     },
   };
+}
+
+/** A Build turn with a gate configured; a plan turn is already read-only. */
+function isGated(input: Pick<RunInput, "turnMode" | "approvals">): boolean {
+  return input.turnMode !== "plan" && input.approvals !== undefined;
 }
 
 interface RunInput {
@@ -154,6 +162,12 @@ interface RunInput {
   text: string;
   /** Turn-scoped image directory, removed after the child closes. */
   cleanupDirectory?: string;
+  /**
+   * Loopback approval gate. When set, a Build turn runs under `default` and
+   * routes every permission check to the in-session approver; when absent the
+   * turn stays pre-approved and Seatbelt is the only confinement.
+   */
+  approvals?: { url: string; token: string };
 }
 
 export class ClaudeSupervisor extends EventEmitter {
@@ -179,9 +193,14 @@ export class ClaudeSupervisor extends EventEmitter {
     return path.join(this.config.sessionRoot, `${sessionUuid}.settings.json`);
   }
 
-  private buildArgs(input: RunInput, settingsPath: string): { command: string; args: string[] } {
+  private mcpConfigPath(sessionUuid: string): string {
+    return path.join(this.config.sessionRoot, `${sessionUuid}.mcp.json`);
+  }
+
+  private buildArgs(input: RunInput, settingsPath: string, mcpConfigPath: string): { command: string; args: string[] } {
     const { preset, workspace, session, text } = input;
-    const permissionMode = input.turnMode === "plan" ? "plan" : "bypassPermissions";
+    const gated = isGated(input);
+    const permissionMode = input.turnMode === "plan" ? "plan" : gated ? "default" : "bypassPermissions";
     const effectiveMode: ClaudePreset["mode"] = input.turnMode === "plan" ? "read-only" : "build";
     const cli = [
       "-p", text,
@@ -192,6 +211,7 @@ export class ClaudeSupervisor extends EventEmitter {
       "--add-dir", workspace.directory,
       "--permission-mode", permissionMode,
       "--settings", settingsPath,
+      ...(gated ? ["--mcp-config", mcpConfigPath, "--permission-prompt-tool", APPROVER_PROMPT_TOOL] : []),
       ...(preset.effort ? ["--effort", preset.effort] : []),
       ...(preset.maxBudgetUsd ? ["--max-budget-usd", String(preset.maxBudgetUsd)] : []),
     ];
@@ -220,11 +240,25 @@ export class ClaudeSupervisor extends EventEmitter {
     mkdirSync(this.config.sessionRoot, { recursive: true, mode: 0o700 });
     const temporaryDirectory = path.join(this.config.sessionRoot, "tmp");
     mkdirSync(temporaryDirectory, { recursive: true, mode: 0o700 });
+    const gated = isGated(input);
     const effectivePreset = input.turnMode === "plan"
       ? { ...input.preset, mode: "read-only" as const, permissionMode: "plan" }
-      : { ...input.preset, mode: "build" as const, permissionMode: "bypassPermissions" };
-    writeFileSync(settingsPath, `${JSON.stringify(claudeSettings(effectivePreset), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    const { command, args } = this.buildArgs(input, settingsPath);
+      : { ...input.preset, mode: "build" as const, permissionMode: gated ? "default" : "bypassPermissions" };
+    writeFileSync(settingsPath, `${JSON.stringify(claudeSettings(effectivePreset, gated), null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    const mcpConfigPath = this.mcpConfigPath(input.session.sessionUuid);
+    if (gated && input.approvals) {
+      const scriptPath = path.join(this.config.sessionRoot, `${input.session.sessionUuid}.approver.mjs`);
+      writeFileSync(scriptPath, APPROVER_SOURCE, { encoding: "utf8", mode: 0o600 });
+      const document = claudeApproverConfig({
+        nodePath: process.execPath,
+        scriptPath,
+        url: input.approvals.url,
+        token: input.approvals.token,
+        sessionId: input.session.id,
+      });
+      writeFileSync(mcpConfigPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    }
+    const { command, args } = this.buildArgs(input, settingsPath, mcpConfigPath);
     return new Promise<void>((resolve, reject) => {
       let child: ChildProcessByStdio<null, Readable, Readable>;
       try {
