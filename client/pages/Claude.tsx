@@ -114,7 +114,7 @@ export function ClaudePage() {
           <div className="grid gap-3">
             {sessions.map((session) => (
               <Link key={session.id} to={`/claude/sessions/${encodeURIComponent(session.id)}`} className="rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-4 hover:bg-[var(--color-background-surface-neutral-muted)]" data-testid="claude-session-row">
-                <div className="flex items-center justify-between gap-3"><strong>{session.title}</strong><div className="flex items-center gap-2"><Badge variant="neutral">{session.mode}</Badge>{session.isolation === "worktree" && <Badge variant="neutral">worktree</Badge>}{session.running && <Badge variant="neutral">Running</Badge>}</div></div>
+                <div className="flex items-center justify-between gap-3"><strong>{session.title}</strong><div className="flex items-center gap-2"><Badge variant="neutral">{session.mode}</Badge>{session.isolation === "worktree" && <Badge variant="neutral">worktree</Badge>}{session.running && <Badge variant="neutral">Running</Badge>}{(session.pendingApprovals?.length ?? 0) > 0 && <Badge variant="warning" data-testid="claude-session-needs-approval">Needs approval</Badge>}</div></div>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">{session.presetId} · {session.workspaceLabel ?? session.workspaceId}{session.branch ? ` · ${session.branch}` : ""} · {new Date(session.updatedAt).toLocaleString()}</p>
               </Link>
             ))}

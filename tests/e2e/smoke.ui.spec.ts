@@ -678,8 +678,11 @@ test.describe("transcript", () => {
   test("shows muted per-message cost and latency with an ASCII breakdown", async ({ page }) => {
     await page.goto(conversation);
     const metrics = page.getByTestId("opencode-message-metrics");
-    await expect(metrics.locator("summary")).toContainText("8.0s · $0.0421 message · $0.0421 session · final");
+    // The model comes first so a per-turn override is readable on the row it affected.
+    await expect(metrics.locator("summary")).toContainText("claude-opus-5 · 8.0s · $0.0421 message · $0.0421 session · final");
+    await expect(metrics.getByTestId("opencode-message-model")).toHaveAttribute("title", "Model: anthropic/claude-opus-5");
     await metrics.locator("summary").press("Enter");
+    await expect(metrics.getByTestId("opencode-message-metrics-diagram")).toContainText("model:  anthropic/claude-opus-5");
     await expect(metrics.getByTestId("opencode-message-metrics-diagram")).toContainText("prompt -> agent turn -> response");
     await expect(metrics.getByTestId("opencode-message-metrics-diagram")).toContainText("100 in + 900 out + 250 reasoning");
   });

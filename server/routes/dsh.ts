@@ -211,7 +211,7 @@ export function dshRoutes(
       store.applyBridge({ type: "failed", sessionId: session.id, error: "allowlisted DSH workspace is unavailable" });
       return error(res, 409, "allowlisted DSH workspace is unavailable");
     }
-    store.startRun(session, text);
+    store.startRun(session, text, { model: `${selectedPreset.provider}/${selectedPreset.model}` });
     captureLifecycle(session.id, "dca/prompt-accepted", {
       presetId: session.presetId,
       workspaceId: session.workspaceId,

@@ -51,7 +51,12 @@ interface Waiter {
  */
 export class ClaudeApprovalStore extends EventEmitter {
   private readonly waiting = new Map<string, Waiter>();
-  /** toolUseId -> approval id, so a retried ask joins the existing wait. */
+  /**
+   * `sessionId\0toolUseId` -> approval id, so a retried ask joins the existing
+   * wait. Scoped by session: the CLI's ids are unique in practice, but two
+   * sessions sharing one must never share one decision — the second would be
+   * allowed or denied by an answer its own human never saw.
+   */
   private readonly byToolUse = new Map<string, string>();
   /** sessionId -> tool names answered "always" for the rest of the session. */
   private readonly standing = new Map<string, Set<string>>();
@@ -96,7 +101,7 @@ export class ClaudeApprovalStore extends EventEmitter {
     // The CLI can re-issue an ask for a tool call already in flight (a dropped
     // MCP connection re-runs the check). Joining the existing wait keeps one
     // row in front of the user instead of a duplicate per retry.
-    const existingId = this.byToolUse.get(input.toolUseId);
+    const existingId = this.byToolUse.get(`${input.sessionId}\0${input.toolUseId}`);
     const existing = existingId ? this.waiting.get(existingId) : undefined;
     if (existing) return new Promise((resolve) => this.chain(existing, resolve));
 
@@ -114,7 +119,7 @@ export class ClaudeApprovalStore extends EventEmitter {
       }, this.timeoutMs);
       timer.unref();
       this.waiting.set(request.id, { request, settle: resolve, timer });
-      this.byToolUse.set(request.toolUseId, request.id);
+      this.byToolUse.set(`${request.sessionId}\0${request.toolUseId}`, request.id);
       this.emit("asked", request);
     });
   }
@@ -138,7 +143,7 @@ export class ClaudeApprovalStore extends EventEmitter {
     }
     return this.finish(id, reply === "reject"
       ? { behavior: "deny", message: message || "denied by dcaleon: the user rejected this tool call" }
-      : { behavior: "allow", updatedInput: waiter.request.input });
+      : { behavior: "allow", updatedInput: waiter.request.input }, reply);
   }
 
   /** Refuse everything still pending for a session whose turn is over. */
@@ -153,14 +158,18 @@ export class ClaudeApprovalStore extends EventEmitter {
     this.standing.delete(sessionId);
   }
 
-  private finish(id: string, decision: ClaudeApprovalDecision): boolean {
+  /**
+   * `reply` is present only when a human answered; a timeout or a cancelled
+   * turn settles without one, and listeners word the transcript row from that.
+   */
+  private finish(id: string, decision: ClaudeApprovalDecision, reply?: ClaudeApprovalReply): boolean {
     const waiter = this.waiting.get(id);
     if (!waiter) return false;
     clearTimeout(waiter.timer);
     this.waiting.delete(id);
-    this.byToolUse.delete(waiter.request.toolUseId);
+    this.byToolUse.delete(`${waiter.request.sessionId}\0${waiter.request.toolUseId}`);
     waiter.settle(decision);
-    this.emit("settled", { request: waiter.request, decision });
+    this.emit("settled", { request: waiter.request, decision, ...(reply ? { reply } : {}) });
     return true;
   }
 }

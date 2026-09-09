@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronDown, Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, Info, ListChecks, MessageSquareText, OctagonX, PersonStanding, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, Download, Eye, FolderOpen, GitBranch, GitMerge, GitPullRequest, Info, ListChecks, MessageSquareText, OctagonX, PersonStanding, RefreshCw, Send, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert } from "../ds/alert.js";
@@ -7,6 +7,7 @@ import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { cn } from "../ds/utils.js";
 import { AgentModeToggle } from "../components/agent-mode-toggle.js";
+import { AutoPermissionsControl, type AutoPermissionsSource } from "../components/auto-permissions-control.js";
 import { ModelPicker } from "../components/model-picker.js";
 import { ClaudeFilesDrawer } from "../components/claude-files-drawer.js";
 import { SessionInspector } from "../components/session-inspector.js";
@@ -16,7 +17,7 @@ import { SessionShell } from "../components/session-shell.js";
 import { SessionOverflowMenu } from "../components/session-overflow-menu.js";
 import { ReminderPicker } from "../components/reminder-picker.js";
 import { WorkflowPicker } from "../components/workflow-picker.js";
-import { api, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary, type ReminderSummary, type WorkflowSummary } from "../lib/api.js";
+import { api, type ClaudeApprovalReply, type ClaudeChanges, type ClaudePrStatus, type ClaudeSessionSummary, type ReminderSummary, type WorkflowSummary } from "../lib/api.js";
 import type { ModelCatalogue, ModelSelection } from "../lib/models.js";
 import {
   MANAGED_CHILD_WORKFLOW_ID,
@@ -25,7 +26,8 @@ import {
   SESSION_UPDATE_WORKFLOW_ID,
   START_DCA_SESSION_WORKFLOW_ID,
 } from "../lib/workflows.js";
-import { collapseActionGroups, runningActivity } from "../lib/derive.js";
+import { collapseActionGroups, formatDurationMs, runningActivity } from "../lib/derive.js";
+import { detectClaudeStall } from "../lib/claudeStall.js";
 import type { InspectorTab } from "../lib/inspectorTabs.js";
 import { serializeSessionJson, serializeShareMarkdown, shareFilename } from "../lib/sessionSharing.js";
 import { referenceCandidatesFromEvents, type WorkspaceTarget } from "../lib/fileReferences.js";
@@ -280,6 +282,11 @@ export function ClaudeConversationPage() {
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
   const [queued, setQueued] = useState<QueuedClaudePrompt[]>(() => [...(queuedPromptsBySession.get(id) ?? [])]);
   const [queuePaused, setQueuePaused] = useState(false);
+  const [replyingApproval, setReplyingApproval] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState("");
+  // Re-evaluated on a timer so the stall notice can appear while nothing else
+  // on the page changes — which is exactly the situation it describes.
+  const [now, setNow] = useState(() => Date.now());
   const askedRefs = useRef<Set<string>>(new Set());
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [composerCollapsed, setComposerCollapsed] = useState(false);
@@ -298,8 +305,21 @@ export function ClaudeConversationPage() {
     setHistoryOpen(false);
     setRunlogOpen(false);
     setExportOpen(false);
+    setApprovalError("");
+    setReplyingApproval(null);
   }, [id]);
   useEffect(() => { if (session) setSending(false); }, [session]);
+  useEffect(() => {
+    if (!session?.running) return;
+    const timer = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, [session?.running]);
+  // The same directory switch the OpenCode page shows, reached through the
+  // session id because this page never learns the session's path.
+  const autoPermissionsSource = useMemo<AutoPermissionsSource>(() => ({
+    read: () => api.claudeAutoPermissions(id),
+    write: (enabled) => api.setClaudeAutoPermissions(id, enabled),
+  }), [id]);
 
   // The configured models, so a turn can be sent on a different one without
   // changing the session's mode/permission (fixed at creation).
@@ -345,6 +365,23 @@ export function ClaudeConversationPage() {
   const items = useMemo(() => collapseActionGroups(events), [events]);
 
   const activity = useMemo(() => runningActivity(events), [events]);
+  const pendingApprovals = session?.pendingApprovals ?? [];
+  const permissionLane = session?.permissionLane;
+  const stall = useMemo(() => detectClaudeStall({
+    running: !!session?.running, pendingApprovals: pendingApprovals.length, activity, events, now,
+  }), [session?.running, pendingApprovals.length, activity, events, now]);
+  const replyToApproval = async (approvalId: string, reply: ClaudeApprovalReply) => {
+    setReplyingApproval(approvalId);
+    setApprovalError("");
+    try {
+      await api.replyClaudeApproval(id, approvalId, reply);
+      await refresh();
+    } catch (cause) {
+      setApprovalError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setReplyingApproval(null);
+    }
+  };
 
   // File references: collect paths the transcript mentions and validate them
   // server-side so an inline `path:line` span becomes a button. The resolved
@@ -540,19 +577,31 @@ export function ClaudeConversationPage() {
             {session?.prUrl && (
               <Button size="md" variant="ghost" className="min-h-11 min-w-12 px-0" onClick={() => setChangesOpen(true)} aria-label="Open pull request status" title="Reviews" data-testid="claude-open-reviews"><GitPullRequest aria-hidden="true" className="h-3.5 w-3.5" /></Button>
             )}
-            <div className="flex items-center gap-0.5 rounded-full border border-[var(--color-border-default)] px-1 opacity-50" title="Auto permissions always on — Claude runs non-interactively" data-testid="claude-auto-permissions-group">
-              <button type="button" role="switch" aria-checked={true} aria-label="Auto permissions (always on)" disabled className="flex min-h-9 min-w-[4.5rem] items-center justify-center rounded-full disabled:opacity-50" data-testid="claude-auto-permissions-toggle">
-                <span aria-hidden="true" className="relative h-7 w-16 rounded-full border border-current text-[var(--color-text-muted)]">
-                  <span className="absolute left-1 top-1 h-[1.125rem] w-[1.125rem] translate-x-9 rounded-full bg-current" />
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold">ON</span>
+            {permissionLane === "gated" && (
+              <AutoPermissionsControl
+                directory={id}
+                source={autoPermissionsSource}
+                variant="pill"
+                testId="claude-auto-permissions"
+                trailing={
+                  <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="claude-auto-permissions-info">
+                    <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                  </Button>
+                }
+              />
+            )}
+            {permissionLane === "bypass" && (
+              <div className="flex items-center gap-0.5 rounded-full border border-[var(--color-text-danger)] px-1 text-[var(--color-text-danger)]" title="No approval gate: CLAUDE_APPROVALS is off, so Build turns run every tool call unattended" data-testid="claude-auto-permissions-group">
+                <span className="flex min-h-9 items-center gap-1 px-2 text-[11px] font-semibold" data-testid="claude-permission-lane">
+                  <ShieldAlert aria-hidden="true" className="h-3.5 w-3.5" /> Unattended
                 </span>
-              </button>
-              <div className="flex shrink-0">
-                <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="claude-auto-permissions-info">
-                  <Info aria-hidden="true" className="h-3.5 w-3.5" />
-                </Button>
+                <div className="flex shrink-0">
+                  <Button size="md" variant="ghost" className="min-h-9 min-w-9 rounded-lg px-0" onClick={() => setAutoSafetyOpen(true)} aria-label="Auto permissions safety" title="Auto permissions safety" data-testid="claude-auto-permissions-info">
+                    <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
             <Button
               size="md"
               variant="ghost"
@@ -592,7 +641,7 @@ export function ClaudeConversationPage() {
         emptyState: !error ? (
           <div className="py-20 text-center">
             <Sparkles aria-hidden="true" className="mx-auto mb-3 text-[var(--color-text-muted)]" />
-            <p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p>
+            <p className="text-sm text-[var(--color-text-muted)]">{planMode ? "Ask Claude to inspect this workspace. Switch to Build to allow file changes." : permissionLane === "gated" ? "Ask Claude to make a change. Each write or command pauses for your approval here and on your phone unless auto permissions is on; review the result under Changes." : "Ask Claude to make a change. It runs without pausing to ask; review the result under Changes."}</p>
           </div>
         ) : null,
       }}
@@ -703,6 +752,40 @@ export function ClaudeConversationPage() {
         beforeTextarea: (
           <>
             {error && <p className="mb-2 text-xs text-[var(--color-text-danger)]" role="alert">{error}</p>}
+            {pendingApprovals.map((approval) => (
+              <div key={approval.id} className="mb-2" data-testid="claude-approval-request">
+                <Alert variant="warning">
+                  {/* The text keeps a readable floor (basis-56) and the three actions
+                      drop to their own row on a phone rather than squeezing the path
+                      into a five-character column beside them. */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 flex-1 basis-56 text-sm">
+                      <strong>{approval.toolName}</strong> needs your approval — Claude is paused until you answer.
+                      {approval.detail && <code className="mt-1 block max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px]" data-testid="claude-approval-detail">{approval.detail}</code>}
+                    </span>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <Button size="sm" className="min-h-11 sm:min-h-8" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "once")} data-testid="claude-approval-once">{replyingApproval === approval.id ? "Answering..." : "Allow once"}</Button>
+                      <Button size="sm" className="min-h-11 sm:min-h-8" variant="secondary" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "always")} title={`Allow ${approval.toolName} for the rest of this session`} data-testid="claude-approval-always">Always</Button>
+                      <Button size="sm" className="min-h-11 sm:min-h-8" variant="danger" disabled={replyingApproval !== null} onClick={() => void replyToApproval(approval.id, "reject")} data-testid="claude-approval-reject">Reject</Button>
+                    </div>
+                  </div>
+                </Alert>
+              </div>
+            ))}
+            {approvalError && (
+              <div className="mb-2" data-testid="claude-approval-error"><Alert variant="danger">Could not answer the approval request: {approvalError}</Alert></div>
+            )}
+            {stall && stall.kind !== "approval" && (
+              <div className="mb-2 flex items-start gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-warning-muted)] px-3 py-2 text-xs" role="status" data-testid="claude-stall-notice" data-stall={stall.kind}>
+                <ShieldAlert aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <p className="min-w-0 flex-1">
+                  {stall.kind === "gate-unreachable" && <>The approval gate could not be reached from this session, so <strong>{stall.toolName}</strong> was <strong>refused, not approved</strong>. The BFF was probably restarting; once it is back, ask Claude to retry the call.</>}
+                  {stall.kind === "tool" && <><strong>{stall.name}</strong> has been running for {formatDurationMs(stall.elapsedMs)} with no result{stall.detail ? <>: <code className="font-mono">{stall.detail.length > 80 ? `${stall.detail.slice(0, 80)}…` : stall.detail}</code></> : ""}. Long commands are normal; if this is not one, Stop the turn and resend.</>}
+                  {stall.kind === "silent" && <>No output from Claude for {formatDurationMs(stall.elapsedMs)}. The process is still running; if nothing arrives, Stop the turn and resend.</>}
+                </p>
+                <Button type="button" size="sm" variant="danger" className="min-h-11 shrink-0 sm:min-h-8" onClick={() => void cancel()} data-testid="claude-stall-stop"><OctagonX aria-hidden="true" size={14} className="mr-1" /> Stop</Button>
+              </div>
+            )}
             {session?.interrupted && !session.running && (
               <div className="mb-2 flex items-center gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-warning-muted)] px-3 py-2" data-testid="claude-interrupted-banner">
                 <p className="min-w-0 flex-1 text-xs">This turn was interrupted. Resume explicitly after checking whether its last tool action completed.</p>
@@ -813,7 +896,11 @@ export function ClaudeConversationPage() {
               <button type="button" className="absolute inset-0 bg-[var(--color-background-overlay)]" aria-label="Close auto permissions safety" onClick={() => setAutoSafetyOpen(false)} data-testid="claude-auto-permissions-safety-scrim" />
               <section className="relative w-full rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl sm:max-w-md sm:rounded-xl" role="dialog" aria-modal="true" aria-label="Auto permissions safety">
                 <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">Auto permissions safety</h2><button type="button" className="ml-auto min-h-11 min-w-11 rounded text-sm" onClick={() => setAutoSafetyOpen(false)} aria-label="Close auto permissions safety" data-testid="claude-auto-permissions-safety-close">Close</button></div>
-                <p className="mt-3 text-sm text-[var(--color-text-muted)]">Auto permissions approves every asked permission once, including arbitrary shell commands, external-directory access, and repeated requests from a doom loop. This affects every session using this project directory and resets to off when the BFF restarts.</p>
+                <p className="mt-3 text-sm text-[var(--color-text-muted)]">
+                  {permissionLane === "bypass"
+                    ? "CLAUDE_APPROVALS is off on this server, so a Build turn runs under bypassPermissions: every tool call, including arbitrary shell commands, executes without asking anyone. Enable CLAUDE_APPROVALS to route each call through the approval gate."
+                    : "Auto permissions approves every asked permission once, including arbitrary shell commands, external-directory access, and repeated requests from a doom loop. It is the same switch as the OpenCode toggle for this project directory, is persisted across restarts, and while it is on a Claude tool call never waits for you."}
+                </p>
               </section>
             </div>
           )}

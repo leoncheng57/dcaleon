@@ -172,6 +172,10 @@ export const appServer = {
     CLAUDE_CLI_VERSION: "2.1.257",
     CLAUDE_BINARY: `${process.cwd()}/tests/e2e/mock-claude.mjs`,
     CLAUDE_STATE_DIR: `/tmp/dcaleon-claude-state-${PORT}`,
+    // The production posture: Build tool calls route through the approval gate.
+    // The mock binary only consults it for a "gate fixture" prompt, so every
+    // other Build fixture behaves exactly as before.
+    CLAUDE_APPROVALS: "true",
     CLAUDE_PRESETS_JSON: JSON.stringify([
       { id: "e2e-readonly", label: "E2E read-only", model: "mock-claude", effort: "high", permissionMode: "default", mode: "read-only" },
       { id: "e2e-build", label: "E2E Build", model: "mock-claude-opus", permissionMode: "bypassPermissions", mode: "build" },

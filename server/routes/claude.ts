@@ -4,6 +4,8 @@ import { realpath, rm, stat } from "node:fs/promises";
 
 import type { ClaudeConfig, ClaudePreset } from "../claude/config.js";
 import type { ClaudeApprovalStore } from "../claude/approvals.js";
+import { publicApproval } from "../claude/approvalBridge.js";
+import type { AutoPermissionService } from "../opencode/autoPermissions.js";
 import { ClaudeSupervisor } from "../claude/supervisor.js";
 import { ClaudeSessionStore, type ClaudeIsolation } from "../claude/store.js";
 import { listClaudeWorkspaces, resolveClaudeWorkspace, type ResolvedWorkspace } from "../claude/workspaces.js";
@@ -27,17 +29,14 @@ function error(res: Response, status: number, message: string): void {
   res.status(status).json({ error: message });
 }
 
-function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
-  return {
-    id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: session.workspaceLabel,
-    mode: session.mode, isolation: session.isolation, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running,
-    interrupted: session.interrupted === true,
-    ...(session.worktree ? { branch: session.worktree.branch } : {}),
-    ...(session.prUrl ? { prUrl: session.prUrl } : {}),
-    ...(session.tokenUsage ? { tokenUsage: session.tokenUsage } : {}),
-    worktreeClosed: session.isolation === "worktree" && session.events.some((event) => event.kind === "status" && ["Merged into project", "Worktree discarded"].includes(event.label)),
-  };
-}
+/**
+ * How a Build turn's tool calls are decided, stated on the session so the UI
+ * never has to infer it. `gated`: the approval store asks a human (or the
+ * directory's auto-permissions toggle) per call. `bypass`: `CLAUDE_APPROVALS`
+ * is off and Build runs under `bypassPermissions`, so nothing is ever asked.
+ * `read-only`: the preset denies mutation tools outright and asks nobody.
+ */
+type ClaudePermissionLane = "gated" | "bypass" | "read-only";
 
 export function claudeRoutes(
   config: ClaudeConfig,
@@ -47,8 +46,31 @@ export function claudeRoutes(
   bus?: Pick<EventEmitter, "emit">,
   /** Present only when the operator enabled approvals; `port` addresses this BFF over loopback. */
   approvals?: { store: ClaudeApprovalStore; port: number },
+  /** The directory-scoped auto-permissions toggle, read and written through the session so the browser never names a path. */
+  autoPermissions?: Pick<AutoPermissionService, "status" | "setEnabled">,
 ): Router {
   const router = Router();
+
+  function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
+    const lane: ClaudePermissionLane = session.mode !== "build" ? "read-only" : approvals ? "gated" : "bypass";
+    const auto = autoPermissions?.status(session.projectDirectory);
+    return {
+      id: session.id, title: session.title, presetId: session.presetId, workspaceId: session.workspaceId, workspaceLabel: session.workspaceLabel,
+      mode: session.mode, isolation: session.isolation, createdAt: session.createdAt, updatedAt: session.updatedAt, running: session.running,
+      interrupted: session.interrupted === true,
+      ...(session.worktree ? { branch: session.worktree.branch } : {}),
+      ...(session.prUrl ? { prUrl: session.prUrl } : {}),
+      ...(session.tokenUsage ? { tokenUsage: session.tokenUsage } : {}),
+      worktreeClosed: session.isolation === "worktree" && session.events.some((event) => event.kind === "status" && ["Merged into project", "Worktree discarded"].includes(event.label)),
+      permissionLane: lane,
+      // Only a gated lane can have anything waiting; the list is what the
+      // conversation page renders as answerable rows.
+      pendingApprovals: approvals ? approvals.store.list(session.id).map(publicApproval) : [],
+      // The project directory's toggle. Absent when the service is not wired
+      // (tests, fixtures) so the UI shows "unknown" rather than a false OFF.
+      ...(auto ? { autoPermissions: auto } : {}),
+    };
+  }
   let loadError: Error | null = null;
   const ready = store.load().catch((cause) => {
     loadError = cause instanceof Error ? cause : new Error(String(cause));
@@ -287,7 +309,7 @@ export function claudeRoutes(
     const session = store.get(req.params.id);
     if (!session) return error(res, 404, "Claude session not found");
     res.set("Cache-Control", "private, no-store");
-    res.json({ approvals: approvals?.store.list(session.id) ?? [] });
+    res.json({ approvals: approvals?.store.list(session.id).map(publicApproval) ?? [] });
   });
 
   router.post("/claude/sessions/:id/approvals/:approvalId/reply", (req, res) => {
@@ -303,6 +325,31 @@ export function claudeRoutes(
     if (!pending) return error(res, 404, "approval request not found for this session");
     const message = typeof req.body?.message === "string" ? req.body.message : undefined;
     res.json({ replied: approvals.store.reply(req.params.approvalId, reply, message) });
+  });
+
+  // The directory toggle, reached through the session. `/api/auto-approve`
+  // takes `?directory=`, which a Claude page cannot supply — the browser never
+  // learns a Claude session's path — so this is the same switch by another
+  // handle, never a second policy.
+  router.get("/claude/sessions/:id/auto-permissions", (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (!autoPermissions) return error(res, 503, "auto permissions are unavailable");
+    res.set("Cache-Control", "private, no-store");
+    res.json(autoPermissions.status(session.projectDirectory));
+  });
+
+  router.patch("/claude/sessions/:id/auto-permissions", async (req, res) => {
+    if (!requireEnabled(res)) return;
+    const session = store.get(req.params.id);
+    if (!session) return error(res, 404, "Claude session not found");
+    if (!autoPermissions) return error(res, 503, "auto permissions are unavailable");
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || typeof body.enabled !== "boolean") {
+      return error(res, 400, "body must be exactly { enabled: boolean }");
+    }
+    res.json(await autoPermissions.setEnabled(session.projectDirectory, body.enabled));
   });
 
   router.post("/claude/sessions/:id/cancel", (req, res) => {

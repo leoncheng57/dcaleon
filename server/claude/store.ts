@@ -18,7 +18,7 @@ export interface PromptTag { name: string; body: string }
 
 export type ClaudeTranscriptEvent =
   | { id: string; messageId: string; timestamp: string; kind: "user"; text: string; reminders: PromptTag[]; workflows: PromptTag[]; attachments: []; mode?: "plan" | "build" }
-  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string; mode?: "plan" | "build"; metricsStatus?: "pending" | "final"; costStatus?: "pending" | "final" | "unavailable"; cumulativeCostStatus?: "pending" | "final" | "unavailable"; durationStatus?: "pending" | "final" | "unavailable"; messageCost?: number; cumulativeCost?: number; messageDurationMs?: number; inputTokens?: number; outputTokens?: number; reasoningTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
+  | { id: string; messageId: string; timestamp: string; kind: "agent"; text: string; mode?: "plan" | "build"; /** Model id the CLI reported on the assistant frame that produced this prose, e.g. `claude-opus-4-1-20250805`. */ model?: string; metricsStatus?: "pending" | "final"; costStatus?: "pending" | "final" | "unavailable"; cumulativeCostStatus?: "pending" | "final" | "unavailable"; durationStatus?: "pending" | "final" | "unavailable"; messageCost?: number; cumulativeCost?: number; messageDurationMs?: number; inputTokens?: number; outputTokens?: number; reasoningTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
   | { id: string; messageId: string; timestamp: string; kind: "thought"; text: string }
   | { id: string; messageId: string; timestamp: string; kind: "tool"; status: "pending" | "running" | "completed" | "error"; name: string; detail?: string; commandText?: string; output?: string; error?: string; attachments: [] }
   | { id: string; messageId: string; timestamp: string; kind: "patch"; files: string[]; fileCount: number; filesTruncated: boolean }
@@ -272,13 +272,17 @@ export class ClaudeSessionStore extends EventEmitter {
     const turnMode = this.runModes.get(sessionId);
 
     if (frame.type === "assistant") {
+      // The CLI names the model on every assistant frame (`message.model`), so
+      // the prose row can say which model produced it — a per-turn override or
+      // a preset change would otherwise be invisible next to the cost figures.
+      const model = stringField(frame.message, "model")?.slice(0, 80);
       for (const block of blocksOf(frame)) {
         if (block.type === "text" && typeof block.text === "string" && block.text) {
           const id = `agent-${session.activeRunId}`;
           const existingIdx = session.events.findIndex((item) => item.id === id);
           const existing = existingIdx >= 0 ? session.events[existingIdx] : undefined;
-          if (existing?.kind === "agent") session.events[existingIdx] = { ...existing, text: existing.text + `\n\n${block.text}` };
-          else session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: block.text, metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending", ...(turnMode ? { mode: turnMode } : {}) });
+          if (existing?.kind === "agent") session.events[existingIdx] = { ...existing, text: existing.text + `\n\n${block.text}`, ...(model && !existing.model ? { model } : {}) };
+          else session.events.push({ id, messageId: id, timestamp: now, kind: "agent", text: block.text, metricsStatus: "pending", costStatus: "pending", cumulativeCostStatus: "pending", durationStatus: "pending", ...(turnMode ? { mode: turnMode } : {}), ...(model ? { model } : {}) });
         } else if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
           const id = `thought-${randomUUID()}`;
           session.events.push({ id, messageId: id, timestamp: now, kind: "thought", text: block.thinking });
@@ -441,7 +445,16 @@ export class ClaudeSessionStore extends EventEmitter {
     this.emit("update", session.id);
   }
 
-  /** Append a status row (e.g. merge/discard outcomes) outside a running turn. */
+  /**
+   * Announce a change that lives beside the session rather than in it — a
+   * pending approval was asked or answered — so `/claude/events` subscribers
+   * refetch. Nothing is persisted: the approval store owns that state.
+   */
+  nudge(sessionId: string): void {
+    if (this.sessions.has(sessionId)) this.emit("update", sessionId);
+  }
+
+  /** Append a status row (e.g. merge/discard outcomes, approval decisions) with or without a running turn. */
   note(session: ClaudeSession, label: string, detail?: string): void {
     const id = `status-${randomUUID()}`;
     session.events.push({ id, messageId: id, timestamp: new Date().toISOString(), kind: "status", label, ...(detail ? { detail } : {}) });

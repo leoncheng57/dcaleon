@@ -1210,6 +1210,50 @@ several decisions below.
       lives at `/opencode`, a navbar peer of DSH and Claude.** Every runtime is reached from
       the navbar, so the root belongs to none of them. `/sessions/:id` stays where it was:
       moving it would break deep links, notification click URLs and phone transfer for no gain.
+34c. **A gated Claude tool call is an OpenCode-shaped permission ask, and a silent gate is
+    a bug, not a posture.** `CLAUDE_APPROVALS` shipped with the whole gate in place — the
+    approver MCP, `ClaudeApprovalStore.ask()`, list/reply routes — and nothing listening to
+    `asked`: no notification, no SSE frame, no row on the page. A gated `Write` sat for the
+    full 10-minute timeout and then denied, which from the browser was a spinner that never
+    ended and from a phone was nothing at all; the session that found this could not even
+    write its own handoff file. `server/claude/approvalBridge.ts` now translates every ask
+    into the `permission.asked` event the NotificationService already handles, keyed by the
+    session's **project** directory (never the worktree cwd — the toggle and the inbox are
+    scoped to the project), with `id` = approval id and `permission` = the CLI tool name, and
+    every settle into `permission.replied`, which is what disarms the parked escalation. The
+    service's tool-name shape check accepts Claude's `Bash`/`Write`/`mcp__x__y` casing, its
+    generic titles say **"Claude needs permission"** / **"Claude is parked"** for a
+    `claude-` id, and its parked check consults an injected pending lookup rather than
+    OpenCode's `/permission`, which knows nothing about Claude asks. An auto-approved call
+    is filed as `permission.asked` too, so it lands as the suppressed `auto-permissions`
+    audit record decision 10a promises. Both directions `nudge()` the session store so
+    `/claude/events` refetches, and the decision is written to the transcript as a status
+    row (`Approved Bash once`, `Denied Write` + reason) so a later reader sees *why* a call
+    was refused. The public session shape now states its **`permissionLane`**
+    (`gated` / `bypass` / `read-only`) and `pendingApprovals` (id, tool, bounded detail —
+    a Bash command or a file path, **never** a Write body) so the page renders answerable
+    rows and the lab list a `Needs approval` badge. The header's former decorative
+    "Auto permissions (always on)" switch was a false statement under a gate; it is now the
+    real `AutoPermissionsControl` fed through `/claude/sessions/:id/auto-permissions` (the
+    same directory toggle, reached by session id because the browser never learns a Claude
+    path), an explicit red `Unattended` chip in the bypass lane, and nothing for read-only.
+    **A hang must say what it is.** `client/lib/claudeStall.ts` classifies a running turn
+    as waiting on an approval (the row is the notice), a tool past 60s, silence past 90s,
+    or the approver's fail-closed `approval gate was unreachable` refusal — each worded so
+    the reader knows whose wait it is and whether anything was approved (it was not).
+    The e2e lane now runs with `CLAUDE_APPROVALS=true`; the mock binary consults the gate
+    only for a `gate fixture` prompt, reading the approver's URL and token from
+    `--mcp-config` exactly as the generated MCP server would.
+34d. **Every prose row names its model beside its cost.** `AgentEvent.model` is populated
+    from the Claude assistant frame's `message.model` (kept from the first frame that named
+    it), from OpenCode's `info.providerID/modelID` (provider-qualified so two providers'
+    same-named models stay distinct), and for DSH from the preset at prompt time, since DSH
+    frames do not name it. `MessageMetrics` shows `shortModelLabel()` — provider prefix and
+    a trailing 8-digit release date dropped — with the full id in the tooltip and the
+    expanded diagram. Doing this exposed an older bug: the client's prose fingerprint was
+    mode + text only, so a metrics stamp arriving with identical text (pending → final,
+    exactly how the Claude store works) never replaced the row and the client sat at "cost
+    pending" until remount. Metrics and model are now part of the fingerprint.
 35. **All runtime islands share the right tools slot through SessionShell.** OpenCode,
     Claude and DSH pass their native runtime-prefixed session IDs to the same shell-owned
     opener, visibility state, Inspector replacement, and Browser/Minichats/Terminal panel.

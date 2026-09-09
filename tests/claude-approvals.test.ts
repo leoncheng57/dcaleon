@@ -58,6 +58,19 @@ describe("Claude approval store", () => {
     expect(await retry).toMatchObject({ behavior: "allow" });
   });
 
+  it("never lets one session's answer decide another session's identically-numbered call", async () => {
+    const store = new ClaudeApprovalStore();
+    const first = store.ask({ sessionId: "s1", toolName: "Write", toolUseId: "tu_1", input: {} });
+    const second = store.ask({ sessionId: "s2", toolName: "Write", toolUseId: "tu_1", input: {} });
+    expect(store.list()).toHaveLength(2);
+    store.reply(store.list("s1")[0].id, "once");
+    expect(await first).toMatchObject({ behavior: "allow" });
+    // s2 is still waiting on its own human.
+    expect(store.list("s2")).toHaveLength(1);
+    store.reply(store.list("s2")[0].id, "reject");
+    expect(await second).toMatchObject({ behavior: "deny" });
+  });
+
   it("refuses whatever is still pending when the turn ends", async () => {
     const store = new ClaudeApprovalStore();
     const decision = ask(store);

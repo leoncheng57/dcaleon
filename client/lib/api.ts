@@ -202,8 +202,21 @@ export interface ClaudeTranscriptResponse {
   page?: ClaudeTranscriptPage;
 }
 
+/**
+ * How a Build turn's tool calls are decided (server/routes/claude.ts). `gated`
+ * asks a human per call through the approval gate; `bypass` never asks because
+ * `CLAUDE_APPROVALS` is off; `read-only` denies mutation tools outright.
+ */
+export type ClaudePermissionLane = "gated" | "bypass" | "read-only";
+/** A tool call the approval gate is holding until someone answers. Never carries the raw tool input. */
+export interface ClaudePendingApproval { id: string; toolName: string; detail?: string; createdAt: number }
+export type ClaudeApprovalReply = "once" | "always" | "reject";
 export interface ClaudeSessionSummary {
   worktreeClosed?: boolean;
+  permissionLane?: ClaudePermissionLane;
+  pendingApprovals?: ClaudePendingApproval[];
+  /** The project directory's auto-permissions toggle, when the server could read it. */
+  autoPermissions?: AutoPermissionStatus;
   id: string;
   title: string;
   presetId: string;
@@ -862,6 +875,21 @@ export const api = {
   cancelClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/cancel`, { method: "POST" }).then((r) =>
     json<{ cancelled: boolean }>(r)),
   claudeEventsUrl: (id: string) => `/api/claude/events?${new URLSearchParams({ sessionId: id })}`,
+  claudeApprovals: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/approvals`).then((r) => json<{ approvals: ClaudePendingApproval[] }>(r)),
+  replyClaudeApproval: (id: string, approvalId: string, reply: ClaudeApprovalReply, message?: string) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}/approvals/${encodeURIComponent(approvalId)}/reply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reply, ...(message ? { message } : {}) }),
+    }).then((r) => json<{ replied: boolean }>(r)),
+  /** The project directory's auto-permissions switch, reached through the session so the browser never names a path. */
+  claudeAutoPermissions: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/auto-permissions`).then((r) => json<AutoPermissionStatus>(r)),
+  setClaudeAutoPermissions: (id: string, enabled: boolean) =>
+    fetch(`/api/claude/sessions/${encodeURIComponent(id)}/auto-permissions`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }).then((r) => json<AutoPermissionStatus>(r)),
   claudeChanges: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/changes`).then((r) => json<ClaudeChanges>(r)),
   mergeClaude: (id: string) => fetch(`/api/claude/sessions/${encodeURIComponent(id)}/merge`, { method: "POST" }).then((r) =>
     json<{ merged: boolean; mergeCommit: string }>(r)),

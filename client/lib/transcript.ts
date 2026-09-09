@@ -65,6 +65,13 @@ export interface AgentEvent extends TranscriptBase {
   text: string;
   /** Mode this response was produced under, when the backend states it exactly. */
   mode?: MessageMode;
+  /**
+   * Model id that produced this prose, as the runtime reported it
+   * (`claude-opus-4-1-20250805`, `anthropic/claude-opus-5`). Shown beside the
+   * cost figures because a per-turn override or a preset change is otherwise
+   * invisible on the row it affected.
+   */
+  model?: string;
   /** Runtime-neutral provenance for the compact per-message accounting row. */
   metricsStatus?: "pending" | "final";
   costStatus?: MetricStatus;

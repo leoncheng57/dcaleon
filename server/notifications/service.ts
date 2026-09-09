@@ -18,7 +18,7 @@ import {
 } from "./history.js";
 import { PreferenceStore, type NotificationPreferences, type NotifyEvent } from "./preferences.js";
 import { PushSubscriptionStore, sendWebPush } from "./webpush.js";
-import { eventClickUrl } from "../publicAppUrl.js";
+import { eventClickUrl, isClaudeSessionId } from "../publicAppUrl.js";
 
 export function classifyEvent(event: OpencodeEvent): NotifyEvent | null {
   if (event.type === "session.idle") return "idle";
@@ -58,6 +58,14 @@ type SessionExcerptLookup = (
   signal: AbortSignal,
 ) => Promise<string | undefined>;
 
+/**
+ * Is this permission still waiting when the parked timer fires? OpenCode asks
+ * are listed by `GET /permission`; a Claude ask lives in the BFF's own approval
+ * store, which that route knows nothing about. Injected so each runtime's
+ * pending set is consulted rather than OpenCode's being assumed for both.
+ */
+type PendingPermissionLookup = (directory: string, pending: PermissionRequest) => Promise<boolean>;
+
 const SESSION_CACHE_LIMIT = 500;
 const SESSION_CACHE_MS = 5 * 60_000;
 const UNKNOWN_SESSION_CACHE_MS = 5_000;
@@ -76,13 +84,29 @@ function compact(value: string): string {
   return value.trim().replace(/\s+/gu, " ");
 }
 
-function genericTitle(kind: NotifyEvent): string {
-  return kind === "permission" ? "OpenCode needs permission" : `OpenCode: ${kind}`;
+/**
+ * The runtime a record belongs to, read from the session id alone. Claude
+ * sessions are minted `claude-<uuid>` (decision 34b), and a "OpenCode needs
+ * permission" card for a Claude tool call sends the reader to the wrong island.
+ */
+function runtimeName(sessionID: unknown): string {
+  return isClaudeSessionId(sessionID) ? "Claude" : "OpenCode";
 }
 
+function genericTitle(kind: NotifyEvent, sessionID?: unknown): string {
+  const runtime = runtimeName(sessionID);
+  return kind === "permission" ? `${runtime} needs permission` : `${runtime}: ${kind}`;
+}
+
+/**
+ * OpenCode permission names are lowercase (`bash`, `edit`); Claude's are the
+ * CLI's tool names (`Bash`, `Write`, `mcp__server__tool`). Both are bare
+ * identifiers, so the same shape check serves both — the point is to refuse
+ * anything that is not a name, not to insist on one casing.
+ */
 function safeToolName(event: OpencodeEvent): string | undefined {
   const value = event.properties.permission;
-  return typeof value === "string" && /^[a-z][a-z0-9_-]{0,31}$/u.test(value) ? value : undefined;
+  return typeof value === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/u.test(value) ? value : undefined;
 }
 
 function safePreview(value: unknown, limit: number): string | undefined {
@@ -130,7 +154,7 @@ export function outboundMessage(
   const compactTitle = sessionTitle ? compact(sessionTitle) : "";
   const title = compactTitle && compactTitle !== String(event.properties.sessionID ?? "") && !/^ses_[A-Za-z0-9_-]+$/u.test(compactTitle)
     ? truncate(compactTitle, NTFY_TITLE_LIMIT)
-    : genericTitle(kind);
+    : genericTitle(kind, event.properties.sessionID);
   let body: string;
   if (kind === "permission") {
     const tool = safeToolName(event);
@@ -234,6 +258,7 @@ export class NotificationService {
   private readonly onEvent = (event: OpencodeEvent) => void this.handle(event);
   private readonly lookupSessionMetadata: SessionMetadataLookup;
   private readonly lookupSessionExcerpt: SessionExcerptLookup;
+  private readonly isPermissionPending: PendingPermissionLookup;
 
   constructor(
     private readonly config: OpencodeConfig,
@@ -245,7 +270,10 @@ export class NotificationService {
     lookupSessionMetadata?: SessionMetadataLookup,
     private readonly pushSubscriptions = new PushSubscriptionStore(),
     lookupSessionExcerpt?: SessionExcerptLookup,
+    isPermissionPending?: PendingPermissionLookup,
   ) {
+    this.isPermissionPending = isPermissionPending
+      ?? (async (directory, pending) => (await listPermissions(this.config, directory)).some((item) => item.id === pending.id));
     this.lookupSessionMetadata = lookupSessionMetadata
       ?? ((directory, sessionID, signal) => getSessionMetadata(this.config, directory, sessionID, signal));
     this.lookupSessionExcerpt = lookupSessionExcerpt
@@ -383,7 +411,7 @@ export class NotificationService {
     const sessionTitle = this.sessionTitle(event.directory, sessionID);
     // History retains its generic operational copy; outbound ntfy copy is
     // intentionally session-first and lock-screen-safe.
-    const historyTitle = genericTitle(kind);
+    const historyTitle = genericTitle(kind, sessionID);
     const historyBody = details ? `${details.permission} requires review` : `Session ${sessionID || "updated"}`;
     // Suppressed records are never read as an inbox row, so they do not earn an
     // upstream read; only a delivered `idle` does.
@@ -741,8 +769,7 @@ export class NotificationService {
             // a human), so its escalation must follow the same policy as the
             // ask it escalates.
             if (enabled) return;
-            const requests = await listPermissions(this.config, directory);
-            if (!requests.some((item) => item.id === pending.id)) return;
+            if (!await this.isPermissionPending(directory, pending)) return;
             const preferences = await this.store.read();
             const parkedEvent: OpencodeEvent = {
               type: "permission.asked",
@@ -760,7 +787,7 @@ export class NotificationService {
               sessionID: pending.sessionID,
               ...(parkedTitle ? { sessionTitle: parkedTitle } : {}),
               requestID: pending.id,
-              title: "OpenCode is parked",
+              title: `${runtimeName(pending.sessionID)} is parked`,
               body: `${pending.permission} has waited ${seconds}s for a reply`,
               displayBody: inAppMessage(parkedEvent, "parked", seconds),
               ...(message.click ? { click: message.click } : {}),
