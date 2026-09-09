@@ -189,7 +189,7 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
   // The models offered by the mid-session switcher. Defaults to the current
   // Claude model family; CLAUDE_MODELS (JSON array or comma list) overrides it.
   // Preset models are always included so a session's own model is selectable.
-  const DEFAULT_MODELS = ["claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-fable-5"];
+  const DEFAULT_MODELS = ["claude-opus-4-6", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-fable-5"];
   let configuredModels = DEFAULT_MODELS;
   if (env.CLAUDE_MODELS) {
     try {
