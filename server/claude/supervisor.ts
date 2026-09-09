@@ -30,9 +30,17 @@ export interface ClaudeFrame {
 // CLAUDE_CODE_OAUTH_TOKEN, ...) is never copied through.
 const SAFE_ENV = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER", "LOGNAME", "__CF_USER_TEXT_ENCODING", "SSH_AUTH_SOCK"] as const;
 
-export function claudeSupervisorEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+/**
+ * `temporaryDirectory` overrides the inherited `TMPDIR`. The host value points
+ * into `/var/folders/...`, which the Seatbelt profile does not grant, so
+ * anything reaching for `os.tmpdir()` (`mkdtemp`, most test harnesses, many
+ * build tools) fails with EPERM. Pointing it inside the state root — already
+ * writable — makes the ordinary temp-file path work.
+ */
+export function claudeSupervisorEnvironment(source: NodeJS.ProcessEnv = process.env, temporaryDirectory?: string): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const key of SAFE_ENV) if (source[key]) environment[key] = source[key];
+  if (temporaryDirectory) environment.TMPDIR = temporaryDirectory;
   if (!environment.USER || !environment.LOGNAME || !environment.__CF_USER_TEXT_ENCODING) {
     try {
       const info = userInfo();
@@ -99,6 +107,11 @@ export function claudeSeatbeltProfile(input: {
     "(deny default)",
     '(import "system.sb")',
     "(allow process*)",
+    // Scoped to descendants: a session must be able to manage its own child
+    // processes (a test runner's worker pool terminates workers, and `process*`
+    // does not cover `signal`), but must not be able to signal the BFF that
+    // supervises it or anything else on the host.
+    "(allow signal (target children))",
     "(allow network*)",
     "(allow file-read-metadata)",
     "(allow ipc-posix-shm*)",
@@ -212,6 +225,8 @@ export class ClaudeSupervisor extends EventEmitter {
   run(input: RunInput): Promise<void> {
     const settingsPath = this.settingsPath(input.session.sessionUuid);
     mkdirSync(this.config.sessionRoot, { recursive: true, mode: 0o700 });
+    const temporaryDirectory = path.join(this.config.sessionRoot, "tmp");
+    mkdirSync(temporaryDirectory, { recursive: true, mode: 0o700 });
     const effectivePreset = input.turnMode === "plan"
       ? { ...input.preset, mode: "read-only" as const, permissionMode: "plan" }
       : { ...input.preset, mode: "build" as const, permissionMode: "bypassPermissions" };
@@ -222,7 +237,7 @@ export class ClaudeSupervisor extends EventEmitter {
       try {
         child = spawn(command, args, {
           cwd: input.workspace.directory,
-          env: claudeSupervisorEnvironment(),
+          env: claudeSupervisorEnvironment(process.env, temporaryDirectory),
           stdio: ["ignore", "pipe", "pipe"],
         });
       } catch (cause) {

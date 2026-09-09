@@ -38,6 +38,14 @@ describe("Claude supervisor", () => {
     expect(env.SSH_AUTH_SOCK).toBe("/tmp/agent.sock");
   });
 
+  it("redirects TMPDIR into the writable state root instead of the ungranted host temp", () => {
+    const host = { PATH: "/bin", HOME: "/home/x", TMPDIR: "/var/folders/ab/cd/T/" };
+    // Without an override the inherited value survives, so the default is unchanged.
+    expect(claudeSupervisorEnvironment(host).TMPDIR).toBe("/var/folders/ab/cd/T/");
+    // With one, the child gets a path the Seatbelt profile actually grants.
+    expect(claudeSupervisorEnvironment(host, "/state/claude/tmp").TMPDIR).toBe("/state/claude/tmp");
+  });
+
   it("provides the user identity claude needs to find its Keychain, synthesizing it when absent", () => {
     // Passed through when present.
     const forwarded = claudeSupervisorEnvironment({ PATH: "/bin", HOME: "/home/x", USER: "alice", LOGNAME: "alice" });
