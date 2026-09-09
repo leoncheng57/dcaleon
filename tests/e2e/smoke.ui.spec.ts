@@ -192,7 +192,7 @@ test.describe("hub", () => {
     await picker.click();
     const pinned = page.getByTestId("opencode-hub-model-pinned-group");
     await expect(pinned).toContainText("GPT-5.6 Sol");
-    await expect(pinned).toContainText("Claude Opus 5");
+    await expect(pinned).toContainText("Claude Opus 4.6");
     await expect(page.getByTestId("opencode-hub-model-panel")).toContainText("Claude Retired");
     await expect(page.getByTestId("opencode-hub-model-panel")).toContainText("GPT-5");
   });
