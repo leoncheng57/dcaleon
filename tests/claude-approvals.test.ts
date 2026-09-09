@@ -77,6 +77,35 @@ describe("Claude approval store", () => {
     store.reply(store.list("s2")[0].id, "reject");
     expect(await other).toMatchObject({ behavior: "deny" });
   });
+  it("auto-approves when the autoApprove callback returns true", async () => {
+    const store = new ClaudeApprovalStore();
+    store.autoApprove = (sessionId) => sessionId === "s1";
+
+    const autoApproved: string[] = [];
+    store.on("auto-approved", ({ toolName }: { toolName: string }) => autoApproved.push(toolName));
+
+    // s1 is auto-approved: resolves immediately, nothing queued.
+    const decision = await ask(store, "Bash", "toolu_auto1");
+    expect(decision).toMatchObject({ behavior: "allow" });
+    expect(store.list("s1")).toEqual([]);
+    expect(autoApproved).toEqual(["Bash"]);
+
+    // s2 is NOT auto-approved: queued normally.
+    const pending = store.ask({ sessionId: "s2", toolName: "Bash", toolUseId: "toolu_auto2", input: {} });
+    expect(store.list("s2")).toHaveLength(1);
+    store.reply(store.list("s2")[0].id, "reject");
+    expect(await pending).toMatchObject({ behavior: "deny" });
+  });
+
+  it("falls through to manual approval when autoApprove returns false", async () => {
+    const store = new ClaudeApprovalStore();
+    store.autoApprove = () => false;
+
+    const pending = ask(store, "Write", "toolu_manual");
+    expect(store.list("s1")).toHaveLength(1);
+    store.reply(store.list("s1")[0].id, "once");
+    expect(await pending).toMatchObject({ behavior: "allow" });
+  });
 });
 
 describe("Claude approver", () => {
