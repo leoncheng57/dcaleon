@@ -74,7 +74,7 @@ export async function createWorktree(project: string, root: string, sessionUuid:
  * `git worktree add` copies tracked files only, so a fresh worktree has no
  * `node_modules` and nothing in it can run — an agent cannot typecheck or test
  * the change it just made, which is how an unverified change reaches CI.
- * Seatbelt already grants the project read, so the packages are readable; only
+ * Seatbelt grants read of the whole disk, so the packages are readable; only
  * the entry point was missing.
  *
  * `node_modules` is a real directory of per-entry symlinks rather than one

@@ -60,17 +60,18 @@ describe("Claude supervisor", () => {
   });
 
   it("grants the workspace write only in build mode", () => {
-    const ro = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", binaryPath: "/b/claude", mode: "read-only", home: "/home/x" });
-    const build = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", binaryPath: "/b/claude", mode: "build", home: "/home/x" });
+    const ro = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", mode: "read-only", home: "/home/x" });
+    const build = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", mode: "build", home: "/home/x" });
     const writeLine = (profile: string) => profile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
     expect(writeLine(ro)).not.toContain('(subpath "/w")');
     expect(writeLine(build)).toContain('(subpath "/w")');
     // Auth prerequisites are present in both.
     expect(ro).toContain("Library/Keychains");
     expect(ro).toContain("SecurityServer");
-    expect(ro).toContain('(subpath "/opt")');
-    expect(ro).toContain('(subpath "/home/x/.gitconfig")');
-    expect(ro).toContain('(subpath "/home/x/.ssh/known_hosts")');
+    // Reads are whole-disk, so host state needs no per-path grant — and the
+    // blanket read must never leak into the write line.
+    expect(ro).toContain("(allow file-read*)");
+    expect(ro).not.toContain("(allow file-read* (subpath");
     expect(writeLine(build)).not.toContain('(subpath "/opt")');
   });
 
@@ -136,14 +137,13 @@ describe("Claude supervisor", () => {
     await vi.waitFor(() => expect(exited).toBe(true));
   });
   it("grants the project's .git for a worktree Build session but never in read-only", () => {
-    const extras = { extraReads: ["/proj"], extraWrites: ["/proj/.git"] };
-    const build = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", binaryPath: "/b/claude", mode: "build", home: "/home/x", ...extras });
+    const extras = { extraWrites: ["/proj/.git"] };
+    const build = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", mode: "build", home: "/home/x", ...extras });
     const writeLine = (profile: string) => profile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
     expect(writeLine(build)).toContain('(subpath "/wt")');
     expect(writeLine(build)).toContain('(subpath "/proj/.git")');
-    expect(build).toContain('(subpath "/proj")');
     // Read-only ignores the write grant entirely: a worktree read-only session cannot commit.
-    const ro = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", binaryPath: "/b/claude", mode: "read-only", home: "/home/x", ...extras });
+    const ro = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", mode: "read-only", home: "/home/x", ...extras });
     expect(writeLine(ro)).not.toContain("/proj/.git");
     expect(writeLine(ro)).not.toContain('(subpath "/wt")');
   });
@@ -187,7 +187,7 @@ describe("Claude supervisor", () => {
     // Inspect the generated settings + a real profile rather than the child.
     const planSettings = claudeSettings({ ...buildPreset, mode: "read-only", permissionMode: "plan" }) as { permissions: { deny: string[] } };
     expect(planSettings.permissions.deny).toEqual(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
-    const roProfile = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", binaryPath: "/b/claude", mode: "read-only", home: "/home/x" });
+    const roProfile = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", mode: "read-only", home: "/home/x" });
     const writeLine = roProfile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
     expect(writeLine).not.toContain('(subpath "/w")');
   });

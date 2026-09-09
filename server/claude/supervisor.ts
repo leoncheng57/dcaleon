@@ -66,38 +66,30 @@ function seatbeltLiteral(value: string): string {
  * `claude` reads its OAuth credential from the Keychain, not a file. HOME is
  * NOT redirected for the same reason.
  *
- * Seatbelt is the write-confinement authority: the workspace is writable only
- * in build mode. It does not isolate the credential store (that grant is what
- * lets auth work); the credential boundary the BFF honours is code discipline —
- * it never reads the credential itself.
+ * Seatbelt is the write-confinement authority and ONLY that: reads are granted
+ * whole-disk (`(allow file-read*)`), so a session can read anything the user
+ * can — host tool caches, sibling projects, `~/.codex` transcripts — without a
+ * profile edit per path. The workspace is writable only in build mode. This
+ * deliberately exposes every home-directory secret the user owns (SSH private
+ * keys, `~/.aws`, browser cookie stores) to a session of either mode; the
+ * credential boundary the BFF honours is code discipline — it never reads the
+ * credential itself — and that discipline is now the only read boundary.
  */
 export function claudeSeatbeltProfile(input: {
   workspace: string;
   stateRoot: string;
-  binaryPath: string;
   mode: ClaudePreset["mode"];
   home?: string;
   /**
    * Worktree isolation: the worktree is `workspace`, but git keeps the shared
    * object store and worktree metadata in the PROJECT's `.git`, so a Build
-   * session must be able to read the project and write its `.git`. Inherent to
-   * git worktrees; it is the one grant that reaches outside the session dir.
+   * session must write its `.git`. Inherent to git worktrees; it is the one
+   * write that reaches outside the session dir. Reads need no counterpart —
+   * the profile grants read of the whole disk.
    */
-  extraReads?: string[];
   extraWrites?: string[];
 }): string {
   const home = input.home ?? homedir();
-  const runtimeRoot = path.dirname(input.binaryPath);
-  const reads = [
-    // Apple's /usr/bin developer-tool shims load the selected, versioned Xcode
-    // bundle from /Applications. This is deliberately a read-only grant.
-    "/System", "/usr", "/bin", "/sbin", "/opt", "/Applications", "/Library", "/private/etc", "/dev", "/private/var",
-    path.join(home, ".claude"), path.join(home, ".claude.json"), path.join(home, ".config"), path.join(home, ".local"),
-    path.join(home, ".gitconfig"), path.join(home, ".ssh/known_hosts"), path.join(home, ".ssh/config"),
-    path.join(home, "Library/Keychains"), path.join(home, "Library/Preferences"), path.join(home, "Library/Caches"),
-    input.binaryPath, runtimeRoot, input.workspace, input.stateRoot, "/private/tmp", "/tmp",
-    ...(input.extraReads ?? []),
-  ].map((item) => `(subpath "${seatbeltLiteral(item)}")`).join(" ");
   const writes = [
     input.stateRoot, path.join(home, ".claude"), path.join(home, "Library/Keychains"), "/private/tmp", "/tmp",
     ...(input.mode === "build" ? [input.workspace, ...(input.extraWrites ?? [])] : []),
@@ -117,7 +109,10 @@ export function claudeSeatbeltProfile(input: {
     "(allow ipc-posix-shm*)",
     "(allow user-preference-read)",
     '(allow mach-lookup (global-name-regex #"^com\\.apple\\.(SecurityServer|securityd|securityd\\.xpc|trustd|trustd\\.agent|system\\.opendirectoryd\\..*|coreservices\\..*|CoreServices\\..*)"))',
-    `(allow file-read* ${reads})`,
+    // Whole-disk read: the allowlist this replaced had to grow a path every time
+    // a session needed host state (Homebrew runtimes, Xcode bundles, git config),
+    // and read confinement was never what this profile enforced.
+    "(allow file-read*)",
     `(allow file-write* ${writes})`,
   ].join("\n");
 }
@@ -150,8 +145,8 @@ interface RunInput {
   preset: ClaudePreset;
   /** The session's working directory: the project, or its isolated worktree. */
   workspace: Pick<ClaudeWorkspace, "directory">;
-  /** Worktree isolation grants (project read, project `.git` write). */
-  sandboxExtras?: { reads: string[]; writes: string[] };
+  /** Worktree isolation grant: the project `.git` write. */
+  sandboxExtras?: { writes: string[] };
   /** Per-turn model override (validated against configured presets by the route). */
   model?: string;
   /** Explicit per-turn mode: "plan" for read-only planning, "build" for writing. */
@@ -204,9 +199,7 @@ export class ClaudeSupervisor extends EventEmitter {
       const profile = claudeSeatbeltProfile({
         workspace: workspace.directory,
         stateRoot: this.config.sessionRoot,
-        binaryPath: this.config.binaryPath,
         mode: effectiveMode,
-        extraReads: input.sandboxExtras?.reads,
         extraWrites: input.sandboxExtras?.writes,
       });
       return { command: "/usr/bin/sandbox-exec", args: ["-p", profile, this.config.binaryPath, ...cli] };
