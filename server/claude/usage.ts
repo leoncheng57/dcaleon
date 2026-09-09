@@ -38,17 +38,21 @@ async function fetchUsageRaw(token: string, cliVersion: string): Promise<Respons
   });
 }
 
+function normalizePercent(value: number): number {
+  return value > 0 && value <= 1 ? value * 100 : value;
+}
+
 export function parseBucket(raw: unknown): UsageBucket {
   const obj = raw as Record<string, unknown> | undefined;
-  const utilization = typeof obj?.utilization === "number" ? obj.utilization
-    : typeof obj?.percent === "number" ? obj.percent : 0;
+  const rawValue = typeof obj?.percent === "number" ? obj.percent
+    : typeof obj?.utilization === "number" ? obj.utilization : 0;
   return {
-    utilization,
+    utilization: normalizePercent(rawValue),
     resetsAt: typeof obj?.resets_at === "string" ? obj.resets_at : null,
   };
 }
 
-interface LimitEntry { kind?: string; group?: string; percent?: number; resets_at?: string; scope?: { model?: { display_name?: string } }; is_active?: boolean }
+interface LimitEntry { kind?: string; group?: string; percent?: number; utilization?: number; resets_at?: string; scope?: { model?: { display_name?: string } }; is_active?: boolean }
 
 export function parseResponse(body: Record<string, unknown>): ClaudeUsageResponse {
   let session: UsageBucket = { utilization: 0, resetsAt: null };
@@ -57,7 +61,8 @@ export function parseResponse(body: Record<string, unknown>): ClaudeUsageRespons
 
   const limits = Array.isArray(body.limits) ? (body.limits as LimitEntry[]) : [];
   for (const entry of limits) {
-    const bucket: UsageBucket = { utilization: typeof entry.percent === "number" ? entry.percent : 0, resetsAt: typeof entry.resets_at === "string" ? entry.resets_at : null };
+    const rawValue = typeof entry.percent === "number" ? entry.percent : typeof entry.utilization === "number" ? entry.utilization : 0;
+    const bucket: UsageBucket = { utilization: normalizePercent(rawValue), resetsAt: typeof entry.resets_at === "string" ? entry.resets_at : null };
     if (entry.kind === "session") session = bucket;
     else if (entry.kind === "weekly_all") weekly = bucket;
     else if (entry.kind === "weekly_scoped" && entry.scope?.model?.display_name) weeklyByModel[entry.scope.model.display_name] = bucket;
