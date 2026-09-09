@@ -169,7 +169,6 @@ export const appServer = {
     CLAUDE_RUNTIME_ENABLED: "true",
     // Unsafe path (mock binary, no Seatbelt) is refused unless NODE_ENV=test,
     // which is set on the server command above, never on the build.
-    CLAUDE_TEST_UNSAFE: "true",
     CLAUDE_CLI_VERSION: "2.1.257",
     CLAUDE_BINARY: `${process.cwd()}/tests/e2e/mock-claude.mjs`,
     CLAUDE_STATE_DIR: `/tmp/dcaleon-claude-state-${PORT}`,

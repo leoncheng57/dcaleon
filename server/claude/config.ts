@@ -43,7 +43,6 @@ export interface ClaudeConfig {
    * time (real projects), in addition to the static allowlist. Null disables discovery.
    */
   projectsRoot: string | null;
-  sandbox: "seatbelt" | "test-unsafe" | "host";
   /**
    * Route permission checks to the user instead of pre-approving them. Opt-in
    * while the UI to answer them is still being built: with nothing listening,
@@ -81,34 +80,13 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
   const root = canonicalProspective(path.resolve(env.CLAUDE_STATE_DIR || ".state/claude"));
   const cliVersion = env.CLAUDE_CLI_VERSION || "";
 
-  // The unsafe path drops the Seatbelt workspace-write backstop and points the
-  // supervisor at a mock binary, so it may only be honoured by an explicit test
-  // process. A deployed service (the launchd plist sets NODE_ENV=production) can
-  // never opt into it, and asking for it outside a test fails closed rather than
-  // silently downgrading to Seatbelt.
-  const testUnsafeRequested = env.CLAUDE_TEST_UNSAFE === "true";
-  const testUnsafe = testUnsafeRequested && env.NODE_ENV === "test";
-  // Terminal parity. `CLAUDE_SANDBOX=host` drops the Seatbelt wrapper so a session
-  // holds exactly the authority `claude` has in a terminal: no write confinement, so
-  // a read-only turn keeps only its tool-layer denies and a Build turn can write
-  // anywhere the user can. Opt-in and never silent -- the mode is reported on
-  // /api/status. An unrecognised value fails closed rather than quietly sandboxing
-  // a session the operator meant to run unconfined.
-  const sandboxRequest = env.CLAUDE_SANDBOX || "seatbelt";
-  const hostRequested = sandboxRequest === "host";
-  if (sandboxRequest !== "seatbelt" && !hostRequested) {
-    errors.push('CLAUDE_SANDBOX must be "seatbelt" (default) or "host"');
-  }
-  const sandbox = testUnsafe ? "test-unsafe" : hostRequested ? "host" : "seatbelt";
+  // A session runs at terminal parity: the `claude` binary is spawned directly and
+  // the generated settings file (see `claudeSettings`) is the only confinement. There
+  // is no OS-level write boundary, so an ungated Build turn can write anywhere the
+  // operator can — set CLAUDE_APPROVALS to route permission checks to a human.
   const approvals = env.CLAUDE_APPROVALS === "true";
-  if (testUnsafeRequested && !testUnsafe) {
-    errors.push("CLAUDE_TEST_UNSAFE is test-only and requires NODE_ENV=test");
-  }
   if (enabled && !/^\d+\.\d+\.\d+(?:[A-Za-z0-9.-]+)?$/.test(cliVersion)) {
     errors.push("CLAUDE_CLI_VERSION must pin one exact CLI version");
-  }
-  if (enabled && process.platform !== "darwin" && !testUnsafe && !hostRequested) {
-    errors.push("Claude runtime V1 requires macOS Seatbelt; non-macOS launch is test-only");
   }
 
   const binaryInput = absolute(env.CLAUDE_BINARY);
@@ -234,7 +212,6 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
     sessionsFile: path.resolve(env.CLAUDE_SESSIONS_FILE || path.join(root, "sessions.json")),
     worktreeRoot: path.join(root, "worktrees"),
     projectsRoot,
-    sandbox,
     approvals,
     models,
     presets,

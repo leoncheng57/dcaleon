@@ -168,7 +168,7 @@ app.get("/api/health", async (_req, res) => {
       },
       events: { connected: bus.isConnected() },
       dsh: { enabled: dsh.enabled, configured: dsh.configured, sdkVersion: dsh.sdkVersion, sandbox: dsh.sandbox },
-      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions(), sandbox: claude.sandbox },
+      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions() },
     });
   } catch (error) {
     res.status(503).json({

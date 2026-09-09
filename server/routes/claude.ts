@@ -1,7 +1,6 @@
 import { Router, type Response } from "express";
 import type { EventEmitter } from "node:events";
 import { realpath, rm, stat } from "node:fs/promises";
-import path from "node:path";
 
 import type { ClaudeConfig, ClaudePreset } from "../claude/config.js";
 import type { ClaudeApprovalStore } from "../claude/approvals.js";
@@ -38,12 +37,6 @@ function publicSession(session: ReturnType<ClaudeSessionStore["create"]>) {
     ...(session.tokenUsage ? { tokenUsage: session.tokenUsage } : {}),
     worktreeClosed: session.isolation === "worktree" && session.events.some((event) => event.kind === "status" && ["Merged into project", "Worktree discarded"].includes(event.label)),
   };
-}
-
-/** Worktree sessions need to write the project's shared `.git`; reads are whole-disk. */
-function sandboxExtras(session: ReturnType<ClaudeSessionStore["create"]>): { writes: string[] } | undefined {
-  if (!session.worktree) return undefined;
-  return { writes: [path.join(session.projectDirectory, ".git")] };
 }
 
 export function claudeRoutes(
@@ -105,7 +98,6 @@ export function claudeRoutes(
       enabled: true,
       configured: config.configured,
       cliVersion: config.cliVersion,
-      sandbox: config.sandbox,
       approvals: config.approvals,
       presets: config.presets.map(({ id, label, model, effort, permissionMode, mode }) => ({ id, label, model, effort, permissionMode, mode })),
       workspaces: workspaces.map(({ id, label, source }) => ({ id, label, source })),
@@ -258,7 +250,6 @@ export function claudeRoutes(
         session: { id: session.id, sessionUuid: session.sessionUuid, started: session.started },
         preset: selectedPreset,
         workspace: { directory: session.directory },
-        sandboxExtras: sandboxExtras(session),
         ...(requestedModel ? { model: requestedModel } : {}),
         turnMode: plan ? "plan" : "build",
         ...(approvals ? { approvals: { url: `http://127.0.0.1:${approvals.port}/api/claude/internal/approvals`, token: approvals.store.token } } : {}),
@@ -275,7 +266,7 @@ export function claudeRoutes(
   });
 
   // The in-session approver's own endpoint. It may only ASK: there is no way to
-  // supply a decision through it, so the token the sandbox necessarily holds
+  // supply a decision through it, so the token the session necessarily holds
   // cannot be turned into a self-approval. Held open until someone answers.
   router.post("/claude/internal/approvals", async (req, res) => {
     if (!requireEnabled(res)) return;
@@ -419,7 +410,7 @@ export function claudeRoutes(
   });
 
   // Push the worktree branch to origin and open a PR. Runs in the BFF on host
-  // git credentials (never in the sandbox). GitHub origin + GITHUB_TOKEN only;
+  // git credentials, never in the session itself. GitHub origin + GITHUB_TOKEN only;
   // degrades with a clear message otherwise.
   router.post("/claude/sessions/:id/pr", async (req, res) => {
     if (!requireEnabled(res)) return;

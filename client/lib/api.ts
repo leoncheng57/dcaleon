@@ -177,7 +177,6 @@ export interface ClaudeConfigResponse {
   enabled: true;
   configured: boolean;
   cliVersion: string;
-  sandbox: "seatbelt" | "test-unsafe";
   presets: ClaudePresetSummary[];
   workspaces: ClaudeWorkspaceSummary[];
   models: string[];

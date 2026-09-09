@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ClaudeSupervisor, claudeSeatbeltProfile, claudeSettings, claudeSupervisorEnvironment } from "../server/claude/supervisor.js";
+import { ClaudeSupervisor, claudeSettings, claudeSupervisorEnvironment } from "../server/claude/supervisor.js";
 import type { ClaudeConfig, ClaudePreset, ClaudeWorkspace } from "../server/claude/config.js";
 
 const temporary: string[] = [];
@@ -23,7 +23,7 @@ async function harness(body: string) {
   const config = {
     enabled: true, configured: true, binaryPath: bin, cliVersion: "2.1.257",
     sessionRoot: path.join(root, "sessions"), ledgerFile: path.join(root, "ledger.json"),
-    sandbox: "test-unsafe", presets: [preset], workspaces: [workspace], errors: [],
+    presets: [preset], workspaces: [workspace], errors: [],
   } as unknown as ClaudeConfig;
   return { root, bin, workspace, config, supervisor: new ClaudeSupervisor(config) };
 }
@@ -38,11 +38,11 @@ describe("Claude supervisor", () => {
     expect(env.SSH_AUTH_SOCK).toBe("/tmp/agent.sock");
   });
 
-  it("redirects TMPDIR into the writable state root instead of the ungranted host temp", () => {
+  it("redirects TMPDIR into the state root so a turn's temp files are session-scoped", () => {
     const host = { PATH: "/bin", HOME: "/home/x", TMPDIR: "/var/folders/ab/cd/T/" };
     // Without an override the inherited value survives, so the default is unchanged.
     expect(claudeSupervisorEnvironment(host).TMPDIR).toBe("/var/folders/ab/cd/T/");
-    // With one, the child gets a path the Seatbelt profile actually grants.
+    // With one, the child's temp files land inside the session state root.
     expect(claudeSupervisorEnvironment(host, "/state/claude/tmp").TMPDIR).toBe("/state/claude/tmp");
   });
 
@@ -59,21 +59,6 @@ describe("Claude supervisor", () => {
     expect(synthesized.ANTHROPIC_API_KEY).toBeUndefined();
   });
 
-  it("grants the workspace write only in build mode", () => {
-    const ro = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", mode: "read-only", home: "/home/x" });
-    const build = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", mode: "build", home: "/home/x" });
-    const writeLine = (profile: string) => profile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
-    expect(writeLine(ro)).not.toContain('(subpath "/w")');
-    expect(writeLine(build)).toContain('(subpath "/w")');
-    // Auth prerequisites are present in both.
-    expect(ro).toContain("Library/Keychains");
-    expect(ro).toContain("SecurityServer");
-    // Reads are whole-disk, so host state needs no per-path grant — and the
-    // blanket read must never leak into the write line.
-    expect(ro).toContain("(allow file-read*)");
-    expect(ro).not.toContain("(allow file-read* (subpath");
-    expect(writeLine(build)).not.toContain('(subpath "/opt")');
-  });
 
   it("denies mutation tools in read-only and allows them by name in Build", () => {
     const ro = claudeSettings(preset) as { permissions: { allow: string[]; deny: string[]; ask: string[] } };
@@ -81,7 +66,7 @@ describe("Claude supervisor", () => {
     expect(ro.permissions.allow).toEqual([]);
     expect(ro.permissions.ask).toEqual([]);
     // Build must allow by name — headless claude denies a mutation tool no rule
-    // explicitly allows, even under acceptEdits. Seatbelt still confines the writes.
+    // explicitly allows, even under acceptEdits.
     const build = claudeSettings(buildPreset) as { permissions: { allow: string[]; deny: string[] } };
     expect(build.permissions.allow).toEqual(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
     expect(build.permissions.deny).toEqual([]);
@@ -136,17 +121,6 @@ describe("Claude supervisor", () => {
     expect(supervisor.cancel("s3")).toBe(true);
     await vi.waitFor(() => expect(exited).toBe(true));
   });
-  it("grants the project's .git for a worktree Build session but never in read-only", () => {
-    const extras = { extraWrites: ["/proj/.git"] };
-    const build = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", mode: "build", home: "/home/x", ...extras });
-    const writeLine = (profile: string) => profile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
-    expect(writeLine(build)).toContain('(subpath "/wt")');
-    expect(writeLine(build)).toContain('(subpath "/proj/.git")');
-    // Read-only ignores the write grant entirely: a worktree read-only session cannot commit.
-    const ro = claudeSeatbeltProfile({ workspace: "/wt", stateRoot: "/s", mode: "read-only", home: "/home/x", ...extras });
-    expect(writeLine(ro)).not.toContain("/proj/.git");
-    expect(writeLine(ro)).not.toContain('(subpath "/wt")');
-  });
   it("delivers the final result frame even when the child exits immediately after writing it", async () => {
     // Regression: listening on `exit` (not `close`) let the process end before its
     // last stdout chunk was read, so the turn was marked failed and the `result`
@@ -183,12 +157,11 @@ describe("Claude supervisor", () => {
     await vi.waitFor(() => expect(exit).toBeDefined());
     expect(exit).toMatchObject({ sessionId: "stderr", code: 17, stderr: "runtime library denied" });
   });
-  it("a plan turn is read-only: plan permission mode, read-only settings, read-only Seatbelt", async () => {
-    // Inspect the generated settings + a real profile rather than the child.
-    const planSettings = claudeSettings({ ...buildPreset, mode: "read-only", permissionMode: "plan" }) as { permissions: { deny: string[] } };
+  it("a plan turn is read-only: plan permission mode and read-only settings", async () => {
+    // The generated settings file is the only confinement now, so the deny list
+    // it carries is the whole read-only boundary.
+    const planSettings = claudeSettings({ ...buildPreset, mode: "read-only", permissionMode: "plan" }) as { permissions: { deny: string[]; allow: string[] } };
     expect(planSettings.permissions.deny).toEqual(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
-    const roProfile = claudeSeatbeltProfile({ workspace: "/w", stateRoot: "/s", mode: "read-only", home: "/home/x" });
-    const writeLine = roProfile.split("\n").find((line) => line.startsWith("(allow file-write*")) ?? "";
-    expect(writeLine).not.toContain('(subpath "/w")');
+    expect(planSettings.permissions.allow).toEqual([]);
   });
 });
