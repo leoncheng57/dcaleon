@@ -27,8 +27,13 @@ describe("parseBucket", () => {
     });
   });
 
-  it("prefers utilization over percent when both are present", () => {
-    expect(parseBucket({ utilization: 42, percent: 70 })).toEqual({ utilization: 42, resetsAt: null });
+  it("prefers percent over utilization when both are present", () => {
+    expect(parseBucket({ utilization: 42, percent: 70 })).toEqual({ utilization: 70, resetsAt: null });
+  });
+
+  it("normalizes fractional utilization (0-1) to percentage (0-100)", () => {
+    expect(parseBucket({ utilization: 0.42 })).toEqual({ utilization: 42, resetsAt: null });
+    expect(parseBucket({ percent: 0.7 })).toEqual({ utilization: 70, resetsAt: null });
   });
 
   it("defaults to 0 and null for missing or invalid fields", () => {
