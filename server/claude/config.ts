@@ -44,6 +44,12 @@ export interface ClaudeConfig {
    */
   projectsRoot: string | null;
   sandbox: "seatbelt" | "test-unsafe" | "host";
+  /**
+   * Route permission checks to the user instead of pre-approving them. Opt-in
+   * while the UI to answer them is still being built: with nothing listening,
+   * every gated call would wait out its timeout and then be refused.
+   */
+  approvals: boolean;
   /** Models offered in the mid-session switcher (preset models are always included). */
   models: string[];
   presets: ClaudePreset[];
@@ -94,6 +100,7 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
     errors.push('CLAUDE_SANDBOX must be "seatbelt" (default) or "host"');
   }
   const sandbox = testUnsafe ? "test-unsafe" : hostRequested ? "host" : "seatbelt";
+  const approvals = env.CLAUDE_APPROVALS === "true";
   if (testUnsafeRequested && !testUnsafe) {
     errors.push("CLAUDE_TEST_UNSAFE is test-only and requires NODE_ENV=test");
   }
@@ -228,6 +235,7 @@ export function readClaudeConfig(env: NodeJS.ProcessEnv = process.env): ClaudeCo
     worktreeRoot: path.join(root, "worktrees"),
     projectsRoot,
     sandbox,
+    approvals,
     models,
     presets,
     workspaces,

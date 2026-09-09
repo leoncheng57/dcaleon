@@ -48,6 +48,7 @@ import { readClaudeConfig } from "./claude/config.js";
 import { ClaudeSessionStore } from "./claude/store.js";
 import { ClaudeSupervisor } from "./claude/supervisor.js";
 import { claudeRoutes } from "./routes/claude.js";
+import { ClaudeApprovalStore } from "./claude/approvals.js";
 import { getSessionMetadata, latestAssistantExcerpt } from "./opencode/sessions.js";
 import { isClaudeSessionId } from "./publicAppUrl.js";
 import { parseLiveBrowserConfig } from "./browser/policy.js";
@@ -87,6 +88,7 @@ webPushConfig(); // Fail at startup rather than exposing a half-configured chann
 // OpenCode server about an id it has never issued.
 const claudeStore = new ClaudeSessionStore(claude.ledgerFile, claude.sessionsFile);
 const claudeSupervisor = new ClaudeSupervisor(claude);
+const claudeApprovals = claude.approvals ? new ClaudeApprovalStore() : undefined;
 const notificationService = new NotificationService(
   opencode,
   bus,
@@ -127,7 +129,7 @@ app.use("/api", modelPinRoutes());
 app.use("/api", recentRoutes(opencode));
 app.use("/api", memoryRoutes());
 app.use("/api", dshRoutes(dsh, undefined, undefined, undefined, bus));
-app.use("/api", claudeRoutes(claude, claudeSupervisor, claudeStore, bus));
+app.use("/api", claudeRoutes(claude, claudeSupervisor, claudeStore, bus, claudeApprovals ? { store: claudeApprovals, port: PORT } : undefined));
 const opencodePort = Number(new URL(opencode.baseUrl).port || 80);
 app.use("/api", previewRoutes(parseAllowedPorts(process.env.PREVIEW_ALLOWED_PORTS, [PORT, opencodePort])));
 
