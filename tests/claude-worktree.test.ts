@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -36,6 +36,34 @@ describe("Claude worktree isolation", () => {
     expect(path.relative(dir, wt.directory).startsWith("..")).toBe(true);
     expect(existsSync(path.join(wt.directory, "README.md"))).toBe(true);
     expect(git(dir, ["branch", "--list", "claude/abc-123"])).toContain("claude/abc-123");
+  });
+
+  it("makes the project's dependencies resolvable from the worktree without exporting its writes", async () => {
+    const { project: dir, root } = project();
+    mkdirSync(path.join(dir, "node_modules", ".bin"), { recursive: true });
+    mkdirSync(path.join(dir, "node_modules", "@scope", "pkg"), { recursive: true });
+    writeFileSync(path.join(dir, "node_modules", "@scope", "pkg", "index.js"), "module.exports = 1;\n");
+
+    const wt = await createWorktree(dir, root, "deps");
+    const modules = path.join(wt.directory, "node_modules");
+
+    // A real directory of per-entry links, NOT one symlink to the project's:
+    // scratch state written under node_modules has to stay in the worktree,
+    // because a session cannot write to the project.
+    expect(lstatSync(modules).isSymbolicLink()).toBe(false);
+    expect(lstatSync(path.join(modules, "@scope")).isSymbolicLink()).toBe(true);
+    expect(lstatSync(path.join(modules, ".bin")).isSymbolicLink()).toBe(true);
+    expect(readFileSync(path.join(modules, "@scope", "pkg", "index.js"), "utf8")).toContain("module.exports");
+
+    writeFileSync(path.join(modules, ".vite-temp"), "scratch\n");
+    expect(existsSync(path.join(dir, "node_modules", ".vite-temp"))).toBe(false);
+  });
+
+  it("still creates a worktree for a project with nothing installed", async () => {
+    const { project: dir, root } = project();
+    const wt = await createWorktree(dir, root, "no-deps");
+    expect(existsSync(path.join(wt.directory, "README.md"))).toBe(true);
+    expect(existsSync(path.join(wt.directory, "node_modules"))).toBe(false);
   });
 
   it("reports the worktree's changes against the base commit, including untracked files", async () => {

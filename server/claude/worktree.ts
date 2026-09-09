@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, realpath, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, realpath, rm, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -63,7 +63,47 @@ export async function createWorktree(project: string, root: string, sessionUuid:
   const branch = `claude/${sessionUuid}`;
   const baseCommit = (await git(project, ["rev-parse", "HEAD"])).trim();
   await git(project, ["worktree", "add", "-b", branch, directory, "HEAD"]);
-  return { directory: await realpath(directory), branch, baseCommit, project };
+  const resolved = await realpath(directory);
+  await linkDependencies(project, resolved);
+  return { directory: resolved, branch, baseCommit, project };
+}
+
+/**
+ * Make the project's installed dependencies resolvable from the worktree.
+ *
+ * `git worktree add` copies tracked files only, so a fresh worktree has no
+ * `node_modules` and nothing in it can run — an agent cannot typecheck or test
+ * the change it just made, which is how an unverified change reaches CI.
+ * Seatbelt already grants the project read, so the packages are readable; only
+ * the entry point was missing.
+ *
+ * `node_modules` is a real directory of per-entry symlinks rather than one
+ * symlink to the project's: tools write scratch state *inside* `node_modules`
+ * (vite's `.vite-temp`, for one), and a single symlink would aim those writes
+ * at the project, which is read-only to a session. Linking per entry keeps the
+ * writes in the worktree.
+ *
+ * Best-effort: a session that cannot link dependencies is still a usable
+ * session, so failure here must not fail worktree creation.
+ */
+async function linkDependencies(project: string, worktree: string): Promise<void> {
+  const source = path.join(project, "node_modules");
+  try {
+    if (!(await stat(source)).isDirectory()) return;
+  } catch {
+    return; // project has no installed dependencies; nothing to link
+  }
+  const target = path.join(worktree, "node_modules");
+  try {
+    await mkdir(target, { recursive: true });
+    // Includes dotted entries (`.bin`) and scope directories (`@scope`), each of
+    // which is linked whole.
+    for (const entry of await readdir(source)) {
+      await symlink(path.join(source, entry), path.join(target, entry)).catch(() => {});
+    }
+  } catch {
+    // Leave the worktree as-is; callers treat dependencies as a convenience.
+  }
 }
 
 /**
