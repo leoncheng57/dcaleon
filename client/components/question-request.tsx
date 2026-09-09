@@ -104,9 +104,11 @@ export function QuestionRequest({
             </fieldset>
           ))}
           {error && <p className="text-sm" role="alert">{error}</p>}
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button className="min-h-11" variant="danger" disabled={submitting} onClick={() => void reject()} data-testid="opencode-question-reject">Reject</Button>
-            <Button className="min-h-11" disabled={submitting || !valid} onClick={() => void submit()} data-testid="opencode-question-submit">Submit answers</Button>
+          <div className="sticky bottom-0 -mx-3 -mb-3 rounded-b-lg bg-[var(--color-background-surface-warning-muted)] px-3 pb-3 pt-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button className="min-h-11" variant="danger" disabled={submitting} onClick={() => void reject()} data-testid="opencode-question-reject">Reject</Button>
+              <Button className="min-h-11" disabled={submitting || !valid} onClick={() => void submit()} data-testid="opencode-question-submit">Submit answers</Button>
+            </div>
           </div>
         </div>
       </Alert>
