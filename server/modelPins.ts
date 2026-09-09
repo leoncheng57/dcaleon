@@ -9,7 +9,7 @@ export interface ModelPin {
 export const MODEL_PINS_MAX = 20;
 export const DEFAULT_MODEL_PINS: ModelPin[] = [
   { providerID: "openai", modelID: "gpt-5.6-sol" },
-  { providerID: "anthropic", modelID: "claude-opus-5" },
+  { providerID: "anthropic", modelID: "claude-opus-4-6" },
 ];
 
 export class ModelPinError extends Error {}
