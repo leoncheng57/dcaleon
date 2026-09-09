@@ -272,12 +272,41 @@ fi
 say "building and reloading ${LABEL}"
 install_args=("--port=${port}")
 [ "$force_active_claude" -eq 1 ] && install_args+=("--force-active-claude")
-if ! npm run service:install -- "${install_args[@]}"; then
-  die "service:install failed" \
-    "The LaunchAgent may have been replaced without being loaded. Check:" \
-    "  launchctl print gui/$(id -u)/${LABEL}" \
-    "  npm run service:logs"
+install_log="$(mktemp -t dcaleon-service-install.XXXXXX)"
+trap 'rm -f "$install_log"' EXIT
+if ! npm run service:install -- "${install_args[@]}" 2>&1 | tee "$install_log"; then
+  # macOS occasionally returns bootstrap error 5 immediately after bootout,
+  # even though the newly written plist is valid. At that point install has
+  # already removed the old service, so exiting here leaves localhost down.
+  # Retry only this exact terminal failure: never turn a build, config or
+  # active-session refusal into an implicit service start.
+  recovered=0
+  if grep -Fxq "launchctl bootstrap failed" "$install_log" &&
+    [ -f "$PLIST" ] &&
+    ! launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
+    warn "launchd rejected the first bootstrap — retrying without rebuilding"
+    for attempt in 1 2 3; do
+      sleep "$attempt"
+      if launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1 ||
+        launchctl bootstrap "gui/$(id -u)" "$PLIST"; then
+        if launchctl print "gui/$(id -u)/${LABEL}" >/dev/null; then
+          ok "LaunchAgent loaded on bootstrap retry ${attempt}"
+          recovered=1
+          break
+        fi
+      fi
+      warn "bootstrap retry ${attempt} failed"
+    done
+  fi
+  if [ "$recovered" -eq 0 ]; then
+    die "service:install failed" \
+      "The LaunchAgent may have been replaced without being loaded. Check:" \
+      "  launchctl print gui/$(id -u)/${LABEL}" \
+      "  npm run service:logs"
+  fi
 fi
+rm -f "$install_log"
+trap - EXIT
 
 # ---------------------------------------------------------------------------
 # Prove it is actually serving. A successful bootstrap is not a healthy BFF.
