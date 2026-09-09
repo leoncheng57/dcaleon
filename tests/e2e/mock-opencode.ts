@@ -1153,6 +1153,7 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
           options: { apiKey: "must-not-reach-browser", baseURL: "https://private.example" },
           models: {
             "claude-opus-5": { name: "Claude Opus 5", attachment: true, reasoning: true, limit: { context: 200000, output: 32000 }, variants: { high: { token: "secret" } } },
+            "claude-opus-4-6": { name: "Claude Opus 4.6", attachment: true, reasoning: true, limit: { context: 200000, output: 32000 } },
             "claude-text": { name: "Claude Text", status: "active", limit: { context: 100000, output: 16000 } },
             "claude-retired": { name: "Claude Retired", enabled: false, limit: { context: 1000 } },
           },
