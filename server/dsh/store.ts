@@ -230,6 +230,13 @@ export class DshSessionStore extends EventEmitter {
     this.emit("update", session.id);
   }
 
+  rename(session: DshSession, title: string): void {
+    session.title = title;
+    session.updatedAt = new Date().toISOString();
+    this.persistSessions();
+    this.emit("update", session.id);
+  }
+
   cancel(session: DshSession): boolean {
     if (!session.running) return false;
     this.finish(session, "cancelled", true);

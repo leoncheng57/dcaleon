@@ -18,6 +18,8 @@ import {
   createManagedChild,
   deleteSession,
   getSession,
+  renameSession,
+  SESSION_TITLE_LIMIT,
   getSessionTurnDiff,
   SESSION_TURN_DIFF_LIMITS,
   listMessages,
@@ -518,6 +520,30 @@ export function sessionRoutes(
     if (session.directory !== directory) throw new HttpError(404, "session not found");
     return session;
   };
+
+  router.patch(
+    "/sessions/:id",
+    sessionRoute(async (req, res) => {
+      const directory = await directoryOf(req);
+      const sessionID = paramOf(req, "id");
+      const body = req.body;
+      if (!body || typeof body !== "object" || Array.isArray(body) ||
+          typeof body.title !== "string") {
+        throw new HttpError(400, "body must contain { title: string }");
+      }
+      const title = body.title.trim();
+      if (!title || title.length > SESSION_TITLE_LIMIT) {
+        throw new HttpError(400, `title must be a non-empty string of at most ${SESSION_TITLE_LIMIT} characters`);
+      }
+      // Same cross-directory guard share/unshare use: `?directory=` selects
+      // the project, so without it a caller could retitle another project's
+      // session by id.
+      await ownedSession(directory, sessionID);
+      await renameSession(config, directory, sessionID, title);
+      const session = await getSession(config, directory, sessionID);
+      res.json({ session });
+    }),
+  );
 
   router.post(
     "/sessions/:id/share",

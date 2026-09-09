@@ -689,6 +689,20 @@ export async function getSession(
   return toSummary(raw ?? {}, running.has(sessionID));
 }
 
+/** Rename a session via upstream PATCH /session/{id}. */
+export async function renameSession(
+  config: OpencodeConfig,
+  directory: string,
+  sessionID: string,
+  title: string,
+): Promise<void> {
+  await request<RawSession>(config, `/session/${encodeURIComponent(sessionID)}`, {
+    method: "PATCH",
+    directory,
+    body: { title },
+  });
+}
+
 export interface SessionTurnDiff extends VcsFileDiff {
   patch: string;
   status: NonNullable<VcsFileDiff["status"]>;
