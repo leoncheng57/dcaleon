@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -45,18 +45,21 @@ function fixture(): string {
   return directory;
 }
 
-function run(directory: string, args: string[]): Run {
-  try {
-    const output = execFileSync("bash", [path.join(directory, "scripts", "deploy.sh"), ...args], {
-      encoding: "utf8",
-      stdio: "pipe",
-      env: { ...process.env, DCA_DEPLOY_PREFLIGHT_ONLY: "1" },
-    });
-    return { status: 0, output };
-  } catch (error) {
-    const failure = error as { status?: number; stdout?: string; stderr?: string };
-    return { status: failure.status ?? -1, output: `${failure.stdout ?? ""}${failure.stderr ?? ""}` };
-  }
+/**
+ * `input` is what the port question reads. The default of "" is an immediate
+ * EOF, i.e. a caller with no answer to give.
+ */
+function run(directory: string, args: string[], input = ""): Run {
+  // spawnSync rather than execFileSync: the script reports refusals and retry
+  // warnings on stderr, and execFileSync surfaces stderr only when the command
+  // fails — which would silently drop them from a successful run.
+  const result = spawnSync("bash", [path.join(directory, "scripts", "deploy.sh"), ...args], {
+    encoding: "utf8",
+    input,
+    env: { ...process.env, DCA_DEPLOY_PREFLIGHT_ONLY: "1" },
+  });
+  if (result.error) throw result.error;
+  return { status: result.status ?? -1, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
 }
 
 afterEach(() => {
@@ -150,6 +153,67 @@ describe("supervised deploy script", () => {
     const outOfRange = run(directory, ["--skip-fetch", "--ref=HEAD", "--port=70000"]);
     expect(outOfRange.status).not.toBe(0);
     expect(outOfRange.output).toContain("invalid supervised port");
+  });
+
+  it("asks for the port when --port is omitted and uses the answer", () => {
+    const directory = fixture();
+
+    const result = run(directory, ["--skip-fetch", "--ref=HEAD"], "3299\n");
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("which supervised port? [3210]");
+    expect(result.output).toContain("on :3299");
+  });
+
+  it("accepts the 3210 default when the question is answered with Enter", () => {
+    const directory = fixture();
+
+    const result = run(directory, ["--skip-fetch", "--ref=HEAD"], "\n");
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("on :3210");
+  });
+
+  it("does not ask when --port is given", () => {
+    const directory = fixture();
+
+    const result = run(directory, ["--skip-fetch", "--ref=HEAD", "--port=3211"]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain("which supervised port");
+    expect(result.output).toContain("on :3211");
+  });
+
+  it("re-asks after a rejected answer instead of giving up", () => {
+    const directory = fixture();
+
+    const result = run(directory, ["--skip-fetch", "--ref=HEAD"], "3000\nnot-a-port\n3212\n");
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("conflicts with the development default");
+    expect(result.output).toContain("invalid supervised port: not-a-port");
+    expect(result.output).toContain("on :3212");
+  });
+
+  it("gives up after three rejected answers rather than deploying somewhere unintended", () => {
+    const directory = fixture();
+
+    const result = run(directory, ["--skip-fetch", "--ref=HEAD"], "0\n70000\n3000\n");
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("no valid supervised port after 3 attempts");
+  });
+
+  it("falls back to the default when no answer is available at all", () => {
+    const directory = fixture();
+
+    // Empty stdin is an immediate EOF: cron, CI, a pipe. A deploy must not
+    // block forever there, and must not invent a port either.
+    const result = run(directory, ["--skip-fetch", "--ref=HEAD"], "");
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("no answer available — using the default :3210");
+    expect(result.output).toContain("on :3210");
   });
 
   it("rejects an unknown option", () => {

@@ -24,7 +24,11 @@ LABEL="ai.dcaleon.bff"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 DEV_PORT=3000
 
-port=3210
+DEFAULT_PORT=3210
+PORT_ATTEMPTS=3
+
+# Empty until resolved: an explicit --port wins, otherwise we ask.
+port=""
 ref="origin/main"
 force_active_claude=0
 skip_fetch=0
@@ -48,16 +52,23 @@ Usage: scripts/deploy.sh [options]
 Updates this checkout to a remote ref and reloads the supervised BFF.
 
 Options:
-  --port=N                Supervised port (default: ${port}).
+  --port=N                Supervised port. When omitted you are asked for one,
+                          with ${DEFAULT_PORT} offered as the default.
   --ref=REF               Git ref to deploy (default: ${ref}).
   --force-active-claude   Replace the BFF even if Claude sessions are running.
                           Passed through to scripts/launchd.ts.
   --skip-fetch            Do not run 'git fetch'; deploy the ref as already known.
   -h, --help              Show this message.
 
+The port is asked for rather than assumed because deploying onto the wrong port
+either collides with a running service or quietly starts a second one. Press
+Enter to accept ${DEFAULT_PORT}. With no answer available — a pipe, cron, CI — the
+default is used, so non-interactive callers keep working; pass --port to be
+explicit there.
+
 Examples:
-  scripts/deploy.sh                          # deploy origin/main on :3210
-  scripts/deploy.sh --port=3211              # same, different supervised port
+  scripts/deploy.sh                          # asks for the port, default ${DEFAULT_PORT}
+  scripts/deploy.sh --port=3211              # skip the question
   scripts/deploy.sh --ref=origin/release-1.2 # deploy some other ref
 EOF
 }
@@ -76,18 +87,63 @@ for argument in "$@"; do
   esac
 done
 
-# Fail fast on a port scripts/launchd.ts would reject anyway, so a typo costs a
+# Rejects a port scripts/launchd.ts would reject anyway, so a typo costs a
 # second instead of a full SPA + server build. parseSupervisedPort() there stays
 # the authority; this mirrors it only to move the error earlier.
-case "$port" in
-  '' | *[!0-9]*) die "invalid supervised port: ${port}" "Expected an integer between 1 and 65535." ;;
-esac
-if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-  die "invalid supervised port: ${port}" "Expected an integer between 1 and 65535."
-fi
-if [ "$port" -eq "$DEV_PORT" ]; then
-  die "supervised port ${DEV_PORT} conflicts with the development default" \
-    "Pick another port, e.g. --port=3210."
+port_rejection() {
+  local value="$1"
+  case "$value" in
+    '' | *[!0-9]*)
+      printf 'invalid supervised port: %s (expected an integer between 1 and 65535)' "$value"
+      return 0
+      ;;
+  esac
+  if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+    printf 'invalid supervised port: %s (expected an integer between 1 and 65535)' "$value"
+    return 0
+  fi
+  if [ "$value" -eq "$DEV_PORT" ]; then
+    printf 'supervised port %s conflicts with the development default' "$DEV_PORT"
+    return 0
+  fi
+  return 1
+}
+
+# An explicit --port is taken as given; anything else is a question, because
+# deploying onto the wrong port either collides with the running service or
+# quietly starts a second one alongside it.
+if [ -n "$port" ]; then
+  if rejection="$(port_rejection "$port")"; then
+    die "${rejection}" "Run 'scripts/deploy.sh --help' for usage."
+  fi
+else
+  attempt=0
+  while [ "$attempt" -lt "$PORT_ATTEMPTS" ]; do
+    attempt=$((attempt + 1))
+    printf '→ which supervised port? [%s] ' "$DEFAULT_PORT"
+    # EOF (a pipe, cron, CI) is not a wrong answer, it is the absence of one:
+    # fall back to the default rather than failing a non-interactive deploy.
+    if ! read -r answer; then
+      printf '\n'
+      port="$DEFAULT_PORT"
+      info "no answer available — using the default :${DEFAULT_PORT}"
+      break
+    fi
+    answer="${answer:-$DEFAULT_PORT}"
+    if rejection="$(port_rejection "$answer")"; then
+      # Interactively the user's own Enter ended the prompt line; a piped
+      # answer leaves the cursor mid-line, so close it before complaining.
+      [ -t 0 ] || printf '\n'
+      warn "$rejection"
+    else
+      port="$answer"
+      break
+    fi
+  done
+  if [ -z "$port" ]; then
+    die "no valid supervised port after ${PORT_ATTEMPTS} attempts" \
+      "Pass one directly, e.g. --port=${DEFAULT_PORT}."
+  fi
 fi
 
 printf '\n'

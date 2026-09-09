@@ -63,8 +63,8 @@ external `service:install`, an external SIGTERM/SIGINT signal, or launchd's
 ## Reproducible production update
 
 ```bash
-npm run deploy                 # origin/main on :3210
-npm run deploy -- --port=3211  # or another supervised port
+npm run deploy                 # asks which port; Enter accepts 3210
+npm run deploy -- --port=3211  # answer it up front instead
 ```
 
 `scripts/deploy.sh` performs the whole sequence below, refuses a dirty checkout,
@@ -72,6 +72,13 @@ runs `npm ci` only when the update actually changes the dependency tree, and
 polls `/api/health` afterwards so a bootstrap that loads but never serves is
 reported as a failure instead of a success. It works from the repository root and
 from a worktree; `--help` lists the options.
+
+The supervised port is asked for rather than assumed, because deploying onto the
+wrong one either collides with the running service or quietly starts a second
+one beside it. `3210` is offered as the default and a bare Enter accepts it. A
+rejected answer is asked again, three times, before the script gives up rather
+than guess. Callers with no answer to give — cron, CI, anything piping stdin —
+get the default; pass `--port` to be explicit there.
 
 ### The same update by hand
 
