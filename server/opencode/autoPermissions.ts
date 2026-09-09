@@ -55,6 +55,9 @@ export class AutoPermissionService {
    * a reconcile pass right after `persist()` doesn't mistake its own write for
    * an external change. */
   private lastWrittenMtimeMs: number | null = null;
+  /** Tracks the previous restore outcome so we only log transitions, not
+   * steady-state no-ops that flood the audit log (see #470). */
+  private lastRestoreOutcome: string | null = null;
   private readonly onEvent = (event: OpencodeEvent) => {
     if (event.type === "permission.asked") void this.handleAsked(event);
     if (event.type === "permission.replied") void this.handleReplied(event);
@@ -234,17 +237,24 @@ export class AutoPermissionService {
       // already-loaded state alone rather than guessing at intent.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         this.lastFileMtimeMs = null;
-        logAuditEvent("auto_approval_restore_completed", {
-          restoredCount: 0,
-          outcome: "file_not_found",
-        });
+        // Only log the transition to file_not_found, not every 5s poll that
+        // finds the same steady state (#470).
+        if (this.lastRestoreOutcome !== "file_not_found") {
+          logAuditEvent("auto_approval_restore_completed", {
+            restoredCount: 0,
+            outcome: "file_not_found",
+          });
+        }
+        this.lastRestoreOutcome = "file_not_found";
         return;
       }
       console.warn("[auto-permission]", `Could not stat state file: ${this.message(error)}`);
+      // Errors are always noteworthy — log unconditionally.
       logAuditEvent("auto_approval_restore_completed", {
         restoredCount: 0,
         outcome: "stat_error",
       });
+      this.lastRestoreOutcome = "stat_error";
       return;
     }
     if (this.lastFileMtimeMs !== null && fileStat.mtimeMs === this.lastFileMtimeMs) return;
@@ -267,6 +277,7 @@ export class AutoPermissionService {
         restoredCount: 0,
         outcome: "parse_error",
       });
+      this.lastRestoreOutcome = "parse_error";
       return;
     }
 
@@ -295,10 +306,16 @@ export class AutoPermissionService {
       }
     }
 
-    logAuditEvent("auto_approval_restore_completed", {
-      restoredCount: enabled.length,
-      outcome: "success",
-    });
+    // Only log when directories were actually restored, or when transitioning
+    // from an error state. A success with restoredCount 0 and no state change
+    // is the steady-state no-op that flooded the log (#470).
+    if (enabled.length > 0 || this.lastRestoreOutcome !== "success") {
+      logAuditEvent("auto_approval_restore_completed", {
+        restoredCount: enabled.length,
+        outcome: "success",
+      });
+    }
+    this.lastRestoreOutcome = "success";
   }
 
   private persist(): Promise<void> {
