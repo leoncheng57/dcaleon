@@ -724,12 +724,11 @@ export function ConversationPage() {
           <Alert variant="danger">Could not answer the permission request: {permissionError}</Alert>
         </div>
       )}
-
-      {stream.questions.map((request) => (
-        <QuestionRequest key={request.id} directory={directory} sessionID={id} request={request} onResolved={stream.refresh} />
-      ))}
         </>
       )}
+      prompts={stream.questions.length > 0 ? stream.questions.map((request) => (
+        <QuestionRequest key={request.id} directory={directory} sessionID={id} request={request} onResolved={stream.refresh} />
+      )) : undefined}
       transcript={{
         items,
         wrap,

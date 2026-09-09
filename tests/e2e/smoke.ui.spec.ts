@@ -1528,6 +1528,22 @@ test.describe("question remote control", () => {
     ]);
   });
 
+  // #508: two questions with several options overflow the banners wrapper's
+  // 25% height cap, and the Submit/Reject bar used to sit below its fold. It
+  // must be visible before any scrolling — toBeInViewport() intersects through
+  // scrollable ancestors, so a button clipped behind the wrapper fails here even
+  // though a click() would have auto-scrolled to it.
+  test("keeps Submit and Reject visible without scrolling at both viewports", async ({ page }) => {
+    for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 740 }]) {
+      await page.setViewportSize(size);
+      await page.goto(`/sessions/ses_mock_done?directory=${encodeURIComponent(DIR)}`);
+      const request = page.getByTestId("opencode-question-request");
+      await expect(request).toContainText("Which checks should run?");
+      await expect(page.getByTestId("opencode-question-submit")).toBeInViewport({ ratio: 1 });
+      await expect(page.getByTestId("opencode-question-reject")).toBeInViewport({ ratio: 1 });
+    }
+  });
+
   test("rejects a question", async ({ page }) => {
     await page.goto(`/sessions/ses_mock_done?directory=${encodeURIComponent(DIR)}`);
     await page.getByTestId("opencode-question-reject").click();

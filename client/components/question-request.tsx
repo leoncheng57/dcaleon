@@ -54,12 +54,12 @@ export function QuestionRequest({
   };
 
   return (
-    // No scroll container of its own: the SessionShell banners wrapper
-    // (`max-h-[25%] overflow-y-auto`) is the sole scrollport, so the sticky
-    // button bar below anchors to *its* visible bottom edge. A nested
-    // overflow-y-auto here would become the nearest scrollport instead and,
-    // whenever the question fit inside its own cap but not the wrapper's, the
-    // buttons would stick to nothing and stay clipped (#508).
+    // No scroll container of its own: SessionShell renders questions in a
+    // dedicated `prompts` scrollport, and the sticky button bar below anchors
+    // to *that* window's bottom edge. A nested overflow-y-auto here would
+    // become the nearest scrollport instead and, whenever the question fit
+    // inside its own cap but not the outer one, the buttons would stick to
+    // nothing and stay clipped (#508).
     <div className="shrink-0 px-4 pt-3" data-testid="opencode-question-request">
       <Alert variant="warning">
         <div className="space-y-4">

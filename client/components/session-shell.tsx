@@ -39,6 +39,16 @@ export interface SessionShellProps {
 
   banners?: ReactNode;
 
+  /**
+   * Blocking requests the turn cannot continue without (agent questions).
+   * Rendered in their own scrollport beneath `banners`, not inside it: the
+   * banners window is capped at 25% and shared with passive notices, and a
+   * sticky action bar can never rise above its own containing block, so a
+   * question that started near or below that window's fold had its Submit
+   * button clipped with no visible way to reach it (#508).
+   */
+  prompts?: ReactNode;
+
   transcript: {
     virtualized?: boolean;
     items: DisplayItem[];
@@ -103,7 +113,7 @@ export interface SessionShellProps {
   overlays?: ReactNode;
 }
 
-export function SessionShell({ testIds, browserSessionID, header, banners, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
+export function SessionShell({ testIds, browserSessionID, header, banners, prompts, transcript, scroll, composer, inspector, overlays }: SessionShellProps) {
   const TranscriptView = transcript.virtualized ? VirtualTranscript : Transcript;
   const [toolsOpen, setToolsOpen] = useState(false);
   const [browserNavigation, setBrowserNavigation] = useState<{ id: number; url: string; sessionID: string }>();
@@ -143,6 +153,14 @@ export function SessionShell({ testIds, browserSessionID, header, banners, trans
       <div className="max-h-[25%] shrink-0 overflow-y-auto">
         {banners}
       </div>
+      {/* Own scrollport so the question's sticky action bar anchors to a window
+          it is the first thing inside of; bounded so the transcript keeps some
+          room, in dvh so a phone URL bar cannot shrink it below the bar. */}
+      {prompts && (
+        <div className="max-h-[45dvh] shrink-0 overflow-y-auto overscroll-contain" data-testid={`${testIds.root}-prompts`}>
+          {prompts}
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="relative min-h-0 min-w-0 flex-1">
