@@ -20,21 +20,33 @@
   --color-purple-100: #ede9fe;
   --color-purple-700: #6d28d9;
 
-  /* ── Surfaces */
-  --color-background-surface: #ffffff;
-  --color-background-surface-neutral-muted: #f3f4f6;
-  --color-background-surface-info-muted: #eff6ff;
-  --color-background-surface-success-muted: #ecfdf5;
-  --color-background-surface-warning-muted: #fffbeb;
-  --color-background-surface-danger-muted: #fef2f2;
+  /* ── Surfaces
+   * Light mode is a warm paper field rather than #ffffff. A long agent
+   * transcript is read, not scanned, and pure white at full-page scale is the
+   * glare source; beige lowers it without tinting the prose. Raised is
+   * *lighter* than the field so a card lifts off the page — the inverse of the
+   * white theme, where cards could only be distinguished by going grey.
+   *
+   * The accent is green, never orange. Orange is Claude's signature and this
+   * is not a clone of it; the green below is the one the app already used for
+   * primary actions, so paper changes the field and not the brand. */
+  --color-background-surface: #f7f4ec;
+  --color-background-surface-raised: #fffdf8;
+  --color-background-surface-neutral-muted: #ece7da;
+  --color-background-surface-info-muted: #e9eefb;
+  --color-background-surface-success-muted: #e6f2e8;
+  --color-background-surface-warning-muted: #f9f1dd;
+  --color-background-surface-danger-muted: #fbeae6;
   /* Solid danger fill. Only the notification counter uses it: a muted pill
    * does not read as "unanswered" at nav size. */
   --color-background-surface-danger: #dc2626;
   --color-text-on-danger: #ffffff;
-  --color-background-overlay: rgb(17 24 39 / 0.65);
+  --color-background-overlay: rgb(41 37 33 / 0.6);
+  /* QR and iframe canvases stay true white in both appearances: they carry
+   * scanned or third-party content that assumes a white page, not our field. */
   --color-background-qr: #ffffff;
   --color-foreground-qr: #000000;
-  --color-browser-chrome: #16a34a;
+  --color-browser-chrome: #0f7a3d;
 
   /* ── Message provenance (Plan / Build)
    * Own semantic family rather than reusing warning/info: these mean "produced
@@ -44,50 +56,68 @@
    * The muted surfaces fill the mode pill only. Message bodies are never
    * tinted — the rail marks the row without putting a wash behind prose that
    * already uses surface fills for code blocks and tables. */
-  --color-background-surface-plan-muted: #fffbeb;
-  --color-border-plan: #b45309;
-  --color-text-plan: #92400e;
-  --color-background-surface-build-muted: #eff6ff;
+  --color-background-surface-plan-muted: #f9f1dd;
+  --color-border-plan: #8f4405;
+  --color-text-plan: #7c3c06;
+  --color-background-surface-build-muted: #e9eefb;
   --color-border-build: #1d4ed8;
   --color-text-build: #1e40af;
 
-  /* ── Actions */
-  --color-background-action-primary: #16a34a;
-  --color-background-action-primary-hover: #15803d;
+  /* ── Actions
+   * Primary green is darker than the old #16a34a because that value scored
+   * 3.00 against the white field and only 2.67 against a muted one — as a
+   * focus ring on beige it would have failed the 3:1 non-text minimum. At
+   * #0f7a3d the ring clears 4.39 on the worst surface and white label text on
+   * the solid fill clears 5.42. */
+  --color-background-action-primary: #0f7a3d;
+  --color-background-action-primary-hover: #0b6231;
   --color-background-action-info: #2563eb;
   --color-background-action-info-hover: #1d4ed8;
-  --color-background-action-ghost-hover: #f3f4f6;
-  --color-text-action-ghost: #374151;
+  --color-background-action-ghost-hover: #ece7da;
+  --color-text-action-ghost: #4a4339;
 
-  /* ── Text */
-  --color-text-default: #111827;
-  --color-text-muted: #6b7280;
+  /* ── Text
+   * Warm near-black ink instead of the blue-grey #111827 — a cool ink on a
+   * warm field reads as a mismatch before it reads as text. Muted, success,
+   * warning and danger are each a step darker than their white-theme values:
+   * beige raises the floor, and these now clear AA 4.5 on every light surface
+   * including a muted chip nested inside a muted panel, which the white theme
+   * did not. */
+  --color-text-default: #1c1917;
+  --color-text-muted: #635c50;
   --color-text-info: #1d4ed8;
-  --color-text-success: #15803d;
-  --color-text-warning: #b45309;
-  --color-text-danger: #b91c1c;
+  --color-text-success: #146c35;
+  --color-text-warning: #8f4405;
+  --color-text-danger: #b01717;
 
   /* ── Source syntax
    * Code syntax is its own semantic family: these colors distinguish language
    * roles, not application statuses. Keep every foreground readable against
-   * the editor surface in both appearances. */
-  --color-syntax-comment: #5f6b7a;
-  --color-syntax-keyword: #6d28d9;
-  --color-syntax-name: #0369a1;
-  --color-syntax-string: #047857;
-  --color-syntax-number: #b45309;
-  --color-syntax-punctuation: #374151;
+   * the editor surface in both appearances. Retuned for the warm field: the
+   * white-theme values were chosen against #ffffff and lost separation once
+   * the page stopped being the lightest thing on it. */
+  --color-syntax-comment: #645b4e;
+  --color-syntax-keyword: #6b21a8;
+  --color-syntax-name: #075985;
+  --color-syntax-string: #12683c;
+  --color-syntax-number: #8f4405;
+  --color-syntax-punctuation: #4a4339;
 
   /* ── Lines */
-  --color-border-default: #e5e7eb;
-  --color-border-focus: #16a34a;
-  --color-border-danger: #fca5a5;
+  --color-border-default: #ddd5c4;
+  --color-border-focus: #0f7a3d;
+  --color-border-danger: #e3a9a2;
   /* Deliberately heavier than the default line. A floating panel has to prove
    * it is floating; the in-page border weight makes it read as another card. */
-  --color-border-overlay: #c8ccd4;
+  --color-border-overlay: #bdb19a;
 
   /* Translucent neutral fill for chips, bubbles and code blocks. Translucent
-   * rather than opaque so it reads correctly over any surface. */
+   * rather than opaque so it reads correctly over any surface.
+   *
+   * Note this mixes the *ink*, so warming the ink above also warms every chip,
+   * bubble and code block that uses this. That is intended here — the fill
+   * should belong to the same paper — but it is why the ink and this token
+   * cannot be changed independently. */
   --color-background-muted: color-mix(in oklab, var(--color-text-default) 8%, transparent);
 
   /* ── Radii */
@@ -96,25 +126,33 @@
 
   /* ── App-local aliases (historically "hh-" in the predecessor) */
   --hh-border: var(--color-border-default);
-  --hh-row-hover: #f9fafb;
+  --hh-row-hover: #f0ebe0;
 
   /* ── Playbooks
-   * The catalog is deliberately its own visual reading surface: reusable agent
-   * procedures benefit from a quieter, document-like field and a terminal
-   * hierarchy. Components consume these semantic aliases only. */
-  --playbooks-paper: #f7f4ea;
-  --playbooks-surface: #fffdf6;
-  --playbooks-ink: #123d32;
-  --playbooks-muted: #587064;
-  --playbooks-line: #164d3d;
-  --playbooks-accent: #087851;
-  --playbooks-accent-soft: #d8f1e1;
-  --playbooks-shadow: #164d3d;
-  --playbooks-terminal: #062e24;
-  --playbooks-terminal-ink: #e9fff3;
-  --playbooks-terminal-muted: #a0c9b3;
-  --playbooks-terminal-line: #16835f;
-  --playbooks-overlay: rgb(18 61 50 / 28%);
+   * The catalog keeps its own *typographic* character — serif headings, hard
+   * offset shadows, a terminal panel — but no longer its own palette. It was
+   * the one page already on warm paper with green ink, and the rest of the app
+   * contradicted it the moment you navigated away; now that the field is paper
+   * everywhere, a second set of colour values would be the thing that looks
+   * wrong. These are aliases onto the global tokens, kept as names so the
+   * page's CSS module does not have to be rewritten and so the catalogue can
+   * diverge again deliberately rather than by drift.
+   *
+   * The terminal family is the exception: it stays dark in BOTH appearances,
+   * because it depicts a terminal. */
+  --playbooks-paper: var(--color-background-surface);
+  --playbooks-surface: var(--color-background-surface-raised);
+  --playbooks-ink: var(--color-text-default);
+  --playbooks-muted: var(--color-text-muted);
+  --playbooks-line: var(--color-border-overlay);
+  --playbooks-accent: var(--color-background-action-primary);
+  --playbooks-accent-soft: var(--color-background-surface-success-muted);
+  --playbooks-shadow: var(--color-border-overlay);
+  --playbooks-terminal: #21201c;
+  --playbooks-terminal-ink: #f2efe6;
+  --playbooks-terminal-muted: #b3ab9b;
+  --playbooks-terminal-line: #4d4941;
+  --playbooks-overlay: rgb(41 37 33 / 0.5);
 }
 
 .dark {
@@ -124,6 +162,10 @@
   --color-purple-700: #ddd6fe;
 
   --color-background-surface: #16181d;
+  /* Dark inverts the light rule: a raised card is *lighter* there because the
+   * field is light, and lighter again here because the field is dark. Both
+   * appearances therefore lift a card toward the viewer rather than away. */
+  --color-background-surface-raised: #1d2027;
   --color-background-surface-neutral-muted: #22252c;
   --color-background-surface-info-muted: #172554;
   --color-background-surface-success-muted: #052e1d;
@@ -173,18 +215,20 @@
   --hh-border: var(--color-border-default);
   --hh-row-hover: #1c1f25;
 
-  --playbooks-paper: #101815;
-  --playbooks-surface: #16221d;
-  --playbooks-ink: #e5f4e9;
-  --playbooks-muted: #abc4b2;
-  --playbooks-line: #9cd6b3;
-  --playbooks-accent: #52d88f;
-  --playbooks-accent-soft: #173d2c;
-  --playbooks-shadow: #9cd6b3;
-  --playbooks-terminal: #071c15;
-  --playbooks-terminal-ink: #eafff0;
-  --playbooks-terminal-muted: #93c5aa;
-  --playbooks-terminal-line: #44c881;
+  /* Collapsed onto the global tokens, as in :root. The catalogue keeps its
+   * typographic character and loses only its private palette. */
+  --playbooks-paper: var(--color-background-surface);
+  --playbooks-surface: var(--color-background-surface-raised);
+  --playbooks-ink: var(--color-text-default);
+  --playbooks-muted: var(--color-text-muted);
+  --playbooks-line: var(--color-border-overlay);
+  --playbooks-accent: var(--color-background-action-primary);
+  --playbooks-accent-soft: var(--color-background-surface-success-muted);
+  --playbooks-shadow: var(--color-border-overlay);
+  --playbooks-terminal: #0e1014;
+  --playbooks-terminal-ink: #e8eaed;
+  --playbooks-terminal-muted: #9aa0a6;
+  --playbooks-terminal-line: #3a3f49;
   --playbooks-overlay: rgb(0 0 0 / 62%);
 }
 

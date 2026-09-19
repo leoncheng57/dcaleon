@@ -85,6 +85,21 @@ export const REVIEW_SCENARIOS: readonly ReviewScenario[] = [
     id: "settings-page", title: "Settings — effective configuration", route: "/settings?directory=/tmp/mock-project",
     steps: [{ testId: "opencode-setting-subagent-depth", action: "visible" }],
   },
+  {
+    // The catalogue was the app's one warm-paper page and the rest of the
+    // product contradicted it; after #518 it is the page that proves the field
+    // now agrees. It is also the only surface carrying the terminal panel,
+    // which deliberately stays dark in both appearances.
+    id: "playbooks-catalog", title: "Playbooks — catalogue on the shared paper field", route: "/playbooks",
+    steps: [{ testId: "opencode-playbook-reminders-ready", action: "visible" }],
+  },
+  {
+    // A transcript is the longest continuous reading surface in the app and
+    // the reason the field moved off #ffffff, so a palette change that is fine
+    // everywhere else still has to be judged here.
+    id: "session-transcript", title: "Session — transcript reading surface", route: "/sessions/ses_mock_done?directory=/tmp/mock-project",
+    steps: [{ testId: "opencode-composer", action: "visible" }],
+  },
 ];
 
 export function reviewScenario(id: string): ReviewScenario {
@@ -101,7 +116,16 @@ export function selectReviewScenarios(files: string[]): { ids: string[]; reason:
   const ids = new Set<string>();
   let unknown = false;
   for (const file of visual) {
-    if (/DesignComponents|design-components|client\/ds\/(?:responsive-panel|panel-selector|panel-state)|client\/theme\/motion/i.test(file)) { ids.add("design-gallery"); ids.add("design-panel"); }
+    // The token layer is every surface at once, so it selects one scenario per
+    // appearance-bearing region rather than falling into the generic unknown
+    // bucket below — that bucket suggests two states, which would leave a
+    // palette change reviewed on a fraction of what it repaints. It still sets
+    // `unknown`, because a token edit can reach places no catalogue enumerates.
+    if (/client\/theme\/tokens\.css$/i.test(file)) {
+      unknown = true;
+      for (const id of ["design-gallery", "session-transcript", "playbooks-catalog", "planning-page", "settings-page", "hub-projects"]) ids.add(id);
+    }
+    else if (/DesignComponents|design-components|client\/ds\/(?:responsive-panel|panel-selector|panel-state)|client\/theme\/motion/i.test(file)) { ids.add("design-gallery"); ids.add("design-panel"); }
     else if (/Planning|planning/i.test(file)) { ids.add("planning-page"); ids.add("planning-create"); }
     else if (/Settings|settings/i.test(file)) ids.add("settings-page");
     else if (/Hub|projects/i.test(file)) ids.add("hub-projects");

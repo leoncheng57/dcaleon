@@ -139,7 +139,7 @@ export function ShareExportDialog({ directory, sessionID, title, events, target,
       aria-labelledby="share-export-title"
       aria-modal="true"
       tabIndex={-1}
-      className="m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-xl overflow-y-auto overflow-x-hidden rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-0 text-[var(--color-text-default)] shadow-xl backdrop:bg-[var(--color-background-overlay)] sm:w-[calc(100%-2rem)]"
+      className="m-auto max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-xl overflow-y-auto overflow-x-hidden rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface-raised)] p-0 text-[var(--color-text-default)] shadow-xl backdrop:bg-[var(--color-background-overlay)] sm:w-[calc(100%-2rem)]"
       data-testid="opencode-share-export-dialog"
       onCancel={(event) => { event.preventDefault(); close(); }}
       onClose={onClose}

@@ -188,7 +188,7 @@ export function ModelPicker({
     {open && createPortal(
       <div className={`fixed inset-0 ${portalZIndex} flex items-end justify-center sm:items-start sm:p-4 sm:pt-[10vh]`} data-testid={`${testId}-panel`}>
         <button type="button" aria-label="Close model picker" className="absolute inset-0 bg-[var(--color-background-overlay)]" onClick={close} />
-        <div ref={dialogRef} className="relative flex max-h-[82dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl sm:max-h-[72vh] sm:max-w-xl sm:rounded-xl" role="dialog" aria-modal="true" aria-label={`${label} picker`} onKeyDown={onDialogKeyDown}>
+        <div ref={dialogRef} className="relative flex max-h-[82dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface-raised)] shadow-xl sm:max-h-[72vh] sm:max-w-xl sm:rounded-xl" role="dialog" aria-modal="true" aria-label={`${label} picker`} onKeyDown={onDialogKeyDown}>
           <div className="flex items-center gap-2 border-b border-[var(--color-border-default)] p-3">
             <div className="relative min-w-0 flex-1">
               <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />

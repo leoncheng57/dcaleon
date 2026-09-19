@@ -7,7 +7,12 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
     <div
       ref={ref}
       className={cn(
-        "rounded-[var(--border-radius-12)] bg-[var(--color-background-surface)] has-shadow-default",
+        // Raised, not the page field: on the warm paper background a card that
+        // shares the field's colour is separated by its shadow alone, which is
+        // the weakest cue the theme has. Raised lifts it toward white in light
+        // mode and away from black in dark, so the shadow reinforces an edge
+        // that already reads.
+        "rounded-[var(--border-radius-12)] bg-[var(--color-background-surface-raised)] has-shadow-default",
         className,
       )}
       {...props}

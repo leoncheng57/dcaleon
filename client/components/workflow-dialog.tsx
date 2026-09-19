@@ -352,7 +352,7 @@ export function WorkflowDialog({
         aria-modal="true"
         aria-labelledby="composer-workflow-title"
         tabIndex={-1}
-        className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-4 shadow-xl sm:max-w-xl sm:rounded-xl sm:p-5"
+        className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-[var(--color-border-default)] bg-[var(--color-background-surface-raised)] p-4 shadow-xl sm:max-w-xl sm:rounded-xl sm:p-5"
         onKeyDown={(event) => { if (event.key === "Escape" && !busy) onClose(); }}
       >
         <div className="flex items-start gap-3">

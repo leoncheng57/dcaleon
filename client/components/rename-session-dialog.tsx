@@ -68,7 +68,7 @@ export function RenameSessionDialog({ currentTitle, onRename, onClose }: {
     <dialog
       aria-labelledby="rename-session-title"
       aria-modal="true"
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-0 text-[var(--color-text-default)] shadow-2xl backdrop:bg-black/60 max-sm:mb-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface-raised)] p-0 text-[var(--color-text-default)] shadow-2xl backdrop:bg-black/60 max-sm:mb-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none"
       data-testid="rename-session-dialog"
       onCancel={(event) => {
         if (submittingRef.current) event.preventDefault();

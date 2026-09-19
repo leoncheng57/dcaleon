@@ -282,7 +282,7 @@ export function NotificationPopover({ scopedPath }: { scopedPath: (path: string)
           />
           <div
             aria-label="Notifications"
-            className="has-shadow-overlay fixed inset-x-2 top-11 z-50 flex max-h-[min(32rem,calc(100dvh-4rem))] flex-col gap-2 rounded-lg bg-[var(--color-background-surface)] p-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[34rem]"
+            className="has-shadow-overlay fixed inset-x-2 top-11 z-50 flex max-h-[min(32rem,calc(100dvh-4rem))] flex-col gap-2 rounded-lg bg-[var(--color-background-surface-raised)] p-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[34rem]"
             id={panelId}
             ref={panelRef}
             role="dialog"
