@@ -24,7 +24,9 @@ test.describe("appearance", () => {
     await page.emulateMedia({ colorScheme: "light" });
     await expect(page.getByTestId("opencode-appearance-status")).toHaveText("Selected: System (Light)");
     await expect(page.locator("html")).not.toHaveClass(/dark/);
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#16a34a");
+    // Tracks --color-browser-chrome, which darkened with the primary green in
+    // the paper repaint (#518) so the focus ring clears 3:1 against beige.
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0f7a3d");
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("light");
   });
 
