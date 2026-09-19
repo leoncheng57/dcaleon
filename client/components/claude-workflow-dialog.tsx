@@ -40,7 +40,7 @@ export function ClaudeWorkflowDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center" role="presentation" onClick={onClose}>
       <section
-        className="w-full max-w-2xl rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface)] shadow-xl"
+        className="w-full max-w-2xl rounded-lg border border-[var(--color-border-default)] bg-[var(--color-background-surface-raised)] shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="claude-workflow-title"

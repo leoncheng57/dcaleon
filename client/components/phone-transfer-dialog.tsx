@@ -55,7 +55,7 @@ export function PhoneTransferDialog({ targetUrl, onClose }: { targetUrl: string;
       ref={dialogRef}
       aria-describedby="phone-transfer-description"
       aria-labelledby="phone-transfer-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface)] p-0 text-[var(--color-text-default)] shadow-xl backdrop:bg-[var(--color-background-overlay)]"
+      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-xl border border-[var(--color-border-default)] bg-[var(--color-background-surface-raised)] p-0 text-[var(--color-text-default)] shadow-xl backdrop:bg-[var(--color-background-overlay)]"
       data-testid="opencode-phone-transfer-dialog"
       onCancel={(event) => {
         event.preventDefault();
