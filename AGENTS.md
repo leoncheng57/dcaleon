@@ -1341,6 +1341,41 @@ several decisions below.
     is no authentication at all in front of an island that holds the Unix user's full
     authority.
 
+
+38. **The alertable credential failure is `missing`, never expiry.** The obvious
+    Phase-7 alert — warn when the Claude token is close to expiring — is wrong, and
+    `server/claude/credentialHealth.ts` says so at the top. The CLI holds a
+    short-lived access token (about eight hours on the cloud box) beside a refresh
+    token and refreshes it *lazily*, when a turn next needs one. So a threshold
+    measured in days is tripped permanently, and a lapsed `expiresAt` on an idle host
+    means only that nothing has asked yet — the next turn refreshes and succeeds.
+    Both would fire on a healthy box, and an alert that fires on a healthy box gets
+    muted. What is unambiguous is the store becoming unreadable: file gone, JSON
+    malformed, no `accessToken`. That never resolves on its own and it stops every
+    turn. Hence four states — `ok`, `stale`, `missing`, `unchecked` — of which
+    `isAlertable()` admits exactly one. `stale` is reported and deliberately silent.
+    `server/claude/credentialWatch.ts` is **edge-triggered**: it pushes on the
+    transition into `missing` and again on recovery, so a persistently broken box
+    pushes once rather than hourly, and a recovery is announced because otherwise the
+    only way to learn the box is healthy is to go and look. A first observation that
+    is already `missing` does alert — a BFF starting with no credentials has a
+    problem worth hearing about now. The probe never throws (it runs on a timer, and
+    a throwing probe takes the BFF down on a schedule) and Web Push is optional: with
+    no VAPID keys or no subscription it degrades to the log rather than failing.
+    `/api/health` carries the last observation as `claude.credentials` in both arms,
+    so an external monitor can gate on it without a push subscription.
+
+39. **Rotate the tmux log between runs, not on a timer.** `tee -a` in the supervised
+    loop holds an open descriptor: renaming the file underneath it leaves tee writing
+    to the moved inode, and truncating it in place leaves tee appending at its old
+    offset, producing a sparse file that still reports the old size. So rotation can
+    only happen when no tee owns the file — each loop iteration before the next
+    start, and in `install()` *after* the session is killed (the ordering is asserted
+    by `tests/supervisor.test.ts`, because doing it before the kill is the natural
+    mistake). This covers the case that actually runs away, a crash loop writing a
+    stack trace every five seconds. A healthy process that never exits never rotates,
+    so the real bound is one deploy's worth of logs at 32 MiB — the right trade
+    against corrupting the live log on a 98 GB volume.
 ## Claude transcript performance
 
 - `GET /claude/sessions/:id` defaults to at most 50 events / 128 KiB of event data.
