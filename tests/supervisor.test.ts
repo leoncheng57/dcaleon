@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { chooseBackend, requireBackend } from "../scripts/supervisor.js";
-import { RESTART_DELAY_SECONDS, TMUX_SESSION, renderSupervisedLoop, supervisorPaths } from "../scripts/tmuxSupervisor.js";
+import { PORT_RELEASE_ATTEMPTS, RESTART_DELAY_SECONDS, TMUX_SESSION, renderSupervisedLoop, supervisorPaths } from "../scripts/tmuxSupervisor.js";
 import { BFF_LABEL } from "../scripts/launchd.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -71,6 +71,38 @@ describe("tmux supervised loop", () => {
 
   it("keeps its log beside the launchd logs", () => {
     expect(supervisorPaths("/srv/dcaleon").log).toBe("/srv/dcaleon/.state/logs/bff.tmux.log");
+  });
+});
+
+// Regression: the first real Linux deploy failed here. install() killed its own
+// previous session and then refused to start, because `tmux kill-session`
+// returns before the Node process it held closes its listening socket — so the
+// port check found the corpse it had just made. launchd's bootout is
+// synchronous enough that the launchd backend never sees this.
+describe("tmux port release after kill-session", () => {
+  const source = execFileSync("cat", [path.join(repoRoot, "scripts", "tmuxSupervisor.ts")], { encoding: "utf8" });
+
+  it("waits for the port between killing the old session and checking it", () => {
+    const install = source.slice(source.indexOf("export function install"), source.indexOf("export function status"));
+    const killAt = install.indexOf("kill-session");
+    const waitAt = install.indexOf("waitForPortRelease");
+    const checkAt = install.indexOf("assertPortAvailable");
+    expect(killAt).toBeGreaterThan(-1);
+    expect(waitAt).toBeGreaterThan(killAt);
+    expect(checkAt).toBeGreaterThan(waitAt);
+  });
+
+  it("gives up waiting rather than blocking forever", () => {
+    expect(PORT_RELEASE_ATTEMPTS).toBeGreaterThan(0);
+    expect(PORT_RELEASE_ATTEMPTS).toBeLessThanOrEqual(30);
+  });
+
+  // A missing `ss` must read as "cannot tell", never as "the port is free":
+  // the caller warns instead of silently starting a second listener.
+  it("reports an unknown port state distinctly from an idle one", () => {
+    const body = source.slice(source.indexOf("export function portInUse"), source.indexOf("export function waitForPortRelease"));
+    expect(body).toContain("return undefined");
+    expect(source).toContain("cannot confirm");
   });
 });
 

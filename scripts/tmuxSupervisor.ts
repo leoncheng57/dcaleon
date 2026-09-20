@@ -23,6 +23,9 @@ export const TMUX_SESSION = BFF_LABEL.replaceAll(".", "-");
 /** Seconds between a supervised process exiting and the loop restarting it. */
 export const RESTART_DELAY_SECONDS = 5;
 
+/** One-second polls waiting for a killed session to release its port. */
+export const PORT_RELEASE_ATTEMPTS = 10;
+
 export interface SupervisedLoopOptions {
   nodePath: string;
   serverPath: string;
@@ -68,17 +71,38 @@ function build(root: string): void {
   if (result.status !== 0) throw new Error("production build failed");
 }
 
-function assertPortAvailable(port: number): void {
-  // `ss` on a modern Linux image; absence is not proof the port is free, so a
-  // missing binary is reported rather than treated as a pass.
+/**
+ * Undefined when `ss` is missing: absent evidence is not evidence the port is
+ * free, and the caller has to tell "no listener" apart from "cannot tell".
+ */
+export function portInUse(port: number): boolean | undefined {
   const result = spawnSync("ss", ["-tlnH", `sport = :${port}`], { encoding: "utf8" });
-  if (result.error && (result.error as NodeJS.ErrnoException).code === "ENOENT") {
+  if (result.error && (result.error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+  if (result.status !== 0) return undefined;
+  return result.stdout.trim() !== "";
+}
+
+/**
+ * `tmux kill-session` returns as soon as the session is gone, but the Node
+ * process it held takes a moment longer to close its listening socket. Without
+ * this wait, install kills its own previous session and then refuses to start
+ * because "the port is in use" — by the corpse it just created. launchd's
+ * bootout is synchronous enough that the launchd backend never sees this.
+ */
+export function waitForPortRelease(port: number, attempts = PORT_RELEASE_ATTEMPTS): void {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (portInUse(port) !== true) return;
+    spawnSync("sleep", ["1"]);
+  }
+}
+
+function assertPortAvailable(port: number): void {
+  const inUse = portInUse(port);
+  if (inUse === undefined) {
     console.warn(`Warning: ss is unavailable; cannot confirm :${port} is free.`);
     return;
   }
-  if (result.status === 0 && result.stdout.trim() !== "") {
-    throw new Error(`port ${port} already has a listener; choose another supervised port`);
-  }
+  if (inUse) throw new Error(`port ${port} already has a listener; choose another supervised port`);
 }
 
 export function supervisorPaths(root: string) {
@@ -112,8 +136,11 @@ export function install(root: string, port: number): void {
   mkdirSync(paths.logDir, { recursive: true });
 
   // Stop before the port check: the listener we are about to object to is
-  // usually our own previous session.
-  if (sessionExists()) tmux(["kill-session", "-t", TMUX_SESSION]);
+  // usually our own previous session — then wait for it to actually let go.
+  if (sessionExists()) {
+    tmux(["kill-session", "-t", TMUX_SESSION]);
+    waitForPortRelease(port);
+  }
   assertPortAvailable(port);
 
   const loop = renderSupervisedLoop({ nodePath: process.execPath, serverPath, port, logPath: paths.log });
