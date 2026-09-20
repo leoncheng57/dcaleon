@@ -38,6 +38,18 @@ Three measured facts, not assumptions, set the design (see `AGENTS.md` decision 
   `__CF_USER_TEXT_ENCODING`, synthesized when absent), because macOS resolves the login
   Keychain by user — without `$USER`, even an un-sandboxed `claude` reports "Not logged
   in". Identity is not a credential.
+- **Credential store, by platform.** The usage panel — and nothing else — reads the
+  credential, read-only, to call the OAuth usage endpoint. `server/claude/auth.ts` picks
+  the store from `process.platform`, never from an env var: the macOS Keychain item on
+  darwin, `$CLAUDE_CONFIG_DIR/.credentials.json` (default `~/.claude`, mode 0600, same
+  `claudeAiOauth` JSON shape) elsewhere. A failure there costs the limits display and
+  nothing else; turns keep running. Do not substitute `claude setup-token` /
+  `CLAUDE_CODE_OAUTH_TOKEN` — the `SAFE_ENV` allowlist strips it with `ANTHROPIC_API_KEY`
+  on purpose. Log in on the host with `/login`.
+- **Platform.** The Claude island is not Seatbelt-wrapped, so it runs on Linux unchanged;
+  DSH is not, and a non-macOS host reports DSH unavailable (decision 36). The absent OS
+  backstop above is therefore the same on Linux, which is why a headless deployment should
+  run the BFF as an unprivileged user rather than the login account.
 - **Filesystem: there is no OS-level boundary.** The `claude` binary is spawned directly,
   with no Seatbelt wrapper, so a session holds exactly the authority `claude` holds in a
   terminal. The generated settings file is the only confinement: a read-only preset denies

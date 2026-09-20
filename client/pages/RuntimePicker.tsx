@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Badge } from "../ds/badge.js";
 import { ISLANDS } from "../components/island-selector.js";
 import { api } from "../lib/api.js";
+import { islandAvailability, type IslandStatus } from "../lib/islands.js";
 
 export function RuntimePickerPage() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export function RuntimePickerPage() {
     dshConfigured: boolean;
     claudeEnabled: boolean;
     claudeConfigured: boolean;
+    islands?: IslandStatus[];
   } | null>(null);
 
   useEffect(() => {
@@ -21,17 +23,12 @@ export function RuntimePickerPage() {
         dshConfigured: c.dshConfigured,
         claudeEnabled: c.claudeEnabled,
         claudeConfigured: c.claudeConfigured,
+        islands: c.islands,
       }))
       .catch(() => setConfig({ dshEnabled: false, dshConfigured: false, claudeEnabled: false, claudeConfigured: false }));
   }, []);
 
-  const available = (id: string): boolean | null => {
-    if (!config) return null;
-    if (id === "opencode") return true;
-    if (id === "dsh") return config.dshEnabled && config.dshConfigured;
-    if (id === "claude") return config.claudeEnabled && config.claudeConfigured;
-    return false;
-  };
+  const status = (id: string) => (config ? islandAvailability(id, config) : null);
 
   return (
     <main className="mx-auto max-w-3xl p-4 sm:p-8" data-testid="runtime-picker">
@@ -53,8 +50,8 @@ export function RuntimePickerPage() {
       <section className="space-y-3" aria-label="Runtime Islands">
         {ISLANDS.map((island) => {
           const Icon = island.icon;
-          const status = available(island.id);
-          const disabled = status === false;
+          const islandStatus = status(island.id);
+          const disabled = islandStatus?.available === false;
           return (
             <button
               key={island.id}
@@ -72,17 +69,20 @@ export function RuntimePickerPage() {
               <div className="flex items-center gap-3">
                 <Icon aria-hidden="true" size={22} className="text-[var(--color-text-muted)]" />
                 <span className="text-base font-semibold">{island.label}</span>
-                {status === null ? (
+                {islandStatus === null ? (
                   <Badge variant="neutral">checking…</Badge>
-                ) : status ? (
-                  <Badge variant="success">available</Badge>
                 ) : (
-                  <Badge variant="neutral">not configured</Badge>
+                  <Badge variant={islandStatus.available ? "success" : "neutral"}>{islandStatus.label.toLowerCase()}</Badge>
                 )}
               </div>
               <p className="mt-2 text-sm text-[var(--color-text-muted)]">
                 {island.description}
               </p>
+              {islandStatus?.reason ? (
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]" data-testid={`runtime-card-reason-${island.id}`}>
+                  {islandStatus.reason}
+                </p>
+              ) : null}
               <div className="mt-3 space-y-0.5 text-xs text-[var(--color-text-muted)]">
                 {island.traits.map((trait) => {
                   const colon = trait.indexOf(":");
