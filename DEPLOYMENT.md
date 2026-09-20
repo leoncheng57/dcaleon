@@ -1,8 +1,31 @@
-# Local deployment and restart
+# Deployment and restart
 
-This is the short, reproducible runbook for updating the locally hosted dcaleon
-application. For the full operational design, failure modes, Tailscale setup, and
-first-time installation, see [`deploy/README.md`](deploy/README.md).
+This is the short, reproducible runbook for updating a supervised dcaleon
+deployment, on either supported host. For the full operational design, failure
+modes, remote access, and first-time installation, see
+[`deploy/README.md`](deploy/README.md).
+
+## Two hosts, one runbook
+
+Every command below is the same on both. `npm run service:*` and
+`scripts/deploy.sh` dispatch on `process.platform` / `uname -s`, so the only
+thing that changes is what is doing the supervising underneath.
+
+| Host | Supervisor | What holds the process | Survives a host restart? |
+|---|---|---|---|
+| macOS | launchd | `ai.dcaleon.bff` LaunchAgent, `KeepAlive` | **Yes** — `RunAtLoad` brings it back |
+| Linux | tmux | detached session `ai-dcaleon-bff` running a `while true` loop | **No** — rerun `service:install` |
+
+The backend follows the platform and cannot be chosen with an environment
+variable. This is the same rule the runtime islands follow: what a host *can*
+do is a property of the host, not an operator preference.
+
+The Linux target is a Coder workspace — one Kubernetes pod with
+`restart_policy = "Never"` and no init system the workspace user can bootstrap
+into, so systemd is not available to supervise with. A detached tmux session is
+what that image already uses for its own agent, and it outlives the SSH
+connection that started it. The cost is stated plainly in the table: a stopped
+pod comes back with no sessions and nothing restarts dcaleon for you.
 
 ## Know which server you are using
 
@@ -27,7 +50,7 @@ that the others were restarted or updated:
 | Process | Development default | Supervised/reference default | Restart owner |
 |---|---:|---:|---|
 | Vite React UI | `5173` (then `5174`, etc. if occupied) | Not used | Terminal running `npm run dev` |
-| dcaleon Express BFF | `3000` | `3210` | Development terminal or `ai.dcaleon.bff` LaunchAgent |
+| dcaleon Express BFF | `3000` | `3210` | Development terminal, the `ai.dcaleon.bff` LaunchAgent (macOS), or the `ai-dcaleon-bff` tmux session (Linux) |
 | OpenCode server | `4096` unless `.env` says otherwise | Reference deployment may use `4097` | Separate OpenCode supervisor |
 
 Claude has no listening port. A Claude-island turn is a `claude` CLI child process
@@ -41,7 +64,7 @@ The three runtime islands have different relationships to the BFF process:
 
 | Island | Relationship to BFF | Survives BFF restart? |
 |---|---|---|
-| OpenCode | Independent process (`ai.opencode.serve` LaunchAgent) | **Yes** — separate process continues, BFF reconnects via SSE |
+| OpenCode | Independent process (`ai.opencode.serve` LaunchAgent, macOS only) | **Yes** — separate process continues, BFF reconnects via SSE |
 | Claude | Child process (`claude -p` spawned by BFF supervisor) | **No** — child killed on SIGTERM; session marked interrupted |
 | DSH | Child process (Python bridge spawned by BFF) | **No** — child killed with parent; session marked interrupted |
 
@@ -57,8 +80,14 @@ plain Node process; no Vite process runs in the supervised deployment.
 
 **No island can trigger a BFF restart.** There is no API route, agent tool, or code
 path that allows a running session to restart the BFF. The only restart paths are:
-external `service:install`, an external SIGTERM/SIGINT signal, or launchd's
-`KeepAlive` recovering from a crash.
+external `service:install`, an external SIGTERM/SIGINT signal, or the supervisor
+recovering from a crash — launchd's `KeepAlive` on macOS, the `while true` loop
+on Linux.
+
+On a Linux host the islands table usually has one live row. DSH cannot run there
+at all (its bridge needs macOS Seatbelt), and OpenCode is normally left out of
+`DCALEON_ISLANDS`, so a BFF restart takes down the Claude island and nothing
+else. See AGENTS.md decision 36 for how a host reports that.
 
 ## Reproducible production update
 
@@ -262,13 +291,27 @@ restart OpenCode as part of a dcaleon application upgrade.
 
 ## Diagnose a failed production restart
 
-Check from the inside out:
+Check from the inside out. The first three are identical on both hosts:
 
 ```bash
 curl --fail http://127.0.0.1:3210/api/health
 npm run service:status
 npm run service:logs
-tailscale serve status
+```
+
+Then, for the layer in front of it — `tailscale serve status` on macOS, or on a
+Coder workspace, open the owner-private port URL:
+
+```
+https://3210--main--<workspace>--<owner>.coder.cloud.hebbia.ai
+```
+
+When `service:status` reports nothing on Linux, the usual cause is a pod that
+was stopped and started again: tmux sessions do not survive it. Rerun
+`service:install`. To watch the process directly rather than through the log:
+
+```bash
+tmux attach -t ai-dcaleon-bff
 ```
 
 - If the build fails, the installer leaves the existing BFF serving the previous
@@ -282,6 +325,8 @@ tailscale serve status
 
 ## First-time supervised installation
 
+Identical on both hosts:
+
 ```bash
 cp .env.example .env
 chmod 600 .env
@@ -289,5 +334,16 @@ npm ci
 npm run service:install -- --port=3210
 ```
 
-Configure `.env` before installation, including the existing `OPENCODE_URL`. The
-BFF connects to that long-lived OpenCode process; it never creates a second one.
+Configure `.env` before installation. On macOS that includes the existing
+`OPENCODE_URL`: the BFF connects to that long-lived OpenCode process and never
+creates a second one.
+
+On Linux there is usually no OpenCode server to point at, so set
+`DCALEON_ISLANDS=claude` instead. The BFF then starts without an event bus and
+answers every OpenCode route with a 503 that names the reason, rather than
+failing connections at an upstream that was never there. Claude needs
+`CLAUDE_RUNTIME_ENABLED=true`, an absolute `CLAUDE_BINARY`, and an exact
+`CLAUDE_CLI_VERSION`; its credentials are read from
+`~/.claude/.credentials.json` — written by running `claude` and signing in on
+that host once. Do not set `CLAUDE_CODE_OAUTH_TOKEN`: the supervisor's
+`SAFE_ENV` allowlist strips it, by design.

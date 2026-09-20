@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # One-command supervised deploy: move this checkout to a remote ref, then rebuild
-# and reload the `ai.dcaleon.bff` LaunchAgent.
+# and reload the supervised `ai.dcaleon.bff` service.
+#
+# Two hosts, one script. macOS supervises with launchd; Linux supervises with a
+# detached tmux session, because the Linux host this targets is a Coder
+# workspace — a single pod with no init system the workspace user can bootstrap
+# into. scripts/supervisor.ts owns that choice; everything below only needs to
+# know how to *stop* and *inspect* whatever is running.
 #
 # Why this exists: the DEPLOYMENT.md runbook is a copy-paste sequence that assumes
 # the repository root sitting on `main`. Run it from a worktree and `git switch
@@ -22,7 +28,19 @@ root="$(pwd)"
 
 LABEL="ai.dcaleon.bff"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+TMUX_SESSION="${LABEL//./-}"
 DEV_PORT=3000
+
+# Mirrors chooseBackend() in scripts/supervisor.ts. Kept as a plain case rather
+# than shelling out to tsx so the preflight stays dependency-free.
+case "$(uname -s)" in
+  Darwin) supervisor="launchd" ;;
+  Linux) supervisor="tmux" ;;
+  *)
+    printf '\n✗ no supervisor for %s — dcaleon supervises with launchd on macOS and tmux on Linux\n\n' "$(uname -s)" >&2
+    exit 1
+    ;;
+esac
 
 DEFAULT_PORT=3210
 PORT_ATTEMPTS=3
@@ -32,6 +50,16 @@ port=""
 ref="origin/main"
 force_active_claude=0
 skip_fetch=0
+
+# lsof on macOS, ss on Linux: only used to wait for a port to be released, so
+# a missing tool answers "not in use" and the caller stops waiting.
+port_in_use() {
+  if [ "$supervisor" = "launchd" ]; then
+    /usr/sbin/lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    [ -n "$(ss -tlnH "sport = :${port}" 2>/dev/null)" ]
+  fi
+}
 
 say() { printf '→ %s\n' "$*"; }
 ok() { printf '  ✓ %s\n' "$*"; }
@@ -147,7 +175,7 @@ else
 fi
 
 printf '\n'
-say "deploying ${ref} to ${LABEL} on :${port}"
+say "deploying ${ref} to ${LABEL} on :${port} via ${supervisor}"
 info "checkout: ${root}"
 
 # ---------------------------------------------------------------------------
@@ -249,15 +277,30 @@ if [ "$needs_install" -eq 1 ]; then
   # directory. Stop it first and wait for the port, exactly as DEPLOYMENT.md
   # prescribes; service:install brings it back at the end.
   serving_here=0
-  if [ -f "$PLIST" ] && grep -q "<string>${root}</string>" "$PLIST" &&
-    launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
-    serving_here=1
+  if [ "$supervisor" = "launchd" ]; then
+    if [ -f "$PLIST" ] && grep -q "<string>${root}</string>" "$PLIST" &&
+      launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
+      serving_here=1
+    fi
+  else
+    # The tmux session is started with -c "$root", so its working directory is
+    # the answer to the same question the plist answers on macOS.
+    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+      session_dir="$(tmux display-message -p -t "$TMUX_SESSION" '#{pane_current_path}' 2>/dev/null || true)"
+      # Not `[ ... ] && serving_here=1`: under `set -e` a false test would be
+      # the block's last command and abort the deploy instead of skipping.
+      if [ "$session_dir" = "$root" ]; then serving_here=1; fi
+    fi
   fi
   if [ "$serving_here" -eq 1 ]; then
     warn "the running BFF serves from this checkout — stopping it before 'npm ci'"
-    launchctl bootout "gui/$(id -u)/${LABEL}" || true
+    if [ "$supervisor" = "launchd" ]; then
+      launchctl bootout "gui/$(id -u)/${LABEL}" || true
+    else
+      tmux kill-session -t "$TMUX_SESSION" || true
+    fi
     for _ in 1 2 3 4 5; do
-      /usr/sbin/lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1 || break
+      port_in_use || break
       sleep 1
     done
     ok "stopped; :${port} released"
@@ -287,7 +330,7 @@ if ! npm run service:install -- "${install_args[@]}" 2>&1 | tee "$install_log"; 
   # The sentinel is a substring match (grep -Fq), not exact whole-line
   # (grep -Fxq), because tsx wraps the error in a stack trace.
   recovered=0
-  if grep -Fq "launchctl bootstrap failed" "$install_log" && [ -f "$PLIST" ]; then
+  if [ "$supervisor" = "launchd" ] && grep -Fq "launchctl bootstrap failed" "$install_log" && [ -f "$PLIST" ]; then
     domain="gui/$(id -u)"
     target="${domain}/${LABEL}"
     if launchctl print "$target" >/dev/null 2>&1; then
@@ -295,7 +338,7 @@ if ! npm run service:install -- "${install_args[@]}" 2>&1 | tee "$install_log"; 
       # retrying bootstrap (which would fail on an already-loaded service).
       warn "bootstrap returned an error but the service is loaded — checking health"
       for attempt in $(seq 1 10); do
-        if /usr/bin/curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+        if curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
           ok "service healthy after bootstrap error (health poll ${attempt})"
           recovered=1
           break
@@ -324,9 +367,16 @@ if ! npm run service:install -- "${install_args[@]}" 2>&1 | tee "$install_log"; 
   fi
   if [ "$recovered" -eq 0 ]; then
     keep_install_log=1
+    if [ "$supervisor" = "launchd" ]; then
+      die "service:install failed (log preserved: ${install_log})" \
+        "The LaunchAgent may have been replaced without being loaded. Check:" \
+        "  launchctl print gui/$(id -u)/${LABEL}" \
+        "  npm run service:logs" \
+        "  cat ${install_log}"
+    fi
     die "service:install failed (log preserved: ${install_log})" \
-      "The LaunchAgent may have been replaced without being loaded. Check:" \
-      "  launchctl print gui/$(id -u)/${LABEL}" \
+      "The tmux session may have been killed without being restarted. Check:" \
+      "  tmux has-session -t ${TMUX_SESSION}" \
       "  npm run service:logs" \
       "  cat ${install_log}"
   fi
@@ -340,7 +390,7 @@ trap - EXIT
 say "verifying :${port}"
 healthy=0
 for _ in $(seq 1 20); do
-  if /usr/bin/curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+  if curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
     healthy=1
     break
   fi
@@ -348,14 +398,24 @@ for _ in $(seq 1 20); do
 done
 
 if [ "$healthy" -eq 0 ]; then
+  if [ "$supervisor" = "launchd" ]; then
+    die "deployed ${ref}, but :${port} never answered /api/health" \
+      "The LaunchAgent is installed; the process is not serving. Check:" \
+      "  npm run service:logs" \
+      "  launchctl print gui/$(id -u)/${LABEL}"
+  fi
   die "deployed ${ref}, but :${port} never answered /api/health" \
-    "The LaunchAgent is installed; the process is not serving. Check:" \
+    "The tmux session is running; the process is not serving. Check:" \
     "  npm run service:logs" \
-    "  launchctl print gui/$(id -u)/${LABEL}"
+    "  tmux attach -t ${TMUX_SESSION}"
 fi
 
-pid="$(launchctl list | awk -v l="$LABEL" '$3 == l { print $1 }')"
-ok "healthy on http://127.0.0.1:${port} (pid ${pid:-unknown})"
+if [ "$supervisor" = "launchd" ]; then
+  pid="$(launchctl list | awk -v l="$LABEL" '$3 == l { print $1 }')"
+else
+  pid="$(tmux list-panes -t "$TMUX_SESSION" -F '#{pane_pid}' 2>/dev/null | head -1)"
+fi
+ok "healthy on http://127.0.0.1:${port} (pid ${pid:-unknown}, ${supervisor})"
 
 printf '\n✓ deployed %s at %s\n' "$ref" "$(git rev-parse --short HEAD)"
 info "$(git log -1 --format=%s HEAD)"
