@@ -22,6 +22,21 @@ describe("documentation catalogue", () => {
     expect(doc?.category).toBe("architecture");
   });
 
+  it("covers every host shape and the login matrix in the hosting guide", async () => {
+    const doc = getDoc("hosting");
+    expect(doc?.sourcePath).toBe("docs/hosting.md");
+    expect(doc?.category).toBe("operations");
+
+    // The page exists to answer four questions, and a rewrite that quietly
+    // drops one of them leaves a hosting guide that no longer decides
+    // anything. The headings are the cheapest durable proof they are answered.
+    const source = await doc!.load();
+    expect(source).toContain("## On a local machine");
+    expect(source).toContain("## On a cloud host you do not own");
+    expect(source).toContain("## On a personal cloud VM");
+    expect(source).toContain("## Which login works where");
+  });
+
   it("keeps the capability matrix in step with the retained Managed Child agents", () => {
     const markdown = readFileSync(
       fileURLToPath(new URL("../docs/subagents.md", import.meta.url)),
