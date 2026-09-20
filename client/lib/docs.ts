@@ -92,6 +92,14 @@ export const DOCS: DocDefinition[] = [
     load: () => import("../../docs/research/README.md?raw").then((module) => module.default),
   },
   {
+    slug: "hosting",
+    title: "Hosting dcaleon",
+    description: "Choosing a host: laptop, an operated workspace, or a personal VM — and which login works where.",
+    category: "operations",
+    sourcePath: "docs/hosting.md",
+    load: () => import("../../docs/hosting.md?raw").then((module) => module.default),
+  },
+  {
     slug: "deployment",
     title: "Deployment operations",
     description: "LaunchAgent installation, logs, upgrades, Tailscale access, and process management.",
