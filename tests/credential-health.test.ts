@@ -121,10 +121,10 @@ describe("alerting on the transition, not the state", () => {
 
   it("puts the diagnosis in the alert body, where a phone will show it", () => {
     const message = alertMessage({
-      state: "missing", source: "file", path: "/home/coder/.claude/.credentials.json",
+      state: "missing", source: "file", path: "/home/dcaleon/.claude/.credentials.json",
       expiresAt: null, expiresInMs: null, refreshedAt: null, reason: "ENOENT",
     });
-    expect(message.body).toContain("/home/coder/.claude/.credentials.json");
+    expect(message.body).toContain("/home/dcaleon/.claude/.credentials.json");
     expect(message.body).toContain("ENOENT");
     expect(recoveryMessage().body).toContain("No action needed");
   });

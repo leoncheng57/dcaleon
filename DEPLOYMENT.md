@@ -20,12 +20,12 @@ The backend follows the platform and cannot be chosen with an environment
 variable. This is the same rule the runtime islands follow: what a host *can*
 do is a property of the host, not an operator preference.
 
-The Linux target is a Coder workspace — one Kubernetes pod with
-`restart_policy = "Never"` and no init system the workspace user can bootstrap
+The Linux target is a hosted workspace container: a restart policy that does
+not bring the workload back, and no init system the workspace user can bootstrap
 into, so systemd is not available to supervise with. A detached tmux session is
-what that image already uses for its own agent, and it outlives the SSH
+what such an image already uses for its own agent, and it outlives the SSH
 connection that started it. The cost is stated plainly in the table: a stopped
-pod comes back with no sessions and nothing restarts dcaleon for you.
+workspace comes back with no sessions and nothing restarts dcaleon for you.
 
 ## Know which server you are using
 
@@ -320,12 +320,13 @@ each loop iteration, and every `service:install`. A crash loop therefore rotates
 a healthy process that never exits does not, so the practical bound is one
 deploy's worth of logs.
 
-**State.** Everything durable lives under the home volume, which on a Coder
-workspace is the 100 Gi PVC that survives a stop/start: `.state/` in the
+**State.** Everything durable lives under the home volume, which on a hosted
+workspace is the persistent volume that survives a stop/start: `.state/` in the
 checkout for sessions, history and push subscriptions, and `CLAUDE_STATE_DIR`
 for Claude's own worktrees and ledger. Nothing durable belongs in `/tmp`, which
-does not survive the pod. A workspace left stopped for 45 days is deleted with
-its volume — that is the one loss no amount of care inside the box prevents.
+does not survive the container. Platforms also reap workspaces left stopped long
+enough, deleting the volume with them — that is the one loss no amount of care
+inside the box prevents.
 
 ## Diagnose a failed production restart
 
@@ -338,14 +339,11 @@ npm run service:logs
 ```
 
 Then, for the layer in front of it — `tailscale serve status` on macOS, or on a
-Coder workspace, open the owner-private port URL:
+hosted workspace, open the owner-private port URL the platform publishes for
+`:3210`.
 
-```
-https://3210--main--<workspace>--<owner>.coder.cloud.hebbia.ai
-```
-
-When `service:status` reports nothing on Linux, the usual cause is a pod that
-was stopped and started again: tmux sessions do not survive it. Rerun
+When `service:status` reports nothing on Linux, the usual cause is a workspace
+that was stopped and started again: tmux sessions do not survive it. Rerun
 `service:install`. To watch the process directly rather than through the log:
 
 ```bash

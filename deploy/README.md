@@ -38,11 +38,12 @@ Which supervisor does that follows the platform, decided by `chooseBackend()` in
 | macOS | launchd | `~/Library/LaunchAgents/ai.dcaleon.bff.plist` | `KeepAlive` | `RunAtLoad` |
 | Linux | tmux | detached session `ai-dcaleon-bff` | `while true` loop, 5s delay | **No** |
 
-**Why tmux and not systemd on Linux.** The Linux host is a Coder workspace: a
-single Kubernetes pod with `restart_policy = "Never"`, no init system the
-workspace user can bootstrap into, and therefore no `systemd --user` to install
-a unit with. A detached tmux session survives the SSH connection that created
-it, and it is already how that workspace image supervises its own agent.
+**Why tmux and not systemd on Linux.** The Linux host is a hosted workspace
+container: a restart policy that does not bring the workload back, no init
+system the workspace user can bootstrap into, and therefore no `systemd --user`
+to install a unit with. A detached tmux session survives the SSH connection that
+created it, and it is already how such a workspace image supervises its own
+agent.
 
 The honest gap is the last column. On macOS launchd brings the BFF back after a
 reboot; on Linux a stopped pod comes back with no tmux sessions and nothing
@@ -127,9 +128,9 @@ whether the phone-accessible app is temporarily unavailable:
 | UI or BFF build fails | The existing BFF remains serving because the installer builds before replacing the supervised unit. | Fix the build error, then rerun the upgrade commands. |
 | Replacing the unit fails after the old BFF stops | The app can be down because no BFF is listening on `:3210`. OpenCode remains running. | Run `npm run service:status` and `npm run service:logs`, fix the reported issue, then rerun `npm run service:install -- --port=3210`. |
 | The new BFF exits after launch | The app is down until the service can stay running. Both supervisors retry — launchd via `KeepAlive`, tmux via the restart loop. | Inspect `npm run service:logs`; common causes are invalid `.env` values, a missing dependency, or an upstream configuration problem. |
-| The Linux pod is stopped and started | Nothing. The tmux session is gone with the pod, and no dcaleon process exists. | Rerun `npm run service:install -- --port=3210`. This is expected, not a fault. |
+| The Linux workspace is stopped and started | Nothing. The tmux session is gone with the pod, and no dcaleon process exists. | Rerun `npm run service:install -- --port=3210`. This is expected, not a fault. |
 | Tailscale or its Serve configuration is unavailable (macOS) | The local BFF can still be healthy, but the phone HTTPS origin is unreachable. | Check `tailscale status` and `tailscale serve status`, then bring Tailscale up or recreate the Serve route if needed. |
-| The Coder workspace is stopped (Linux) | Nothing is reachable; the port URL 404s. | Start the workspace, then rerun `service:install`. |
+| The hosted workspace is stopped (Linux) | Nothing is reachable; the port URL 404s. | Start the workspace, then rerun `service:install`. |
 
 Start diagnosis from the inside out: BFF health, supervisor state and logs, then
 whatever fronts it. Do not restart OpenCode merely to recover the UI/BFF.
@@ -151,10 +152,11 @@ matching `gui/$UID/ai.dcaleon.bff` job; on Linux the `ai-dcaleon-bff` tmux
 session, killed and recreated. Uninstall does not use `pkill`, does not touch
 OpenCode, and preserves logs under `.state/logs/` either way.
 
-On a Coder workspace, do not supervise on port `3000` or `1370`. Both are
-declared `share = "public"` by named `coder_app` entries in the workspace
-template, which means no authentication at all in front of them. Any other port
-is owner-private.
+On a hosted workspace, check which ports the workspace template already
+publishes and how before choosing one. A template can declare a port publicly
+shared, which means no authentication at all in front of it, and templates
+routinely do that for conventional development ports such as `3000`. A port the
+template says nothing about stays owner-private.
 
 ## Operations checklist
 
@@ -183,20 +185,14 @@ curl --fail --user "${OPENCODE_SERVER_USERNAME:-opencode}:$OPENCODE_SERVER_PASSW
 
 Two shapes, depending on the host.
 
-### Coder workspace (Linux)
+### Hosted workspace (Linux)
 
-Nothing to configure. Every listening port is reachable at an owner-private URL:
-
-```
-https://<port>--<agent>--<workspace>--<owner>.coder.cloud.hebbia.ai
-```
-
-so `:3210` on workspace `leon-experiment` owned by `leoncheng57` with the
-default `main` agent is
-`https://3210--main--leon-experiment--leoncheng57.coder.cloud.hebbia.ai`.
-This needs no template change and no edit to the workspace's `coder_app`
-entries. Set it as `PUBLIC_APP_URL` in `.env` so Web Push notifications address
-the right origin, then rerun `service:install`.
+Nothing to configure. Platforms of this kind publish every listening port at a
+per-port hostname that authenticates the workspace owner before proxying, so
+`:3210` is reachable as soon as it is listening — no template change and no edit
+to the workspace's published-port entries. Set that origin as `PUBLIC_APP_URL`
+in `.env` so Web Push notifications address the right origin, then rerun
+`service:install`.
 
 Do not change an app's sharing to `authenticated` or `public` to make this
 easier. `public` means unauthenticated, and the Claude island runs with the

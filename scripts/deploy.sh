@@ -3,8 +3,8 @@
 # and reload the supervised `ai.dcaleon.bff` service.
 #
 # Two hosts, one script. macOS supervises with launchd; Linux supervises with a
-# detached tmux session, because the Linux host this targets is a Coder
-# workspace — a single pod with no init system the workspace user can bootstrap
+# detached tmux session, because the Linux host this targets is a hosted
+# workspace container with no init system the workspace user can bootstrap
 # into. scripts/supervisor.ts owns that choice; everything below only needs to
 # know how to *stop* and *inspect* whatever is running.
 #
