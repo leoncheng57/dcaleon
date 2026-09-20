@@ -12,7 +12,7 @@ the honest answer is: they can. Everything below follows from that.
 
 ## The three shapes
 
-| | Your laptop | A workspace someone else operates (Coder) | A personal cloud VM (Oracle A1 and similar) |
+| | Your laptop | A workspace someone else operates | A personal cloud VM |
 |---|---|---|---|
 | Always on | No — sleeps with the lid | Yes, until the pod is stopped | Yes |
 | Who can root the box | You | You *and* the platform team | You |
