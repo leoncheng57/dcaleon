@@ -42,6 +42,7 @@ import { modelPinRoutes } from "./routes/modelPins.js";
 import { recentRoutes } from "./routes/recents.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { parsePublicAppUrl } from "./publicAppUrl.js";
+import { chooseBindHost, describeBindHost } from "./bindHost.js";
 import { readDshConfig } from "./dsh/config.js";
 import { dshRoutes } from "./routes/dsh.js";
 import { readClaudeConfig } from "./claude/config.js";
@@ -259,9 +260,10 @@ app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile("index.html", { root: clientDir });
 });
 
-const server = app.listen(PORT, "0.0.0.0", () => {
-  // 0.0.0.0 so the app is reachable over the tailnet from a phone.
-  console.log(`[bff] listening on :${PORT} -> opencode ${opencode.baseUrl}`);
+const bindHost = chooseBindHost();
+const server = app.listen(PORT, bindHost, () => {
+  // The bind address is this app's access-control boundary; see server/bindHost.ts.
+  console.log(`[bff] listening on ${describeBindHost(bindHost)}:${PORT} -> opencode ${opencode.baseUrl}`);
 });
 
 let shuttingDown = false;
