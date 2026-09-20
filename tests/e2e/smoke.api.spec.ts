@@ -77,7 +77,18 @@ test.describe("public app config", () => {
   test("exposes the configured phone origin and server feature gates", async ({ request }) => {
     const response = await request.get("/api/app-config");
     expect(response.ok()).toBe(true);
-    expect(await response.json()).toEqual({ publicAppUrl: "https://ide.e2e.example.test:8443", dshEnabled: true, dshConfigured: true, claudeEnabled: true, claudeConfigured: true });
+    // DSH needs macOS Seatbelt, so its island availability follows the host the
+    // suite runs on — CI runs this lane on both ubuntu and macOS.
+    const dshAvailable = process.platform === "darwin";
+    expect(await response.json()).toEqual({
+      publicAppUrl: "https://ide.e2e.example.test:8443",
+      dshEnabled: true, dshConfigured: true, claudeEnabled: true, claudeConfigured: true,
+      islands: [
+        { id: "opencode", available: true, reason: null },
+        { id: "dsh", available: dshAvailable, reason: dshAvailable ? null : expect.stringContaining("macOS") },
+        { id: "claude", available: true, reason: null },
+      ],
+    });
   });
 });
 

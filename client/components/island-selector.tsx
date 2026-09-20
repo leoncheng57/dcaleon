@@ -5,6 +5,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { cn } from "../ds/utils.js";
+import { islandAvailability, type IslandStatus } from "../lib/islands.js";
 
 interface IslandDef {
   id: "opencode" | "dsh" | "claude";
@@ -70,17 +71,13 @@ function activeIsland(pathname: string): IslandDef {
   return ISLANDS[0];
 }
 
-function isAvailable(island: IslandDef, props: IslandSelectorProps): boolean {
-  if (island.id === "opencode") return true;
-  if (island.id === "dsh") return props.dshEnabled && props.dshConfigured;
-  return props.claudeEnabled && props.claudeConfigured;
-}
-
 export interface IslandSelectorProps {
   dshEnabled: boolean;
   dshConfigured: boolean;
   claudeEnabled: boolean;
   claudeConfigured: boolean;
+  /** Per-host island availability from `/api/app-config`; absent on an older BFF. */
+  islands?: IslandStatus[];
   scopedPath: (path: string) => string;
 }
 
@@ -136,7 +133,8 @@ export function IslandSelector(props: IslandSelectorProps) {
           <div className="p-1.5">
             {ISLANDS.map((island) => {
               const Icon = island.icon;
-              const available = isAvailable(island, props);
+              const status = islandAvailability(island.id, props);
+              const available = status.available;
               const active = island.id === current.id;
               const to = island.id === "opencode" ? props.scopedPath(island.path) : island.path;
               return (
@@ -156,10 +154,15 @@ export function IslandSelector(props: IslandSelectorProps) {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-[var(--color-text-default)]">{island.label}</span>
                       <Badge variant={available ? "success" : "neutral"} className="text-[10px]">
-                        {available ? "Available" : "Not configured"}
+                        {status.label}
                       </Badge>
                     </div>
                     <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-muted)]">{island.description}</p>
+                    {status.reason ? (
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-[var(--color-text-muted)]" data-testid={`island-reason-${island.id}`}>
+                        {status.reason}
+                      </p>
+                    ) : null}
                     <ul className="mt-1.5 space-y-0.5">
                       {island.traits.map((trait) => {
                         const colon = trait.indexOf(":");

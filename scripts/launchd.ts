@@ -182,7 +182,7 @@ function assertNoActiveClaudeSessions(port: number, force: boolean): void {
   throw new Error(`refusing to replace the BFF while ${active.length} Claude session${active.length === 1 ? " is" : "s are"} running:\n${names}${remainder}\nWait for them to finish or rerun with --force-active-claude to interrupt them explicitly.`);
 }
 
-function install(port: number, forceActiveClaude: boolean): void {
+export function install(port: number, forceActiveClaude: boolean): void {
   assertSupportedNodeVersion();
   const root = repoRoot();
   build(root);
@@ -236,7 +236,7 @@ function install(port: number, forceActiveClaude: boolean): void {
   console.log(`Plist: ${servicePaths.plist}`);
 }
 
-function status(): void {
+export function status(): void {
   const root = repoRoot();
   const servicePaths = paths(root);
   if (!runLaunchctl(["print", serviceTarget()], true)) {
@@ -249,7 +249,7 @@ function status(): void {
   console.log(`stderr: ${servicePaths.stderr}`);
 }
 
-function logs(): void {
+export function logs(): void {
   const servicePaths = paths(repoRoot());
   const files = [servicePaths.stdout, servicePaths.stderr].filter(existsSync);
   if (files.length === 0) throw new Error(`no logs found under ${servicePaths.logDir}`);
@@ -257,7 +257,7 @@ function logs(): void {
   if (result.signal !== "SIGINT" && result.status !== 0) throw new Error("tail failed");
 }
 
-function uninstall(): void {
+export function uninstall(): void {
   const servicePaths = paths(repoRoot());
   if (runLaunchctl(["print", serviceTarget()], true)) {
     runLaunchctl(["bootout", serviceTarget()]);

@@ -321,7 +321,7 @@ export function createPublicSimulator(): typeof fetch {
     const path = url.pathname;
 
     if (path === "/api/health") return response({ healthy: true, upstream: { url: "simulator://opencode", reachable: true, version: "1.18.23+dca.2", expected: "1.18.23+dca.2", versionMatches: true }, events: { connected: true } });
-    if (path === "/api/app-config") return response({ publicAppUrl: null, dshEnabled: true, claudeEnabled: true });
+    if (path === "/api/app-config") return response({ publicAppUrl: null, dshEnabled: true, claudeEnabled: true, islands: [{ id: "opencode", available: true, reason: null }, { id: "dsh", available: true, reason: null }, { id: "claude", available: true, reason: null }] });
     if (path === "/api/projects") return response({ root: "/tmp", projects: [{ name: "mock-project", relativePath: "mock-project", directory: SIMULATOR_DIRECTORY, kind: "repository" }, { name: "mock-second-project", relativePath: "mock-second-project", directory: SECOND_DIRECTORY, kind: "repository" }] });
     if (path === "/api/project-pins") {
       if (method === "PATCH") projectPins = Array.isArray(body.directories) ? body.directories : projectPins;

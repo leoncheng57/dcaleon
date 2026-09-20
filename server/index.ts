@@ -54,6 +54,8 @@ import { listPermissions } from "./opencode/permissions.js";
 import { getSessionMetadata, latestAssistantExcerpt } from "./opencode/sessions.js";
 import { isClaudeSessionId } from "./publicAppUrl.js";
 import { parseLiveBrowserConfig } from "./browser/policy.js";
+import { publicIslands, readIslandConfig } from "./islands.js";
+import { islandGuardRoutes } from "./routes/islandGuard.js";
 import { liveBrowserRoutes } from "./browser/routes.js";
 
 dotenv.config();
@@ -64,6 +66,14 @@ const opencode = readOpencodeConfig();
 const publicAppUrl = parsePublicAppUrl(process.env.PUBLIC_APP_URL);
 const dsh = readDshConfig();
 const claude = readClaudeConfig();
+// Which runtime islands this host runs at all. Separate from each island's own
+// env configuration above: DCALEON_ISLANDS is the operator's preference, and
+// the platform independently vetoes what it cannot host (see server/islands.ts).
+const islands = readIslandConfig();
+for (const problem of islands.errors) console.warn("[islands]", problem);
+for (const island of [islands.opencode, islands.dsh, islands.claude]) {
+  if (!island.available) console.warn(`[islands] ${island.id} unavailable: ${island.reason}`);
+}
 
 app.use(express.json({ limit: "20mb" }));
 
@@ -131,7 +141,16 @@ const notificationService = new NotificationService(
   },
 );
 notificationService.start();
-bus.start();
+// Without the OpenCode island there is no upstream to subscribe to, and
+// starting anyway is exactly the failure this phase removes: endless SSE
+// reconnects against a server that is not running. The bus stays constructed
+// so Claude turns can still emit onto it.
+if (islands.opencode.available) bus.start();
+else console.warn("[bus] not started — the OpenCode island is unavailable on this host");
+
+// Mounted before every route below so an OpenCode request on a host without
+// that island gets one honest 503 instead of an upstream connection error.
+app.use("/api", islandGuardRoutes(islands.opencode));
 
 app.use("/api", sessionRoutes(opencode, bus, publicAppUrl, autoPermissions));
 app.use("/api", settingsRoutes(opencode));
@@ -143,7 +162,7 @@ app.use("/api", forgeRoutes());
 app.use("/api", planningRoutes());
 app.use("/api", reminderRoutes());
 app.use("/api", workflowRoutes());
-app.use("/api", appConfigRoutes(publicAppUrl, dsh.enabled, dsh.configured, claude.enabled, claude.configured));
+app.use("/api", appConfigRoutes(publicAppUrl, dsh.enabled, dsh.configured, claude.enabled, claude.configured, islands));
 app.use("/api", projectRoutes());
 app.use("/api", observabilityRoutes(opencode, PORT));
 app.use("/api", modelPinRoutes());
@@ -176,6 +195,20 @@ if (liveBrowserManager) {
  * mismatch is the first thing to suspect when a response shape looks wrong.
  */
 app.get("/api/health", async (_req, res) => {
+  // A host that does not run the OpenCode island has no upstream to be
+  // unreachable, so probing one would report this BFF as unhealthy forever —
+  // and the deploy path gates on this endpoint. Report the island instead.
+  if (!islands.opencode.available) {
+    res.json({
+      healthy: true,
+      upstream: { url: null, reachable: false, islandAvailable: false, reason: islands.opencode.reason },
+      events: { connected: false },
+      islands: publicIslands(islands),
+      dsh: { enabled: dsh.enabled, configured: dsh.configured, sdkVersion: dsh.sdkVersion, sandbox: dsh.sandbox },
+      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions() },
+    });
+    return;
+  }
   try {
     const upstream = await checkHealth(opencode);
     res.json({
@@ -188,6 +221,7 @@ app.get("/api/health", async (_req, res) => {
         versionMatches: upstream.versionMatches,
       },
       events: { connected: bus.isConnected() },
+      islands: publicIslands(islands),
       dsh: { enabled: dsh.enabled, configured: dsh.configured, sdkVersion: dsh.sdkVersion, sandbox: dsh.sandbox },
       claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions() },
     });

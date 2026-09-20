@@ -20,6 +20,7 @@ import { refreshApp } from "../lib/appRefresh.js";
 import { PUBLIC_SIMULATOR } from "../lib/runtime.js";
 import { useNotifyWatcher } from "../lib/useNotifyWatcher.js";
 import { getDoc } from "../lib/docs.js";
+import { islandAvailability, type IslandStatus } from "../lib/islands.js";
 import { IslandSelector } from "./island-selector.js";
 import { NavOverflowMenu } from "./nav-overflow-menu.js";
 import { NotificationPopover } from "./notification-popover.js";
@@ -66,11 +67,18 @@ export function AppShell() {
   const [dshConfigured, setDshConfigured] = useState(false);
   const [claudeEnabled, setClaudeEnabled] = useState(false);
   const [claudeConfigured, setClaudeConfigured] = useState(false);
+  const [islands, setIslands] = useState<IslandStatus[] | undefined>(undefined);
   const paletteRequest = useRef(0);
 
   useEffect(() => {
     document.title = documentTitle(location.pathname);
   }, [location.pathname]);
+
+  // Badge copy for the command palette rows, resolved once so "unavailable on
+  // this host" and "not configured" stay distinct everywhere they appear.
+  const islandConfig = { dshEnabled, dshConfigured, claudeEnabled, claudeConfigured, islands };
+  const dshStatus = islandAvailability("dsh", islandConfig);
+  const claudeStatus = islandAvailability("claude", islandConfig);
 
   const directory = resolvePaletteDirectory(location.search, localStorage.getItem(DIRECTORY_STORAGE_KEY));
   const scopedPath = (path: string) =>
@@ -82,6 +90,7 @@ export function AppShell() {
       setDshConfigured(config.dshConfigured);
       setClaudeEnabled(config.claudeEnabled);
       setClaudeConfigured(config.claudeConfigured);
+      setIslands(config.islands);
     }).catch(() => undefined);
   }, []);
 
@@ -162,8 +171,8 @@ export function AppShell() {
       { id: "settings", title: "Settings", to: scopedPath("/settings") },
       { id: "planning", title: "Planning", to: "/planning", keywords: ["issues", "pull requests", "roadmap", "github"] },
       { id: "observability", title: "Observability", to: "/observability", keywords: ["logs", "audit", "deployment", "health", "processes"] },
-      { id: "dsh", title: "DSH lab", to: "/dsh", keywords: ["deepseek", "harness", "experiment"], ...(!dshEnabled || !dshConfigured ? { subtitle: "Not configured" } : {}) },
-      { id: "claude", title: "Claude lab", to: "/claude", keywords: ["claude", "anthropic", "code", "binary"], ...(!claudeEnabled || !claudeConfigured ? { subtitle: "Not configured" } : {}) },
+      { id: "dsh", title: "DSH lab", to: "/dsh", keywords: ["deepseek", "harness", "experiment"], ...(dshStatus.available ? {} : { subtitle: dshStatus.label }) },
+      { id: "claude", title: "Claude lab", to: "/claude", keywords: ["claude", "anthropic", "code", "binary"], ...(claudeStatus.available ? {} : { subtitle: claudeStatus.label }) },
       { id: "playbooks", title: "Playbooks", to: "/playbooks", keywords: ["workflows", "procedures"] },
     ],
     actions: [
@@ -221,6 +230,7 @@ export function AppShell() {
             dshConfigured={dshConfigured}
             claudeEnabled={claudeEnabled}
             claudeConfigured={claudeConfigured}
+            islands={islands}
             scopedPath={scopedPath}
           />
           <div className="mr-auto" />

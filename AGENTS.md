@@ -1280,6 +1280,67 @@ several decisions below.
     is constrained to avoid non-proxied UDP. The dated design snapshot is **Live Browser and
     Right Tools Panel — 2026-09-07**; it supersedes rather than edits the 2026-08-27 proposal.
 
+36. **Which islands a host runs is two switches, not one.** `process.platform` decides
+    what an island *can* do here and `DCALEON_ISLANDS` decides what the operator *wants*
+    here; availability is the AND, and every unavailable island carries a reason string
+    the UI shows. The OS gets no env override because a variable that disagrees with
+    reality only fails slower — DSH stays hard macOS-only (`server/dsh/config.ts`:
+    "DSH V1 requires macOS Seatbelt"), so a Linux host reports it unavailable however
+    `DCALEON_ISLANDS` is written. The preference *is* a real variable because the same
+    binary legitimately runs Claude-only on the cloud box and all three on the laptop.
+    `DCALEON_ISLANDS` is a comma-separated allowlist; unset means every island, so an
+    existing macOS deployment is unchanged. A typo or an empty value is reported and
+    falls back to every island rather than silently producing a host that runs nothing.
+    `server/islands.ts` owns the parse, `/api/app-config` and `/api/health` carry the
+    per-island wire shape, and `client/lib/islands.ts` owns the badge so **"unavailable
+    here" and "not configured" never collapse into one string** — the first is a
+    property of the host and no setting in this deployment will change it.
+    Without the OpenCode island the event bus is never started and
+    `server/routes/islandGuard.ts` answers one 503 for every OpenCode route, because the
+    failure this replaces is connection errors and endless SSE reconnects against a
+    server that is not running. 503 not 404: the route exists, this host does not serve
+    it. The guard's prefix list is hand-maintained and cross-checked against the routers'
+    registered paths by `tests/islands.test.ts`, so a new route cannot quietly escape it.
+    `/api/health` reports healthy with `upstream.islandAvailable: false` on such a host —
+    the deploy path gates on that endpoint and must not read "no OpenCode" as "dead BFF".
+    The Claude island itself is platform-independent: it is not Seatbelt-wrapped
+    (`server/claude/supervisor.ts`), so it ports to Linux unchanged. Consequence worth
+    stating: on Linux a `bypassPermissions` Build turn holds its Unix user's full
+    authority with no OS backstop, so run the BFF as an unprivileged user.
+    Credentials follow the same platform-not-env rule — `server/claude/auth.ts` reads
+    the macOS Keychain on darwin and `$CLAUDE_CONFIG_DIR/.credentials.json` (default
+    `~/.claude`, mode 0600, same JSON shape) elsewhere. It is read-only and its only
+    consumer is the usage panel, so a failure costs the limits display, not turns. Do
+    **not** reach for `claude setup-token` / `CLAUDE_CODE_OAUTH_TOKEN`: the `SAFE_ENV`
+    allowlist in `server/claude/supervisor.ts` strips it with `ANTHROPIC_API_KEY` on
+    purpose, so the binary authenticates from its own store and the BFF never brokers
+    auth. Log in on the host with `/login` instead.
+
+37. **One supervisor interface, two backends, chosen by platform.** `npm run service:*`
+    and `scripts/deploy.sh` both route through `scripts/supervisor.ts`, whose
+    `chooseBackend()` reads `process.platform` and nothing else — launchd on darwin,
+    tmux on linux, and an explicit refusal naming the platform on anything else. This
+    is decision 36's rule applied to supervision: what a host *can* do is a property
+    of the host, so there is deliberately no env var to select a backend. The Linux
+    backend is tmux rather than systemd because the host is a Coder workspace — one
+    pod, `restart_policy = "Never"`, no init system the workspace user can bootstrap
+    into, so `systemd --user` is not available to install a unit with. A detached
+    session outlives the SSH connection that made it and matches how that image
+    already supervises its own agent. **The parity gap is real and documented rather
+    than papered over:** launchd restores the BFF after a host reboot via `RunAtLoad`,
+    tmux does not, so a stopped pod needs `service:install` run again;
+    `service:status` exits non-zero when the session is gone, which makes it a usable
+    liveness check. `--force-active-claude` has no tmux counterpart — that backend
+    does not poll `/api/claude/sessions` before replacing the process — so the flag
+    warns there instead of being silently accepted. `scripts/deploy.sh` keeps one
+    preflight for both hosts and guards every `launchctl` call behind the launchd
+    backend; `tests/supervisor.test.ts` scans the script and fails on an unguarded
+    one, because an unconditional `launchctl` is exactly the regression that breaks a
+    Linux deploy at the last step. On a Coder workspace the supervised port must not
+    be 3000 or 1370: named `coder_app` entries declare both `share = "public"`, which
+    is no authentication at all in front of an island that holds the Unix user's full
+    authority.
+
 ## Claude transcript performance
 
 - `GET /claude/sessions/:id` defaults to at most 50 events / 128 KiB of event data.

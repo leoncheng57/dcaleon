@@ -19,16 +19,40 @@ The supervised unit is `ai.dcaleon.bff`. It serves the built SPA and
 production BFF on port `3210` by default, with logs under `.state/logs/`. OpenCode
 is a separate, long-lived process named by `OPENCODE_URL` in `.env`.
 
-## Why launchd supervises the app
+## Why the app is supervised
 
 Production has one Node process for both the UI and BFF: Express serves the built
 React files as well as `/api` routes. A browser refresh cannot replace that process's
 already-loaded server code. It must be restarted after a new server build.
 
-`launchd` is the supervisor for that one process. It starts the BFF after login,
-keeps it alive if it exits, gives it a fixed working directory and environment, and
-writes stable logs. This avoids tying the phone-accessible app to an open terminal,
-`nohup`, or a manually maintained background process.
+Something has to own that one process: start it, keep it alive if it exits, give
+it a fixed working directory and environment, and write stable logs. Otherwise
+the phone-accessible app is tied to an open terminal, `nohup`, or a background
+process somebody maintains by hand.
+
+Which supervisor does that follows the platform, decided by `chooseBackend()` in
+`scripts/supervisor.ts`:
+
+| Host | Supervisor | Unit | Restarts on crash | Restarts on host boot |
+|---|---|---|---|---|
+| macOS | launchd | `~/Library/LaunchAgents/ai.dcaleon.bff.plist` | `KeepAlive` | `RunAtLoad` |
+| Linux | tmux | detached session `ai-dcaleon-bff` | `while true` loop, 5s delay | **No** |
+
+**Why tmux and not systemd on Linux.** The Linux host is a Coder workspace: a
+single Kubernetes pod with `restart_policy = "Never"`, no init system the
+workspace user can bootstrap into, and therefore no `systemd --user` to install
+a unit with. A detached tmux session survives the SSH connection that created
+it, and it is already how that workspace image supervises its own agent.
+
+The honest gap is the last column. On macOS launchd brings the BFF back after a
+reboot; on Linux a stopped pod comes back with no tmux sessions and nothing
+restarts dcaleon. Rerun `npm run service:install -- --port=3210` after a pod
+restart. `service:status` exits non-zero when the session is gone, so it is a
+usable liveness check.
+
+`--force-active-claude` has no counterpart on the tmux backend: it does not poll
+for running Claude sessions before replacing the process. Passing it there warns
+and continues rather than pretending to honour it.
 
 ## What changes during an app upgrade
 
@@ -100,13 +124,15 @@ whether the phone-accessible app is temporarily unavailable:
 
 | Failure point | What remains available | Recovery |
 |---|---|---|
-| UI or BFF build fails | The existing BFF remains serving because the installer builds before replacing the LaunchAgent. | Fix the build error, then rerun the upgrade commands. |
-| Replacing the LaunchAgent fails after the old BFF stops | The app can be down because no BFF is listening on `:3210`. OpenCode remains running. | Run `npm run service:status` and `npm run service:logs`, fix the reported issue, then rerun `npm run service:install -- --port=3210`. |
-| The new BFF exits after launch | The app is down until the service can stay running. launchd attempts to keep the BFF alive. | Inspect `npm run service:logs`; common causes are invalid `.env` values, a missing dependency, or an upstream configuration problem. |
-| Tailscale or its Serve configuration is unavailable | The local BFF can still be healthy, but the phone HTTPS origin is unreachable. | Check `tailscale status` and `tailscale serve status`, then bring Tailscale up or recreate the Serve route if needed. |
+| UI or BFF build fails | The existing BFF remains serving because the installer builds before replacing the supervised unit. | Fix the build error, then rerun the upgrade commands. |
+| Replacing the unit fails after the old BFF stops | The app can be down because no BFF is listening on `:3210`. OpenCode remains running. | Run `npm run service:status` and `npm run service:logs`, fix the reported issue, then rerun `npm run service:install -- --port=3210`. |
+| The new BFF exits after launch | The app is down until the service can stay running. Both supervisors retry — launchd via `KeepAlive`, tmux via the restart loop. | Inspect `npm run service:logs`; common causes are invalid `.env` values, a missing dependency, or an upstream configuration problem. |
+| The Linux pod is stopped and started | Nothing. The tmux session is gone with the pod, and no dcaleon process exists. | Rerun `npm run service:install -- --port=3210`. This is expected, not a fault. |
+| Tailscale or its Serve configuration is unavailable (macOS) | The local BFF can still be healthy, but the phone HTTPS origin is unreachable. | Check `tailscale status` and `tailscale serve status`, then bring Tailscale up or recreate the Serve route if needed. |
+| The Coder workspace is stopped (Linux) | Nothing is reachable; the port URL 404s. | Start the workspace, then rerun `service:install`. |
 
-Start diagnosis from the inside out: BFF health, LaunchAgent state and logs, then
-Tailscale. Do not restart OpenCode merely to recover the UI/BFF.
+Start diagnosis from the inside out: BFF health, supervisor state and logs, then
+whatever fronts it. Do not restart OpenCode merely to recover the UI/BFF.
 
 ## First-time setup
 
@@ -119,10 +145,16 @@ npm run service:install -- --port=3210
 
 Use `npm run service:install -- --port=3211` to choose another supervised port.
 Port `3000` is rejected because `npm run dev` uses it by default. Installation is
-idempotent: it rebuilds the app, replaces only
-`~/Library/LaunchAgents/ai.dcaleon.bff.plist`, and bootstraps only the
-matching `gui/$UID/ai.dcaleon.bff` job. Uninstall does not use `pkill`,
-does not touch OpenCode, and preserves logs.
+idempotent on both hosts: it rebuilds the app, then replaces exactly one thing —
+on macOS `~/Library/LaunchAgents/ai.dcaleon.bff.plist`, bootstrapping only the
+matching `gui/$UID/ai.dcaleon.bff` job; on Linux the `ai-dcaleon-bff` tmux
+session, killed and recreated. Uninstall does not use `pkill`, does not touch
+OpenCode, and preserves logs under `.state/logs/` either way.
+
+On a Coder workspace, do not supervise on port `3000` or `1370`. Both are
+declared `share = "public"` by named `coder_app` entries in the workspace
+template, which means no authentication at all in front of them. Any other port
+is owner-private.
 
 ## Operations checklist
 
@@ -147,7 +179,34 @@ curl --fail --user "${OPENCODE_SERVER_USERNAME:-opencode}:$OPENCODE_SERVER_PASSW
   "$OPENCODE_URL/global/health"
 ```
 
-## Tailscale access
+## Remote access
+
+Two shapes, depending on the host.
+
+### Coder workspace (Linux)
+
+Nothing to configure. Every listening port is reachable at an owner-private URL:
+
+```
+https://<port>--<agent>--<workspace>--<owner>.coder.cloud.hebbia.ai
+```
+
+so `:3210` on workspace `leon-experiment` owned by `leoncheng57` with the
+default `main` agent is
+`https://3210--main--leon-experiment--leoncheng57.coder.cloud.hebbia.ai`.
+This needs no template change and no edit to the workspace's `coder_app`
+entries. Set it as `PUBLIC_APP_URL` in `.env` so Web Push notifications address
+the right origin, then rerun `service:install`.
+
+Do not change an app's sharing to `authenticated` or `public` to make this
+easier. `public` means unauthenticated, and the Claude island runs with the
+Unix user's full authority and no OS-level write boundary.
+
+Reaching the pod directly over the tailnet does **not** work: workspace pods do
+not appear in a personal device's netmap, whatever the workspace's own
+`tailscale status` reports.
+
+### Tailscale Serve (macOS)
 
 Proxy the dedicated supervised port and inspect the resulting Serve configuration:
 
@@ -160,8 +219,8 @@ Set `PUBLIC_APP_URL` in `.env` to the HTTPS origin shown by Tailscale, then reru
 `npm run service:install -- --port=3210` so the BFF reads the new value.
 
 Tailscale is not restarted by an app upgrade. Its Serve configuration keeps the same
-local destination, so the only interruption is the short period while launchd replaces
-the BFF. A request in that window can receive a transient connection error or `502`;
+local destination, so the only interruption is the short period while the supervisor
+replaces the BFF. A request in that window can receive a transient connection error or `502`;
 reload after the BFF health check succeeds. Run `tailscale up` or recreate Serve only
 if Tailscale itself stopped or its Serve configuration was removed.
 
