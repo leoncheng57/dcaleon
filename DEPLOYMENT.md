@@ -289,6 +289,44 @@ them deliberately. The installer checks for active Claude sessions and refuses w
 any are running (there is no equivalent safety gate for DSH). There is no reason to
 restart OpenCode as part of a dcaleon application upgrade.
 
+## Durability on a headless host
+
+Three things go wrong quietly when nobody is sitting in front of the box.
+
+**Credentials.** `/api/health` reports `claude.credentials` as one of `ok`,
+`stale`, `missing` or `unchecked`. Only `missing` is a problem:
+
+| State | Meaning | Action |
+|---|---|---|
+| `ok` | The store is readable and the access token has not lapsed. | None. |
+| `stale` | Readable, but `expiresAt` has passed. | **None.** Normal on an idle host — the CLI refreshes lazily, when a turn next needs it. |
+| `missing` | Unreadable, unparseable, or no access token. | Every turn will fail. Run `claude` on the host and sign in. |
+| `unchecked` | The Claude island is unavailable here. | None. |
+
+Do not alert on expiry itself. The access token lives about eight hours, so any
+threshold measured in days is tripped permanently, and a lapsed `expiresAt` on a
+quiet box means only that nothing has asked for a token yet. The BFF pushes a
+Web Push notification when the state *enters* `missing`, and again when it
+recovers — once per transition, not once per probe, so a box that stays broken
+does not push hourly until you mute it. Without VAPID keys or a subscribed
+device the alert still reaches the log.
+
+**Logs.** The Linux supervisor rotates `.state/logs/bff.tmux.log` past 32 MiB,
+keeping one previous generation, between runs of the server rather than on a
+timer. That is forced, not lazy: `tee -a` holds the file open, so renaming it
+mid-run leaves tee writing to the moved inode and truncating it leaves tee
+appending at its old offset. The only safe moment is when no tee owns the file —
+each loop iteration, and every `service:install`. A crash loop therefore rotates;
+a healthy process that never exits does not, so the practical bound is one
+deploy's worth of logs.
+
+**State.** Everything durable lives under the home volume, which on a Coder
+workspace is the 100 Gi PVC that survives a stop/start: `.state/` in the
+checkout for sessions, history and push subscriptions, and `CLAUDE_STATE_DIR`
+for Claude's own worktrees and ledger. Nothing durable belongs in `/tmp`, which
+does not survive the pod. A workspace left stopped for 45 days is deleted with
+its volume — that is the one loss no amount of care inside the box prevents.
+
 ## Diagnose a failed production restart
 
 Check from the inside out. The first three are identical on both hosts:

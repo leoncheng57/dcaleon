@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { chooseBackend, requireBackend } from "../scripts/supervisor.js";
-import { PORT_RELEASE_ATTEMPTS, RESTART_DELAY_SECONDS, TMUX_SESSION, renderSupervisedLoop, supervisorPaths } from "../scripts/tmuxSupervisor.js";
+import { LOG_ROTATE_BYTES, PORT_RELEASE_ATTEMPTS, RESTART_DELAY_SECONDS, TMUX_SESSION, renderSupervisedLoop, rotateIfLarge, supervisorPaths } from "../scripts/tmuxSupervisor.js";
 import { BFF_LABEL } from "../scripts/launchd.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -103,6 +105,58 @@ describe("tmux port release after kill-session", () => {
     const body = source.slice(source.indexOf("export function portInUse"), source.indexOf("export function waitForPortRelease"));
     expect(body).toContain("return undefined");
     expect(source).toContain("cannot confirm");
+  });
+});
+
+describe("tmux log rotation", () => {
+  const options = {
+    nodePath: "/usr/bin/node",
+    serverPath: "/home/coder/dcaleon/dist/server/index.js",
+    port: 3210,
+    logPath: "/home/coder/dcaleon/.state/logs/bff.tmux.log",
+  };
+
+  it("rotates between runs, keeping one previous generation", () => {
+    const loop = renderSupervisedLoop(options);
+    expect(loop).toContain("wc -c <");
+    expect(loop).toContain(`mv -f '${options.logPath}' '${options.logPath}.1'`);
+  });
+
+  // `tee -a` holds the descriptor open, so the rename has to sit before the
+  // run that creates the next tee — never beside a live one.
+  it("rotates before starting the server, not during", () => {
+    const loop = renderSupervisedLoop(options);
+    expect(loop.indexOf("mv -f")).toBeLessThan(loop.indexOf("tee -a"));
+  });
+
+  it("rotates at a bound a crash loop can reach but a deploy will not", () => {
+    expect(LOG_ROTATE_BYTES).toBeGreaterThanOrEqual(1024 * 1024);
+    expect(LOG_ROTATE_BYTES).toBeLessThanOrEqual(256 * 1024 * 1024);
+  });
+
+  it("does not rotate a file that is absent or small, and never throws", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "dca-rotate-"));
+    const log = path.join(dir, "bff.tmux.log");
+    expect(rotateIfLarge(log)).toBe(false);
+    writeFileSync(log, "x".repeat(64));
+    expect(rotateIfLarge(log)).toBe(false);
+    expect(existsSync(`${log}.1`)).toBe(false);
+  });
+
+  it("rotates a file past the limit", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "dca-rotate-"));
+    const log = path.join(dir, "bff.tmux.log");
+    writeFileSync(log, "x".repeat(2048));
+    expect(rotateIfLarge(log, 1024)).toBe(true);
+    expect(existsSync(`${log}.1`)).toBe(true);
+    expect(existsSync(log)).toBe(false);
+  });
+
+  // install() must not rename a log a live tee still owns.
+  it("rotates only after the old session is gone", () => {
+    const source = execFileSync("cat", [path.join(repoRoot, "scripts", "tmuxSupervisor.ts")], { encoding: "utf8" });
+    const install = source.slice(source.indexOf("export function install"), source.indexOf("export function status"));
+    expect(install.indexOf("kill-session")).toBeLessThan(install.indexOf("rotateIfLarge"));
   });
 });
 

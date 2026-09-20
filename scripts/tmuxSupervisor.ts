@@ -12,7 +12,7 @@
 // A stopped pod comes back with no sessions, so `install` has to run again.
 // Recording that plainly is better than implying parity.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { BFF_LABEL, assertSupportedNodeVersion } from "./launchd.js";
@@ -26,11 +26,29 @@ export const RESTART_DELAY_SECONDS = 5;
 /** One-second polls waiting for a killed session to release its port. */
 export const PORT_RELEASE_ATTEMPTS = 10;
 
+/**
+ * Rotate the log past this size, keeping one previous generation.
+ *
+ * Rotation happens between runs, not on a timer, and that is forced rather than
+ * lazy: `tee -a` holds an open descriptor, so renaming the file underneath it
+ * leaves tee writing to the moved inode, and truncating it in place leaves tee
+ * appending at its old offset — producing a sparse file that still reports the
+ * old size. The only safe moment to move the file is when no tee owns it.
+ *
+ * Which covers the case that actually runs away: a crash loop, restarting every
+ * five seconds and writing a stack trace each time. A healthy process that
+ * never exits also never rotates — `service:install` rotates on the way in, so
+ * the bound is "one deploy's worth of logs", and on a 98 GB home volume that is
+ * the right trade for not corrupting the live log.
+ */
+export const LOG_ROTATE_BYTES = 32 * 1024 * 1024;
+
 export interface SupervisedLoopOptions {
   nodePath: string;
   serverPath: string;
   port: number;
   logPath: string;
+  rotateBytes?: number;
 }
 
 /**
@@ -40,11 +58,15 @@ export interface SupervisedLoopOptions {
  */
 export function renderSupervisedLoop(options: SupervisedLoopOptions): string {
   const quote = (value: string | number) => `'${String(value).replaceAll("'", `'\\''`)}'`;
+  const log = quote(options.logPath);
+  const rotateBytes = options.rotateBytes ?? LOG_ROTATE_BYTES;
   return [
     "while true; do",
+    // Between runs, when no tee holds the descriptor: see LOG_ROTATE_BYTES.
+    `if [ -f ${log} ] && [ "$(wc -c < ${log})" -gt ${rotateBytes} ]; then mv -f ${log} ${quote(`${options.logPath}.1`)}; fi;`,
     `PORT=${quote(options.port)} NODE_ENV=production`,
     `${quote(options.nodePath)} ${quote(options.serverPath)}`,
-    `2>&1 | tee -a ${quote(options.logPath)};`,
+    `2>&1 | tee -a ${log};`,
     `sleep ${RESTART_DELAY_SECONDS};`,
     "done",
   ].join(" ");
@@ -105,6 +127,22 @@ function assertPortAvailable(port: number): void {
   if (inUse) throw new Error(`port ${port} already has a listener; choose another supervised port`);
 }
 
+/**
+ * The deploy-time half of rotation. Safe here because install has already
+ * killed the session, so nothing holds the file open.
+ */
+export function rotateIfLarge(logPath: string, limit = LOG_ROTATE_BYTES): boolean {
+  try {
+    if (statSync(logPath).size <= limit) return false;
+    renameSync(logPath, `${logPath}.1`);
+    return true;
+  } catch {
+    // No log yet, or an unreadable one: nothing to rotate, and never a reason
+    // to fail a deploy.
+    return false;
+  }
+}
+
 export function supervisorPaths(root: string) {
   const logDir = path.join(root, ".state", "logs");
   return { logDir, log: path.join(logDir, "bff.tmux.log") };
@@ -142,6 +180,10 @@ export function install(root: string, port: number): void {
     waitForPortRelease(port);
   }
   assertPortAvailable(port);
+
+  // Only now: until the session is gone, a tee still holds the log open and
+  // renaming it would leave that tee writing to the moved inode.
+  rotateIfLarge(paths.log);
 
   const loop = renderSupervisedLoop({ nodePath: process.execPath, serverPath, port, logPath: paths.log });
   tmux(["new-session", "-d", "-s", TMUX_SESSION, "-c", root, loop]);

@@ -47,6 +47,7 @@ import { dshRoutes } from "./routes/dsh.js";
 import { readClaudeConfig } from "./claude/config.js";
 import { ClaudeSessionStore } from "./claude/store.js";
 import { ClaudeSupervisor } from "./claude/supervisor.js";
+import { CredentialWatch } from "./claude/credentialWatch.js";
 import { claudeRoutes } from "./routes/claude.js";
 import { ClaudeApprovalStore } from "./claude/approvals.js";
 import { bindClaudeApprovalEvents } from "./claude/approvalBridge.js";
@@ -141,6 +142,16 @@ const notificationService = new NotificationService(
   },
 );
 notificationService.start();
+
+// An unreadable Claude credential store stops every turn and, on a headless
+// host, tells nobody. The watch pushes once on the transition into that state
+// and once on recovery; see credentialHealth.ts for why expiry itself is
+// reported but never alerted on.
+const credentialWatch = new CredentialWatch({
+  subscriptions: pushSubscriptions,
+  available: islands.claude.available && claude.enabled,
+});
+credentialWatch.start();
 // Without the OpenCode island there is no upstream to subscribe to, and
 // starting anyway is exactly the failure this phase removes: endless SSE
 // reconnects against a server that is not running. The bus stays constructed
@@ -205,7 +216,7 @@ app.get("/api/health", async (_req, res) => {
       events: { connected: false },
       islands: publicIslands(islands),
       dsh: { enabled: dsh.enabled, configured: dsh.configured, sdkVersion: dsh.sdkVersion, sandbox: dsh.sandbox },
-      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions() },
+      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions(), credentials: credentialWatch.state() },
     });
     return;
   }
@@ -223,7 +234,7 @@ app.get("/api/health", async (_req, res) => {
       events: { connected: bus.isConnected() },
       islands: publicIslands(islands),
       dsh: { enabled: dsh.enabled, configured: dsh.configured, sdkVersion: dsh.sdkVersion, sandbox: dsh.sandbox },
-      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions() },
+      claude: { enabled: claude.enabled, configured: claude.configured, cliVersion: claude.cliVersion, versions: claudeSupervisor.cliVersions(), credentials: credentialWatch.state() },
     });
   } catch (error) {
     res.status(503).json({
@@ -263,6 +274,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   await claudeStore.flush();
   claudeSupervisor.close();
   notificationService.stop();
+  credentialWatch.stop();
   autoPermissions.stop();
   bus.stop();
   process.exitCode = 0;
