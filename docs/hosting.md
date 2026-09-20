@@ -19,7 +19,7 @@ the honest answer is: they can. Everything below follows from that.
 | Supervisor | launchd | tmux | tmux |
 | Survives a host restart | Yes (`RunAtLoad`) | **No** — rerun `service:install` | No, unless you add an init unit |
 | Islands available | OpenCode, Claude, DSH | Claude (OpenCode optional) | Claude, OpenCode |
-| Safe to hold a personal API key | Yes | **No** — see [Credentials on a host you do not own](#credentials-on-a-host-you-do-not-own) | Yes |
+| Who could reach a personal API key | You, and whatever backs up the disk | **Also the platform team**, with no audit trail you can inspect | You, and your cloud provider |
 | Reachable from a phone | Tailscale Serve | Owner-private port URL | Tailscale Serve |
 
 Running more than one host at a time is fine and is the current arrangement:
@@ -146,6 +146,34 @@ but two details are load-bearing and easy to get wrong:
 Supervision is tmux here too, so the same "does not survive a reboot" caveat
 applies unless you add an init unit yourself. Being root is what makes the
 credential mitigations above actually available.
+
+### What a personal VM does not fix
+
+This is the host where a personal API key is reasonable, and it is worth being
+exact about why rather than rounding it up to "private". What changes is the
+*set of people who could read it*: no colleague, and no platform team with an
+audit-free path to the box. What does not change:
+
+- **The hypervisor is still somebody else's.** Guest memory and disk live on the
+  provider's hardware, so the capability exists there; whether it is ever
+  exercised is a question about their controls and your contract, not about
+  anything you can configure inside the guest. Providers offer no guarantee to
+  the contrary, and the confidential-computing features that would narrow this
+  are tied to specific CPU families rather than available everywhere.
+- **Snapshots and backups are plaintext copies.** A mode-`0600` `.env` inside a
+  volume image is readable by anything that can read the image.
+- **The agent runs as a Unix user, and so does the key.** A
+  `bypassPermissions` turn can read `/proc/<pid>/environ` and every file its
+  user can read. Giving the key-holding process its own user only helps if the
+  agent's user genuinely cannot `sudo` — check that rather than assume it,
+  especially on a box you have been doing setup work on.
+- **Anything that reaches the host reaches the key**: an SSH key, a VPN node
+  added later, a shell history that captured it once.
+
+So treat the key as rotatable rather than secret. Keep it out of shell history
+and out of cloud-init user-data, set a spend limit on it, and know how to revoke
+it — those are the controls that still work after one of the assumptions above
+turns out to be wrong.
 
 ## Which login works where
 
