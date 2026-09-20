@@ -8,9 +8,9 @@ import { ALL_INTERFACES, LOOPBACK, chooseBindHost, describeBindHost } from "../s
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("bind host selection", () => {
-  // The Coder workspace pod sits on the corporate tailnet, and this app has no
-  // authentication of its own — so on Linux every interface but loopback is a
-  // way around Coder's owner-private port gate.
+  // A hosted workspace container sits on a network the platform operates, and
+  // this app has no authentication of its own — so on Linux every interface but
+  // loopback is a way around the platform's owner-private port gate.
   it("binds loopback on Linux and every interface on macOS", () => {
     expect(chooseBindHost("linux", {})).toBe(LOOPBACK);
     expect(chooseBindHost("darwin", {})).toBe(ALL_INTERFACES);

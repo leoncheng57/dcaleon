@@ -1322,13 +1322,14 @@ several decisions below.
     tmux on linux, and an explicit refusal naming the platform on anything else. This
     is decision 36's rule applied to supervision: what a host *can* do is a property
     of the host, so there is deliberately no env var to select a backend. The Linux
-    backend is tmux rather than systemd because the host is a Coder workspace — one
-    pod, `restart_policy = "Never"`, no init system the workspace user can bootstrap
-    into, so `systemd --user` is not available to install a unit with. A detached
+    backend is tmux rather than systemd because the host is a hosted workspace
+    container — a restart policy that does not bring the workload back, no init
+    system the workspace user can bootstrap into, so `systemd --user` is not
+    available to install a unit with. A detached
     session outlives the SSH connection that made it and matches how that image
     already supervises its own agent. **The parity gap is real and documented rather
     than papered over:** launchd restores the BFF after a host reboot via `RunAtLoad`,
-    tmux does not, so a stopped pod needs `service:install` run again;
+    tmux does not, so a stopped workspace needs `service:install` run again;
     `service:status` exits non-zero when the session is gone, which makes it a usable
     liveness check. `--force-active-claude` has no tmux counterpart — that backend
     does not poll `/api/claude/sessions` before replacing the process — so the flag
@@ -1336,10 +1337,10 @@ several decisions below.
     preflight for both hosts and guards every `launchctl` call behind the launchd
     backend; `tests/supervisor.test.ts` scans the script and fails on an unguarded
     one, because an unconditional `launchctl` is exactly the regression that breaks a
-    Linux deploy at the last step. On a Coder workspace the supervised port must not
-    be 3000 or 1370: named `coder_app` entries declare both `share = "public"`, which
-    is no authentication at all in front of an island that holds the Unix user's full
-    authority.
+    Linux deploy at the last step. On a hosted workspace the supervised port must
+    be one the workspace template does not already publish: a template can declare a
+    port publicly shared, which is no authentication at all in front of an island
+    that holds the Unix user's full authority.
 
 
 38. **The alertable credential failure is `missing`, never expiry.** The obvious

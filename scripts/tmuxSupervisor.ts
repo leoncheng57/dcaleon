@@ -2,9 +2,9 @@
 //
 // Why tmux and not systemd. The handoff assumed systemd would be the Linux
 // counterpart to launchd, and on an ordinary VM it would be. The host this was
-// actually built for is a Coder workspace — one Kubernetes pod, no init system
-// reachable by the workspace user, and `restart_policy = "Never"` on the pod
-// itself. systemd --user is not available to bootstrap into. tmux is, it is
+// actually built for is a hosted workspace container — no init system reachable
+// by the workspace user, and a restart policy that does not bring the workload
+// back. systemd --user is not available to bootstrap into. tmux is, it is
 // already how that image supervises its own agent session, and a detached
 // session survives the SSH connection that started it.
 //

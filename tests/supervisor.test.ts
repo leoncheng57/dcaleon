@@ -39,9 +39,9 @@ describe("supervisor backend selection", () => {
 describe("tmux supervised loop", () => {
   const options = {
     nodePath: "/usr/bin/node",
-    serverPath: "/home/coder/dcaleon/dist/server/index.js",
+    serverPath: "/home/dcaleon/dcaleon/dist/server/index.js",
     port: 3210,
-    logPath: "/home/coder/dcaleon/.state/logs/bff.tmux.log",
+    logPath: "/home/dcaleon/dcaleon/.state/logs/bff.tmux.log",
   };
 
   it("restarts the server rather than exiting with it", () => {
@@ -61,8 +61,8 @@ describe("tmux supervised loop", () => {
   // The loop is handed to `tmux new-session` as one shell word; an unquoted
   // path with a space would silently run the wrong thing.
   it("quotes paths so a space cannot split the command", () => {
-    const loop = renderSupervisedLoop({ ...options, serverPath: "/home/coder/my dir/index.js" });
-    expect(loop).toContain("'/home/coder/my dir/index.js'");
+    const loop = renderSupervisedLoop({ ...options, serverPath: "/home/dcaleon/my dir/index.js" });
+    expect(loop).toContain("'/home/dcaleon/my dir/index.js'");
   });
 
   it("names the session after the service, without tmux-hostile characters", () => {
@@ -111,9 +111,9 @@ describe("tmux port release after kill-session", () => {
 describe("tmux log rotation", () => {
   const options = {
     nodePath: "/usr/bin/node",
-    serverPath: "/home/coder/dcaleon/dist/server/index.js",
+    serverPath: "/home/dcaleon/dcaleon/dist/server/index.js",
     port: 3210,
-    logPath: "/home/coder/dcaleon/.state/logs/bff.tmux.log",
+    logPath: "/home/dcaleon/dcaleon/.state/logs/bff.tmux.log",
   };
 
   it("rotates between runs, keeping one previous generation", () => {

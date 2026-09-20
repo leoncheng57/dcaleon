@@ -9,17 +9,18 @@
 //   - macOS: the operator's own machine, reachable over their tailnet. The
 //     phone needs to reach it, so bind every interface. This is the original
 //     deployment and nothing about it changes.
-//   - Linux: a Coder workspace pod. The pod is a node on the corporate
-//     tailnet (verified: tailscale0 / tail8635c.ts.net), so 0.0.0.0 publishes
-//     the app to any tailnet peer permitted to route here — bypassing Coder's
-//     owner-private port gate entirely. The Coder agent proxies from
-//     localhost, so loopback costs nothing and closes that path.
+//   - Linux: a hosted workspace container. It is a node on a network the
+//     platform operates (verified on the deployed host: a tailscale0
+//     interface), so 0.0.0.0 publishes the app to every peer permitted to
+//     route here — bypassing the platform's owner-private port gate
+//     entirely. That gate proxies from localhost, so loopback costs nothing
+//     and closes the path around it.
 //
 // BIND_HOST overrides both. It exists because the default is a judgement about
 // the *typical* host, not a security control — an operator who has put a real
 // gate in front of the app should be able to widen this without patching. A
 // deliberate override is fine; a silent default that publishes a credential-
-// bearing shell to a corporate tailnet is not.
+// bearing shell to a shared network is not.
 export const LOOPBACK = "127.0.0.1";
 export const ALL_INTERFACES = "0.0.0.0";
 
@@ -35,5 +36,5 @@ export function chooseBindHost(
 /** Why this bind was chosen, for the startup line — a silent bind is hard to diagnose. */
 export function describeBindHost(host: string, environment: NodeJS.ProcessEnv = process.env): string {
   if (environment.BIND_HOST?.trim()) return `${host} (BIND_HOST)`;
-  return host === LOOPBACK ? `${host} (loopback only; reach it through the Coder port URL)` : host;
+  return host === LOOPBACK ? `${host} (loopback only; reach it through the workspace port URL)` : host;
 }
