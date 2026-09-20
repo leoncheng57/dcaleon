@@ -14,7 +14,7 @@ the honest answer is: they can. Everything below follows from that.
 
 | | Your laptop | A workspace someone else operates | A personal cloud VM |
 |---|---|---|---|
-| Always on | No — sleeps with the lid | Yes, until the pod is stopped | Yes |
+| Always on | No — sleeps with the lid | Yes, until the workspace is stopped | Yes |
 | Who can root the box | You | You *and* the platform team | You |
 | Supervisor | launchd | tmux | tmux |
 | Survives a host restart | Yes (`RunAtLoad`) | **No** — rerun `service:install` | No, unless you add an init unit |
@@ -63,38 +63,41 @@ answer to it.
 
 ## On a cloud host you do not own
 
-A Coder workspace is one Kubernetes pod. The image already supervises its own
-agent session with tmux, so tmux is what `service:install` uses there — not
-systemd, which the workspace user cannot bootstrap into, and which would not
-help anyway because the pod's `restart_policy` is `Never`.
+A hosted development workspace is usually one container, built from an image the
+platform controls and scheduled by something that can stop it. That shape
+decides the supervision: such an image typically already runs its own agent
+session under tmux, the workspace user cannot bootstrap into systemd, and the
+container's restart policy generally does not bring workloads back anyway. So
+tmux is what `service:install` uses on Linux.
 
-What that means in practice, stated plainly: **a stopped pod comes back with no
-tmux sessions and nothing restarts dcaleon for you.** Rerun
-`npm run service:install -- --port=3210` after every pod restart. A workspace
-left stopped long enough is deleted with its volume; that is the one loss no
-care inside the box prevents.
+What that means in practice, stated plainly: **a stopped workspace comes back
+with no tmux sessions and nothing restarts dcaleon for you.** Rerun
+`npm run service:install -- --port=3210` after every restart. Platforms also
+reap workspaces left stopped for long enough, deleting the volume with them;
+that is the one loss no care inside the box prevents.
 
 Durable state belongs on the home volume — `.state/` in the checkout, and
 `CLAUDE_STATE_DIR` for Claude's own worktrees. Nothing durable belongs in
-`/tmp`, which does not survive the pod.
+`/tmp`, which does not survive the container.
 
 ### Ports are not a free choice
 
-Reachability needs no configuration: every listening port answers at an
-owner-private URL of the form
-`https://<port>--<agent>--<workspace>--<owner>.coder.cloud.hebbia.ai`. Set that
-origin as `PUBLIC_APP_URL` and rerun `service:install`.
+Reachability is usually free: platforms of this kind publish each listening port
+at a per-port hostname that authenticates the workspace owner before proxying.
+Set that origin as `PUBLIC_APP_URL` and rerun `service:install`.
 
-Two ports are reserved and must not be used: the inspected template's
-`coder_app` entries for **3000** and **1370** are `share = "public"`, and
-`public` there means unauthenticated. Use `3210`. Do not raise a port's sharing
-to `authenticated` or `organization` to make a link easier to hand out — the
-owner-private URL is already a real SSO gate, and what sits behind it is a
-runtime with your shell.
+**Check what the workspace template already publishes, and how.** A template can
+declare a port as publicly shared, which means reachable with no authentication
+at all — and templates routinely do that for the ports a development stack uses
+by convention, `3000` among them. Pick a port the template says nothing about;
+`3210` is the supervised default for exactly this reason. Do not raise a port's
+sharing to make a link easier to hand out: the owner-private URL is already a
+real SSO gate, and what sits behind it is a runtime with your shell.
 
-VPN reachability is not authorization either. The pod is a node on the corporate
-tailnet, so a BFF bound to `0.0.0.0` was reachable around the owner gate
-entirely; on Linux the BFF now binds loopback for exactly that reason.
+VPN reachability is not authorization either. The workspace is typically a node
+on a network the platform operates, so a BFF bound to `0.0.0.0` is reachable
+around the owner gate entirely; on Linux the BFF now binds loopback for exactly
+that reason.
 
 ### Credentials on a host you do not own
 
@@ -112,9 +115,9 @@ access bypasses the workspace's own audit trail.
 
 So the workable answers are the two that involve no personal key at all:
 
-- **Credentials the platform already grants the pod**, such as a cloud model
-  endpoint reached through the pod's own role. Nothing is stored, rotation is
-  somebody else's problem, and every call is attributable.
+- **Credentials the platform already grants the workspace**, such as a cloud
+  model endpoint reached through the workload's own role. Nothing is stored,
+  rotation is somebody else's problem, and every call is attributable.
 - **Keep the key on a host you do own**, and accept that the island which needs
   it lives there rather than here.
 
