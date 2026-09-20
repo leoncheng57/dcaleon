@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "prNumber": 523,
-  "sourceSha": "f2a1b4d2c6de42fb5a90aea1e44e4d12170b6e9f",
-  "capturedAt": "2026-09-20T20:45:48.261Z",
+  "sourceSha": "f6c303492c2dcf6d4a34c5043c1cfb03f791a82e",
+  "capturedAt": "2026-09-20T21:30:05.119Z",
   "screenshots": [
     {
       "requestedRoute": "/opencode?directory=/tmp/mock-project",
@@ -24,8 +24,8 @@
             "width": 358,
             "height": 269
           },
-          "bytes": 16533,
-          "sha256": "04166e8578c7f359d04bc16870d1ea55ef19d650b5209ea74b752af0b837c787"
+          "bytes": 16538,
+          "sha256": "027c020e507378011d628166895e163f67cfe41fee44cd708f150628230168c1"
         }
       }
     },
