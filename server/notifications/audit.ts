@@ -59,7 +59,7 @@ export function resolveAuditHmacKey(
   env: NodeJS.ProcessEnv = process.env,
   warn: (message: string) => void = (message) => console.warn(message),
 ): Buffer {
-  const configured = env.NOTIFICATION_AUDIT_HMAC_KEY?.trim();
+  const configured = env.NOTIFICATION_AUDIT_HMAC_KEY;
   if (configured) return Buffer.from(configured, "utf8");
 
   const file = auditHmacKeyPath(env);
