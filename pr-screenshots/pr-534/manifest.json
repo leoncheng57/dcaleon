@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 534,
+  "sourceSha": "ef187d4de77de2cf3951311d90a35481251f58be",
+  "capturedAt": "2026-10-04T22:26:29.474Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project&panel=todo",
+      "fullPage": false,
+      "scenarioId": "session-todo",
+      "captures": {
+        "desktop": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-37b8f494--desktop.png",
+          "dimensions": {
+            "width": 287,
+            "height": 154
+          },
+          "bytes": 11294,
+          "sha256": "f76253a23aa767b25d9d670089f63a576441dda7ae59b416cb1391008980cc01"
+        },
+        "mobile": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-26dcd2b5--mobile.png",
+          "dimensions": {
+            "width": 358,
+            "height": 154
+          },
+          "bytes": 9722,
+          "sha256": "61dfdfc262235d225409f338600d2df671b810d99712426a0959435db8336ad2"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-37b8f494--desktop.webm",
+          "bytes": 325997,
+          "sha256": "b40065ee32c998dc5a1e903e2d1da8e414417f4f9f25d9c31ee30064267b0430"
+        },
+        "preview": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-37b8f494--desktop.gif",
+          "bytes": 723882,
+          "sha256": "1199162828755572774cba8c370c5467c0d276437b166c4706a68c68482edf65",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "reason": "Author override from the screenshots block (an empty block explicitly skips capture).",
+    "needsLocalReview": false
+  }
+}
