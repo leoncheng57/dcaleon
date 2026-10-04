@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Circle, CircleCheck, CircleDashed, CircleX, Flag, ListTodo, LoaderCircle, type LucideIcon } from "lucide-react";
 
 import { Button } from "../ds/button.js";
 import { normalizeTranscript } from "../lib/events.js";
@@ -16,6 +16,7 @@ import {
 } from "../lib/derive.js";
 import { api, type CatalogResponse, type ClaudeMemorySnapshot, type McpStatus, type Todo } from "../lib/api.js";
 import { type InspectorTab } from "../lib/inspectorTabs.js";
+import { todoPriorityKind, todoStatusKind, todoSummary, TODO_STATUS_LABEL, type TodoPriorityKind, type TodoStatusKind } from "../lib/todoView.js";
 import { useSubagents, type SubagentsState } from "../lib/useSubagents.js";
 import type { TranscriptEvent } from "../lib/transcript.js";
 import { DshTrajectoryInspector } from "./dsh-trajectory-inspector.js";
@@ -268,37 +269,82 @@ function statusVariant(status: string): BadgeVariant {
   return "neutral";
 }
 
+const TODO_STATUS_ICON: Record<TodoStatusKind, { Icon: LucideIcon; className: string }> = {
+  completed: { Icon: CircleCheck, className: "text-[var(--color-text-success)]" },
+  in_progress: { Icon: LoaderCircle, className: "text-[var(--color-text-info)] motion-safe:animate-spin [animation-duration:2.5s]" },
+  cancelled: { Icon: CircleX, className: "text-[var(--color-text-muted)]" },
+  pending: { Icon: Circle, className: "text-[var(--color-text-muted)]" },
+};
+
+const TODO_PRIORITY_CLASS: Record<TodoPriorityKind, string> = {
+  high: "text-[var(--color-text-danger)]",
+  medium: "text-[var(--color-text-warning)]",
+  low: "text-[var(--color-text-muted)]",
+};
+
+function TodoRow({ todo }: { todo: Todo }) {
+  const status = todoStatusKind(todo.status);
+  const priority = todoPriorityKind(todo.priority);
+  const { Icon, className } = TODO_STATUS_ICON[status];
+  const done = status === "completed" || status === "cancelled";
+  return (
+    <li
+      className={`flex min-w-0 items-start gap-2.5 px-3 py-2 ${status === "in_progress" ? "bg-[var(--color-background-surface-info-muted)]" : ""}`}
+      data-status={todo.status}
+      data-testid="opencode-todo-item"
+    >
+      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${className}`} strokeWidth={2.25} />
+      <span className="sr-only">{TODO_STATUS_LABEL[status]}: </span>
+      <span
+        className={`min-w-0 flex-1 break-words text-sm leading-5 ${done ? "text-[var(--color-text-muted)]" : ""} ${status === "completed" ? "line-through" : ""} ${status === "in_progress" ? "font-medium" : ""}`}
+      >
+        {todo.content}
+      </span>
+      {priority !== "low" && !done && (
+        <span className={`mt-0.5 inline-flex shrink-0 items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${TODO_PRIORITY_CLASS[priority]}`} title={`${priority} priority`}>
+          <Flag aria-hidden className="size-3" strokeWidth={2.5} />
+          <span className="sr-only sm:not-sr-only">{priority}</span>
+        </span>
+      )}
+    </li>
+  );
+}
+
 function TodoPanel({ todos, loaded, error }: { todos: Todo[]; loaded: boolean; error: string | null }) {
-  const completed = todos.filter((todo) => todo.status === "completed").length;
+  const summary = todoSummary(todos);
   return (
     <section data-testid="opencode-todo-list">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">Session todo</h2>
-        {loaded && <span className="text-xs text-[var(--color-text-muted)]">{completed}/{todos.length} done</span>}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+          <ListTodo aria-hidden className="size-3.5" />
+          Session todo
+        </h2>
+        {loaded && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{summary.completed}/{summary.total} done</span>}
       </div>
       {loaded && todos.length > 0 && (
-        <progress className="mb-3 h-1.5 w-full accent-[var(--color-text-success)]" max={todos.length} value={completed} aria-label={`${completed} of ${todos.length} todos completed`} />
+        <div
+          className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-background-muted)]"
+          role="progressbar"
+          aria-label={`${summary.completed} of ${summary.total} todos completed`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={summary.percent}
+        >
+          <div className="h-full rounded-full bg-[var(--color-text-success)] transition-[width] duration-300" style={{ width: `${summary.percent}%` }} />
+        </div>
       )}
       {!loaded && <p className="text-sm text-[var(--color-text-muted)]" role="status">Loading todos...</p>}
       {error && <p className="mb-3 break-words text-sm text-[var(--color-text-danger)]" role="alert">Could not load todos: {error}</p>}
-      {loaded && todos.length === 0 && !error && <p className="text-sm text-[var(--color-text-muted)]">No todos reported.</p>}
+      {loaded && todos.length === 0 && !error && (
+        <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-[var(--color-border-default)] px-3 py-6 text-center">
+          <CircleDashed aria-hidden className="size-5 text-[var(--color-text-muted)]" />
+          <p className="text-sm text-[var(--color-text-muted)]">No todos reported.</p>
+        </div>
+      )}
       {todos.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-[var(--color-border-default)] overflow-hidden rounded-md border border-[var(--color-border-default)] bg-[var(--color-background-surface-raised)]">
           {todos.map((todo, index) => (
-            <li key={`${index}-${todo.content}`} className="min-w-0 rounded border border-[var(--color-border-default)] p-2.5" data-status={todo.status}>
-              <div className="flex min-w-0 items-start gap-2">
-                <span aria-hidden className="mt-0.5 shrink-0 text-xs">
-                  {todo.status === "completed" ? "[x]" : todo.status === "in_progress" ? "[~]" : "[ ]"}
-                </span>
-                <span className={`min-w-0 flex-1 break-words text-sm ${todo.status === "completed" ? "text-[var(--color-text-muted)] line-through" : ""}`}>
-                  {todo.content}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5 pl-6">
-                <Badge variant={statusVariant(todo.status)} className="text-[9px]">{todo.status.replaceAll("_", " ")}</Badge>
-                <Badge variant={todo.priority === "high" ? "danger" : todo.priority === "medium" ? "warning" : "neutral"} className="text-[9px]">{todo.priority} priority</Badge>
-              </div>
-            </li>
+            <TodoRow key={`${index}-${todo.content}`} todo={todo} />
           ))}
         </ul>
       )}

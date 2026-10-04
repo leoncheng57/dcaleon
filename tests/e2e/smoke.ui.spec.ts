@@ -726,6 +726,11 @@ test.describe("transcript", () => {
     const tasks = page.getByTestId("opencode-todo-list");
     await expect(tasks).toContainText("1/3 done");
     await expect(tasks).toContainText("Add the route");
+    await expect(tasks.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "33");
+    const active = tasks.getByTestId("opencode-todo-item").filter({ hasText: "Add the route" });
+    await expect(active).toHaveAttribute("data-status", "in_progress");
+    await expect(active).toContainText("In progress:");
+    await expect(active.locator("svg").first()).toHaveAttribute("aria-hidden", "true");
   });
 
   test("never leaks provider signatures into the DOM", async ({ page }) => {
