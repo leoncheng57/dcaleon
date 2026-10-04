@@ -9,8 +9,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Captured before .env is sourced: .env is shared with the supervised BFF, so
+# only the invoking shell may opt a dev stack into notification delivery (#320).
+notification_delivery="${NOTIFICATION_DELIVERY:-off}"
+
 env_file="${DCA_ENV_FILE:-./.env}"
 [ -f "$env_file" ] && set -a && . "$env_file" && set +a
+export NOTIFICATION_DELIVERY="$notification_delivery"
 
 OPENCODE_URL="${OPENCODE_URL:-http://127.0.0.1:4096}"
 PORT="${PORT:-3000}"
@@ -47,6 +52,11 @@ expected=$(grep -oE 'EXPECTED_SERVER_VERSION = "[^"]+"' server/opencode/client.t
 actual=$(printf '%s' "$health" | grep -oE '"version":"[^"]+"' | cut -d'"' -f4 || true)
 if [ -n "$expected" ] && [ -n "$actual" ] && [ "$expected" != "$actual" ]; then
   echo "  ! version skew: server ${actual}, client pinned to ${expected}" >&2
+fi
+
+echo "→ notification delivery: ${NOTIFICATION_DELIVERY}"
+if [ "${NOTIFICATION_DELIVERY}" = "off" ]; then
+  echo "  (no Web Push, ntfy or notification history from this BFF; run NOTIFICATION_DELIVERY=on npm run dev to enable)"
 fi
 
 # Used by the regression test to exercise the real preflight without starting

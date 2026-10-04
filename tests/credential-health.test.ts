@@ -148,10 +148,22 @@ describe("the watch", () => {
         return { sent: 1, failed: 0, expired: [], failures: [] };
       }) as never,
       log: () => {},
+      deliveryEnabled: true,
       ...overrides,
     });
     return { instance, sent };
   }
+
+  it("logs but never pushes when notification delivery is off", async () => {
+    const logged: string[] = [];
+    const { instance, sent } = watch(["missing"], {
+      deliveryEnabled: false,
+      log: (m: string) => logged.push(m),
+    });
+    await expect(instance.check()).resolves.toMatchObject({ alert: true });
+    expect(sent).toHaveLength(0);
+    expect(logged.join(" ")).toContain("notification delivery is off");
+  });
 
   it("pushes once for a persistent failure, not once per probe", async () => {
     const { instance, sent } = watch(["missing", "missing", "missing"]);
