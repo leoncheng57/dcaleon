@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 533,
+  "sourceSha": "3a69b4d4c7e0b811c39e8745551bf0bb61540cd2",
+  "capturedAt": "2026-10-04T22:01:16.601Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/opencode?directory=/tmp/mock-project",
+      "fullPage": false,
+      "scenarioId": "hub-projects",
+      "captures": {
+        "desktop": {
+          "filename": "01-opencode-directory-tmp-mock-project-357a957d--desktop.png",
+          "dimensions": {
+            "width": 848,
+            "height": 281
+          },
+          "bytes": 18055,
+          "sha256": "9ca64574e3aa8e2c0a9cfe8bbb22cbb2bb65e2a831b05ecbc090b8ac6c4a9ced"
+        },
+        "mobile": {
+          "filename": "01-opencode-directory-tmp-mock-project-c65e4a9d--mobile.png",
+          "dimensions": {
+            "width": 358,
+            "height": 269
+          },
+          "bytes": 16586,
+          "sha256": "95e4697821c0897bff512149694902596be6c37d981180a4a73a866d7e5f0fa4"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "01-opencode-directory-tmp-mock-project-357a957d--desktop.webm",
+          "bytes": 197262,
+          "sha256": "8760fd8929397347c3fdbaf1e0860a5ba6f77b99e3ac66eba574fc6c3920ca17"
+        },
+        "preview": {
+          "filename": "01-opencode-directory-tmp-mock-project-357a957d--desktop.gif",
+          "bytes": 510598,
+          "sha256": "3d0e6542401aad48c30203a3636f4080b302bb25cc7a97b477bc77631326723b",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "reason": "Author override from the screenshots block (an empty block explicitly skips capture).",
+    "needsLocalReview": false
+  }
+}
