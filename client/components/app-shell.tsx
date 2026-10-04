@@ -6,7 +6,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../ds/button.js";
 import { CommandPalette } from "../ds/command-palette.js";
 import { api, type SessionSummary } from "../lib/api.js";
-import { formatBuildLabel } from "../lib/buildInfo.js";
+import { formatBuildLabel, formatBuildTitle } from "../lib/buildInfo.js";
 import { useNotificationCenter } from "../lib/useNotificationCenter.js";
 import {
   DIRECTORY_STORAGE_KEY,
@@ -27,7 +27,8 @@ import { NotificationPopover } from "./notification-popover.js";
 import { PhoneTransferDialog } from "./phone-transfer-dialog.js";
 
 const APP_NAME = "DCA";
-const BUILD_LABEL = formatBuildLabel(__APP_VERSION__, __APP_COMMIT__);
+const BUILD_LABEL = formatBuildLabel(__APP_VERSION__);
+const BUILD_TITLE = formatBuildTitle(__APP_VERSION__, __APP_COMMIT__);
 
 function documentTitle(pathname: string): string {
   if (pathname === "/") return `Runtimes | ${APP_NAME}`;
@@ -214,17 +215,19 @@ export function AppShell() {
   return (
     <div className="h-full min-h-0">
       <div className="flex h-full min-h-0 flex-col" inert={paletteOpen ? true : undefined}>
-        <nav className="flex h-11 shrink-0 items-center gap-0 border-b border-[var(--color-border-default)] px-2 min-[360px]:gap-1 min-[360px]:px-3" aria-label="Main">
-          <NavLink to="/" className="text-sm font-bold tracking-tight" data-testid="opencode-nav-home">
-            DCA
-          </NavLink>
-          <span
-            className="invisible w-0 truncate font-mono text-[10px] tabular-nums text-[var(--color-text-muted)] min-[480px]:visible min-[480px]:w-auto"
-            data-testid="opencode-nav-version"
-            title={`DCA ${BUILD_LABEL}`}
-          >
-            {BUILD_LABEL}
-          </span>
+        <nav className="flex h-11 shrink-0 items-center gap-0 border-b border-[var(--color-border-default)] px-1.5 min-[360px]:gap-1 min-[360px]:px-3" aria-label="Main">
+          <div className="flex min-w-0 flex-col justify-center min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-1">
+            <NavLink to="/" className="shrink-0 self-start text-sm font-bold leading-tight tracking-tight min-[480px]:self-auto" data-testid="opencode-nav-home">
+              DCA
+            </NavLink>
+            <span
+              className="min-w-0 truncate font-mono text-[10px] leading-tight tabular-nums text-[var(--color-text-muted)]"
+              data-testid="opencode-nav-version"
+              title={BUILD_TITLE}
+            >
+              {BUILD_LABEL}
+            </span>
+          </div>
           <IslandSelector
             dshEnabled={dshEnabled}
             dshConfigured={dshConfigured}
