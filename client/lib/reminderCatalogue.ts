@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Bird, BookOpen, FileText, Footprints, GitFork, ListChecks, MessageCircleQuestion, Search, Send, Waves, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Bird, BookOpen, ClipboardCheck, FileText, Footprints, GitFork, ListChecks, MessageCircleQuestion, Search, Send, Waves, type LucideIcon } from "lucide-react";
 
 import type { ReminderSummary } from "./api.js";
 
@@ -25,7 +25,7 @@ export const REMINDER_GROUPS: ReadonlyArray<{ label: string; ids: readonly strin
   { label: "Learn & Understand", ids: ["brink-nudge-learning"] },
   { label: "Research & Evidence", ids: ["deep-research-subagents", "parallel-research-handoff", "cite-file-lines"] },
   { label: "Delegate & Parallelize", ids: ["background-subagent", "session-handoff", "native-worktree-subagents"] },
-  { label: "Documentation & Delivery", ids: ["docs-and-diagram-tooling", "ascii-diagrams", "human-verification-steps"] },
+  { label: "Documentation & Delivery", ids: ["docs-and-diagram-tooling", "ascii-diagrams", "human-verification-steps", "session-wrap-up"] },
   { label: "Examples / Display", ids: ["duck-mode"] },
 ];
 
@@ -42,6 +42,7 @@ export const REMINDER_ICONS: Readonly<Record<string, LucideIcon>> = {
   "docs-and-diagram-tooling": BookOpen,
   "ascii-diagrams": FileText,
   "human-verification-steps": ListChecks,
+  "session-wrap-up": ClipboardCheck,
   "duck-mode": Bird,
 };
 

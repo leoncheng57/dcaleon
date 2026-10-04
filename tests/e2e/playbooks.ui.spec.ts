@@ -213,7 +213,7 @@ test.describe("Playbooks", () => {
 
   test("lists every reminder beside the workflows, grouped and readable", async ({ page }) => {
     await page.goto("/playbooks");
-    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(13);
+    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(14);
     await expect(page.getByTestId("opencode-playbook-reminder-group")).toHaveCount(6);
     await expect(page.getByTestId("opencode-playbook-reminder-group").nth(0)).toHaveAccessibleName("Plan & Design");
     // The two categories stay visually distinct, so a reader can tell what a
@@ -250,6 +250,15 @@ test.describe("Playbooks", () => {
     await expect(page.getByTestId("opencode-playbook-scope-note")).toContainText("id alone");
   });
 
+  test("shows the Session Wrap-Up reminder and its worked example", async ({ page }) => {
+    await page.goto("/playbooks/reminders/session-wrap-up");
+    const dialog = page.getByTestId("opencode-playbook-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Session Wrap-Up");
+    await expect(dialog.getByTestId("opencode-playbook-reminder-body")).toContainText("Artifacts created");
+    await expect(page.getByTestId("opencode-playbook-simulation")).toBeVisible();
+  });
+
   test("keeps an unknown reminder id honest about scope", async ({ page }) => {
     await page.goto("/playbooks/reminders/no-such-reminder");
     const notFound = page.getByTestId("opencode-playbook-reminder-not-found");
@@ -264,7 +273,7 @@ test.describe("Playbooks", () => {
     await page.getByTestId("opencode-playbook-close").click();
     await expect(page).toHaveURL("/playbooks/reminders");
     await expect(page.getByTestId("opencode-playbook-dialog")).toHaveCount(0);
-    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(13);
+    await expect(page.getByTestId("opencode-playbook-reminder-card")).toHaveCount(14);
   });
 
   // ── Simulations ───────────────────────────────────────────────────────────
