@@ -7,6 +7,7 @@ import {
   getPlanningSnapshot,
   normalizePlanningItem,
   PLANNING_LIMITS,
+  planningErrorBody,
   planningErrorMessage,
   resetPlanningCache,
   updatePlanningItemLabels,
@@ -177,6 +178,38 @@ describe("GitHub planning fetch", () => {
     expect(planningErrorMessage(error)).toBe(expected);
     expect(String(error)).not.toContain("must-never-leak");
     expect(String(error)).not.toContain("upstream-secret-detail");
+  });
+
+  it.each([
+    [403, { "X-RateLimit-Remaining": "0" }],
+    [429, {}],
+  ] as const)("adds a safe token setup code for unauthenticated rate limit %s", async (status, headers) => {
+    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubGlobal("fetch", vi.fn(async () => response({ error: "upstream-secret-detail" }, status, headers)));
+
+    const error = await getPlanningSnapshot().catch((reason: unknown) => reason);
+
+    expect(planningErrorBody(error)).toEqual({
+      error: "Rate limited",
+      code: "PLANNING_GITHUB_TOKEN_MISSING",
+    });
+  });
+
+  it("adds no token setup code when a token is configured or the error is not a rate limit", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "must-never-leak");
+    vi.stubGlobal("fetch", vi.fn(async () => response({ error: "upstream-secret-detail" }, 429)));
+    const rateLimitError = await getPlanningSnapshot().catch((reason: unknown) => reason);
+    const body = planningErrorBody(rateLimitError);
+
+    expect(body).toEqual({ error: "Rate limited" });
+    expect(JSON.stringify(body)).not.toContain("must-never-leak");
+
+    resetPlanningCache();
+    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubGlobal("fetch", vi.fn(async () => response({ error: "upstream-secret-detail" }, 401)));
+    const authError = await getPlanningSnapshot().catch((reason: unknown) => reason);
+    expect(planningErrorBody(authError)).toEqual({ error: "Authentication unavailable" });
+    expect(planningErrorBody(new Error("x"))).toEqual({ error: "Unavailable" });
   });
 
   it("coalesces concurrent requests and caches the successful snapshot", async () => {
@@ -495,6 +528,186 @@ describe("GitHub planning item details", () => {
     expect(details.body).toBe("Visible description");
     expect(details.comments).toEqual([]);
     expect(details.commentsError).toBe("Unavailable");
+  });
+
+  it("adds the missing-token code to rate-limited detail failures without a token", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubGlobal("fetch", vi.fn(async () => response({ message: "rate limit" }, 429)));
+
+    const error = await getPlanningItemDetails(7).catch((reason: unknown) => reason);
+
+    expect(planningErrorBody(error)).toEqual({
+      error: "Rate limited",
+      code: "PLANNING_GITHUB_TOKEN_MISSING",
+    });
+  });
+
+  it("caches item details within the TTL", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => String(input).includes("/comments")
+      ? response([])
+      : response(rawItem(7)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await getPlanningItemDetails(7);
+    const second = await getPlanningItemDetails(7);
+
+    expect(second).toBe(first);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("coalesces concurrent requests for the same item", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      await Promise.resolve();
+      return String(input).includes("/comments") ? response([]) : response(rawItem(7));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = getPlanningItemDetails(7);
+    const second = getPlanningItemDetails(7);
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(a).toBe(b);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fetches details separately for different item numbers", async () => {
+    const requestedNumbers = new Set<number>();
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      const number = Number(String(input).match(/issues\/(\d+)/u)?.[1]);
+      requestedNumbers.add(number);
+      return String(input).includes("/comments") ? response([]) : response(rawItem(number));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getPlanningItemDetails(7);
+    await getPlanningItemDetails(8);
+
+    expect(requestedNumbers).toEqual(new Set([7, 8]));
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not cache details when comments fail", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => String(input).includes("/comments")
+      ? response({ message: "unavailable" }, 500)
+      : response(rawItem(7)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await getPlanningItemDetails(7);
+    const second = await getPlanningItemDetails(7);
+
+    expect(first.commentsError).toBe("Unavailable");
+    expect(second.commentsError).toBe("Unavailable");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("expires cached details after the shared cache window", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => String(input).includes("/comments")
+      ? response([])
+      : response(rawItem(7)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await getPlanningItemDetails(7);
+      now.mockReturnValue(1_000 + PLANNING_LIMITS.cacheMs + 1);
+      await getPlanningItemDetails(7);
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not cache a rejected item fetch", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      if (String(input).includes("/comments")) return response([]);
+      throw new Error("network failure");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getPlanningItemDetails(7)).rejects.toThrow("Unavailable");
+    await expect(getPlanningItemDetails(7)).rejects.toThrow("Unavailable");
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("evicts the oldest detail entry after reaching the cache bound", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      const number = Number(String(input).match(/issues\/(\d+)/u)?.[1]);
+      return String(input).includes("/comments") ? response([]) : response(rawItem(number));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (let number = 1; number <= PLANNING_LIMITS.detailCacheEntries + 1; number += 1) {
+      await getPlanningItemDetails(number);
+    }
+    await getPlanningItemDetails(1);
+
+    expect(fetchMock).toHaveBeenCalledTimes((PLANNING_LIMITS.detailCacheEntries + 2) * 2);
+  });
+
+  it("clears cached details after a successful label update", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "server-secret");
+    let itemReads = 0;
+    let commentReads = 0;
+    const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/labels?")) return response([{ name: "frontend", description: "Client work" }]);
+      if (init?.method === "PATCH") return response(rawItem(1, { labels: [{ name: "frontend" }] }));
+      if (url.includes("/comments")) {
+        commentReads += 1;
+        return response([]);
+      }
+      if (url.endsWith("/issues/1")) {
+        itemReads += 1;
+        return response(rawItem(1));
+      }
+      return response([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getPlanningItemDetails(1);
+    await getPlanningItemDetails(1);
+    await updatePlanningItemLabels(1, { labels: ["frontend"] });
+    await getPlanningItemDetails(1);
+
+    expect(itemReads).toBe(3);
+    expect(commentReads).toBe(2);
+  });
+
+  it("does not cache an in-flight detail load invalidated by a successful mutation", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "server-secret");
+    const pending: Array<{ comments: boolean; resolve: (value: Response) => void }> = [];
+    let itemReads = 0;
+    let commentReads = 0;
+    const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/labels?")) return response([{ name: "frontend", description: "Client work" }]);
+      if (init?.method === "PATCH") return response(rawItem(1, { labels: [{ name: "frontend" }] }));
+      if (url.includes("/comments")) {
+        commentReads += 1;
+        if (commentReads === 1) return new Promise<Response>((resolve) => pending.push({ comments: true, resolve }));
+        return response([]);
+      }
+      if (url.endsWith("/issues/1")) {
+        itemReads += 1;
+        if (itemReads === 1) return new Promise<Response>((resolve) => pending.push({ comments: false, resolve }));
+        return response(rawItem(1, { body: `Item read ${itemReads}` }));
+      }
+      return response([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const staleRequest = getPlanningItemDetails(1);
+    expect(pending).toHaveLength(2);
+    await updatePlanningItemLabels(1, { labels: ["frontend"] });
+    pending.forEach(({ comments, resolve }) => resolve(response(comments ? [] : rawItem(1))));
+    await staleRequest;
+    const freshDetails = await getPlanningItemDetails(1);
+
+    expect(freshDetails.body).toBe("Item read 3");
+    expect(itemReads).toBe(3);
+    expect(commentReads).toBe(2);
   });
 });
 

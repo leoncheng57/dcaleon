@@ -594,7 +594,8 @@ export type ApiErrorCode =
   | "SESSION_AGENT_UNSUPPORTED"
   | "SESSION_AGENT_MISMATCH"
   | "SESSION_AGENT_UNAVAILABLE"
-  | "TURN_DIFF_TOO_LARGE";
+  | "TURN_DIFF_TOO_LARGE"
+  | "PLANNING_GITHUB_TOKEN_MISSING";
 
 /** Mirrors `server/logs.ts`. */
 export type LogSource = "audit" | "stdout" | "stderr";
@@ -673,6 +674,10 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+export function isPlanningGithubTokenMissing(reason: unknown): boolean {
+  return reason instanceof ApiError && reason.code === "PLANNING_GITHUB_TOKEN_MISSING";
 }
 
 export type RootSessionFailureStage = "worktree" | "session" | "prompt";
@@ -763,7 +768,8 @@ async function json<T>(res: Response): Promise<T> {
         body.code === "SESSION_AGENT_UNSUPPORTED" ||
         body.code === "SESSION_AGENT_MISMATCH" ||
         body.code === "SESSION_AGENT_UNAVAILABLE" ||
-        body.code === "TURN_DIFF_TOO_LARGE"
+        body.code === "TURN_DIFF_TOO_LARGE" ||
+        body.code === "PLANNING_GITHUB_TOKEN_MISSING"
       ) code = body.code;
     } catch {
       /* keep the status-only message */

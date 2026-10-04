@@ -300,6 +300,11 @@ several decisions below.
     when the upstream item exceeds that bound, permits at most one recognized
     priority label, and updates the grouped browser snapshot only after GitHub
     succeeds. The browser still cannot select a repository or project directory.
+    Item details are cached per number for the same 60s window, coalesced, bounded
+    at 50 entries, never cached when comments fail, and dropped on any successful
+    mutation. A "Rate limited" error carries
+    `code: "PLANNING_GITHUB_TOKEN_MISSING"` only when the server has no token, so
+    the UI can name the fix without the browser learning anything about the token.
 17a. **Planning is a priority-first queue with deterministic ownership.** Exact,
     case-insensitive `priority:high`, `priority:medium`, and `priority:low` labels
     select the outer section; items with multiple distinct priority labels appear

@@ -6,7 +6,8 @@ import { Badge } from "../ds/badge.js";
 import { Button } from "../ds/button.js";
 import { LoadingIndicator } from "../ds/loading-indicator.js";
 import { Markdown } from "../ds/markdown.js";
-import { api, type PlanningItem, type PlanningItemDetails, type PlanningLabel } from "../lib/api.js";
+import { PlanningRateLimitAlert } from "./planning-rate-limit-alert.js";
+import { api, isPlanningGithubTokenMissing, type PlanningItem, type PlanningItemDetails, type PlanningLabel } from "../lib/api.js";
 
 const PRIORITY_LABELS = new Set(["priority:high", "priority:medium", "priority:low"]);
 
@@ -36,6 +37,7 @@ export function PlanningItemDialog({ itemNumber, onClose, onUpdated }: {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailsError, setDetailsError] = useState("");
+  const [tokenMissing, setTokenMissing] = useState(false);
   const [labelsError, setLabelsError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -51,14 +53,19 @@ export function PlanningItemDialog({ itemNumber, onClose, onUpdated }: {
     }
 
     setLoading(true);
+    setDetailsError("");
+    setTokenMissing(false);
     void api.planningItemDetails(itemNumber)
       .then(({ details: value }) => {
         if (!active) return;
         setDetails(value);
         setSelected(value.item.labels);
       })
-      .catch((reason: Error) => {
-        if (active) setDetailsError(reason.message);
+      .catch((reason: unknown) => {
+        if (active) {
+          setTokenMissing(isPlanningGithubTokenMissing(reason));
+          setDetailsError(reason instanceof Error ? reason.message : "Unavailable");
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -173,7 +180,9 @@ export function PlanningItemDialog({ itemNumber, onClose, onUpdated }: {
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
           {loading && <div className="flex min-h-32 items-center justify-center"><LoadingIndicator label="Loading issue details" /></div>}
-          {detailsError && <Alert data-testid="opencode-planning-item-error" variant="danger">Details unavailable: {detailsError}</Alert>}
+          {detailsError && (tokenMissing
+            ? <PlanningRateLimitAlert data-testid="opencode-planning-item-rate-limit-warning" />
+            : <Alert data-testid="opencode-planning-item-error" variant="danger">Details unavailable: {detailsError}</Alert>)}
           {details && (
             <>
               <section data-testid="opencode-planning-item-description">

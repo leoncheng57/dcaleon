@@ -183,6 +183,55 @@ test.describe("project planning", () => {
     await expect(page.getByRole("alert")).toHaveText("Planning data is unavailable: Rate limited");
   });
 
+  test("explains the missing GitHub token when the board is rate-limited", async ({ page }) => {
+    await page.route("**/api/planning/items", async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Rate limited", code: "PLANNING_GITHUB_TOKEN_MISSING" }),
+      });
+    });
+    await page.goto("/planning");
+
+    const warning = page.getByTestId("opencode-planning-rate-limit-warning");
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText("GITHUB_TOKEN");
+    await expect(warning).toContainText(".env");
+    await expect(warning).toContainText("60 to 5,000 requests/hour");
+    await expect(page.getByText("Planning data is unavailable")).toHaveCount(0);
+  });
+
+  test("explains a missing token in the item dialog and keeps the token-set fallback", async ({ page }) => {
+    await page.route("**/api/planning/items/101", async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Rate limited", code: "PLANNING_GITHUB_TOKEN_MISSING" }),
+      });
+    });
+    await page.goto("/planning?item=101");
+
+    const warning = page.getByTestId("opencode-planning-item-rate-limit-warning");
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText("GITHUB_TOKEN");
+    await expect(warning).toContainText(".env");
+    await expect(warning).toContainText("60 to 5,000 requests/hour");
+    await expect(page.getByText("Details unavailable")).toHaveCount(0);
+
+    await page.unroute("**/api/planning/items/101");
+    await page.route("**/api/planning/items/101", async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Rate limited" }),
+      });
+    });
+    await page.goto("/planning?item=101");
+
+    await expect(page.getByTestId("opencode-planning-item-error")).toHaveText("Details unavailable: Rate limited");
+    await expect(page.getByTestId("opencode-planning-item-rate-limit-warning")).toHaveCount(0);
+  });
+
   test("fits the list at mobile width", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 740 });
     await page.goto("/planning");

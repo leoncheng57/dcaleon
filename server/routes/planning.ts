@@ -6,7 +6,7 @@ import {
   getPlanningLabels,
   getPlanningSnapshot,
   PlanningInputError,
-  planningErrorMessage,
+  planningErrorBody,
   planningErrorStatus,
   updatePlanningItemLabels,
 } from "../github-planning.js";
@@ -17,12 +17,12 @@ export function planningRoutes(): Router {
   router.get("/planning/items", (req, res) => {
     void getPlanningSnapshot(req.query.refresh === "1")
       .then((snapshot) => res.json(snapshot))
-      .catch((error: unknown) => res.status(planningErrorStatus(error)).json({ error: planningErrorMessage(error) }));
+      .catch((error: unknown) => res.status(planningErrorStatus(error)).json(planningErrorBody(error)));
   });
   router.get("/planning/labels", (_req, res) => {
     void getPlanningLabels()
       .then((result) => res.json(result))
-      .catch((error: unknown) => res.status(planningErrorStatus(error)).json({ error: planningErrorMessage(error) }));
+      .catch((error: unknown) => res.status(planningErrorStatus(error)).json(planningErrorBody(error)));
   });
   router.get("/planning/items/:number", (req, res) => {
     void getPlanningItemDetails(req.params.number)
@@ -32,7 +32,7 @@ export function planningRoutes(): Router {
           res.status(400).json({ error: error.message });
           return;
         }
-        res.status(planningErrorStatus(error)).json({ error: planningErrorMessage(error) });
+        res.status(planningErrorStatus(error)).json(planningErrorBody(error));
       });
   });
   router.patch("/planning/items/:number/labels", (req, res) => {
@@ -43,7 +43,7 @@ export function planningRoutes(): Router {
           res.status(400).json({ error: error.message });
           return;
         }
-        res.status(planningErrorStatus(error)).json({ error: planningErrorMessage(error) });
+        res.status(planningErrorStatus(error)).json(planningErrorBody(error));
       });
   });
   router.post("/planning/issues", (req, res) => {
@@ -54,7 +54,7 @@ export function planningRoutes(): Router {
           res.status(400).json({ error: error.message });
           return;
         }
-        res.status(planningErrorStatus(error)).json({ error: planningErrorMessage(error) });
+        res.status(planningErrorStatus(error)).json(planningErrorBody(error));
       });
   });
   return router;
