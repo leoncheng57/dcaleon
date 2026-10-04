@@ -159,7 +159,12 @@ test.describe("mobile conversation action bar", () => {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await expect(toggle).toHaveAccessibleName("Turn auto permissions off");
     await expect(page.getByTestId("opencode-mobile-auto-permissions-state")).toHaveText("ON");
-    expect(await page.getByTestId("opencode-mobile-auto-permissions-group").evaluate((element) => getComputedStyle(element).backgroundColor)).not.toMatch(/transparent|rgba\(0, 0, 0, 0\)/);
+    const autoGroup = page.getByTestId("opencode-mobile-auto-permissions-group");
+    // The group fades its ON colours in with `transition-colors`, and computed
+    // style reports the interpolated value — still transparent on the frame the
+    // class lands. Assert the settled colour, not the first frame (#299).
+    await autoGroup.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+    expect(await autoGroup.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toMatch(/transparent|rgba\(0, 0, 0, 0\)/);
     await resetAutoPermissions(page);
   });
 });
