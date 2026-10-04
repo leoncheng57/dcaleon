@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 425,
+  "sourceSha": "2aa96fd721711f2890db660866b7cbc0b8302f62",
+  "capturedAt": "2026-10-04T22:25:39.697Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/design-components",
+      "fullPage": true,
+      "scenarioId": "design-gallery",
+      "captures": {
+        "desktop": {
+          "filename": "01-design-components-c2019b5c--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 87250,
+          "sha256": "237ae02c5c57e0c7c493893b440df0adcff344b3af8d3bae442c2969f435464f"
+        },
+        "mobile": {
+          "filename": "01-design-components-7f161263--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 52097,
+          "sha256": "c24d6e3f6ab5549db25140abc5fa44c4086220a40b2bdd1a74698d860a8db7b9"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "01-design-components-c2019b5c--desktop--full.webm",
+          "bytes": 309479,
+          "sha256": "c3398c5ef2087ffc0654465edcc5463c7ba70d48c8933f9df3d3c10051bd8a0d"
+        },
+        "preview": {
+          "filename": "01-design-components-c2019b5c--desktop--full.gif",
+          "bytes": 794421,
+          "sha256": "e8662d8e3bda134c549c966f827d57587444cba03c85ced966a5c4fc0c17d98a",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    },
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project",
+      "fullPage": true,
+      "scenarioId": "session-transcript",
+      "captures": {
+        "desktop": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-140cefbf--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 80470,
+          "sha256": "afa30a2044a6127898b74ed210c3c92ca0e00ea69f00a84288403ef29f9f430e"
+        },
+        "mobile": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-3e88525e--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 42620,
+          "sha256": "1d54fbb1e62f672049782e90ae770869fb685599f8f75b4a0a2a30eff3d80520"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-140cefbf--desktop--full.webm",
+          "bytes": 305823,
+          "sha256": "b3f15974864de727abd86543aa46f20e69d6d03693d9aeac29e04719c1f2b20f"
+        },
+        "preview": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-140cefbf--desktop--full.gif",
+          "bytes": 607116,
+          "sha256": "60bdca9a8c08d6f7158d842f208183b55c576d08fa532cf437da36dafb86ed9e",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    },
+    {
+      "requestedRoute": "/playbooks",
+      "fullPage": true,
+      "scenarioId": "playbooks-catalog",
+      "captures": {
+        "desktop": {
+          "filename": "03-playbooks-b7d133d3--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 5736
+          },
+          "bytes": 658854,
+          "sha256": "1fba0a76918e8b2acaf76e628ad1f9f5e33c54f47124509641ab504026664724"
+        },
+        "mobile": {
+          "filename": "03-playbooks-5deafc63--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 9237
+          },
+          "bytes": 705612,
+          "sha256": "933d688648f6f66fa1a538431112809ff72f1ca00def6b313b1cf56e7a3e85b2"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "03-playbooks-b7d133d3--desktop--full.webm",
+          "bytes": 268294,
+          "sha256": "6d7d5a6420c6333c308e259ac5a142ca3f7668dfcab09905dc98c4ec269eece1"
+        },
+        "preview": {
+          "filename": "03-playbooks-b7d133d3--desktop--full.gif",
+          "bytes": 544412,
+          "sha256": "b7aed067b97d2545c0a374bd248d0a1c804819f7e27b52bf20336e9615a7e27b",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    },
+    {
+      "requestedRoute": "/planning",
+      "fullPage": true,
+      "scenarioId": "planning-page",
+      "captures": {
+        "desktop": {
+          "filename": "04-planning-9885aa9e--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 851
+          },
+          "bytes": 88936,
+          "sha256": "28f4abb4b80da2fb3b9ed55de8cdb60454eeddf341cbcf94fed33cd8a4665576"
+        },
+        "mobile": {
+          "filename": "04-planning-729140ed--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 1105
+          },
+          "bytes": 84460,
+          "sha256": "254df079073cef29f78ae38d0f95f737a983294742c9aa3daa30ca9ce243fd53"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "04-planning-9885aa9e--desktop--full.webm",
+          "bytes": 296136,
+          "sha256": "18d0e9a5bc036959dc37f92dae6cba404e0c8ace031c6f548fdce286d548dc4d"
+        },
+        "preview": {
+          "filename": "04-planning-9885aa9e--desktop--full.gif",
+          "bytes": 624453,
+          "sha256": "2aee07ee4bdc26f70541f34d4ecceadbfa403f25355fe167ecfcc8b010f0f3f5",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    },
+    {
+      "requestedRoute": "/settings?directory=/tmp/mock-project",
+      "fullPage": true,
+      "scenarioId": "settings-page",
+      "captures": {
+        "desktop": {
+          "filename": "05-settings-directory-tmp-mock-project-490da88b--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 1025
+          },
+          "bytes": 66835,
+          "sha256": "e587f6cda1e8184abfbe429a2372aadd068d75f9108771e1655c013e10ec82e2"
+        },
+        "mobile": {
+          "filename": "05-settings-directory-tmp-mock-project-6d961247--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 1065
+          },
+          "bytes": 61347,
+          "sha256": "e6701090b7a03e0efb83624ea2d5f3c8fd787ee7a33b7657647da38441d810d6"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "05-settings-directory-tmp-mock-project-490da88b--desktop--full.webm",
+          "bytes": 145641,
+          "sha256": "ed55a8e3012f66119041506f208f411b07bb3a5bc34d70d3b20f433e124c61b0"
+        },
+        "preview": {
+          "filename": "05-settings-directory-tmp-mock-project-490da88b--desktop--full.gif",
+          "bytes": 344786,
+          "sha256": "64ec3ef3348e68766970897823e5bb3b62d2aa92feae17044e07ff17a5bd6fcf",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    },
+    {
+      "requestedRoute": "/opencode?directory=/tmp/mock-project",
+      "fullPage": false,
+      "scenarioId": "hub-projects",
+      "captures": {
+        "desktop": {
+          "filename": "06-opencode-directory-tmp-mock-project-357a957d--desktop.png",
+          "dimensions": {
+            "width": 848,
+            "height": 281
+          },
+          "bytes": 17711,
+          "sha256": "1682d2dda07508cb136f2f0d748330b72cc58d07c99d9e756b8e230b2f496982"
+        },
+        "mobile": {
+          "filename": "06-opencode-directory-tmp-mock-project-c65e4a9d--mobile.png",
+          "dimensions": {
+            "width": 358,
+            "height": 269
+          },
+          "bytes": 16165,
+          "sha256": "8bb22c18933505f33e313190b88f221c2fcc85d0b0d97a1ab025e2307b6e7022"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "06-opencode-directory-tmp-mock-project-357a957d--desktop.webm",
+          "bytes": 281687,
+          "sha256": "c624432093e1621bbe0e4af1eb83ec19bb1c4e718c648b6d4aa6c4b83557e7d8"
+        },
+        "preview": {
+          "filename": "06-opencode-directory-tmp-mock-project-357a957d--desktop.gif",
+          "bytes": 509800,
+          "sha256": "157eb6cbccd3511c935a7b568413d6b2620f4d939b36597a7c72c04725d9e93a",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "ids": [
+      "design-gallery",
+      "session-transcript",
+      "playbooks-catalog",
+      "planning-page",
+      "settings-page",
+      "hub-projects"
+    ],
+    "needsLocalReview": true,
+    "reason": "Baseline coverage includes shared or unmapped changes. A local agent must review the diff and add relevant states; CI has no AI keys."
+  }
+}
