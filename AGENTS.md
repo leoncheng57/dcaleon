@@ -1528,7 +1528,9 @@ full:/sessions/ses_mock_done?directory=/tmp/mock-project
 
 Blank lines and lines beginning with `#` are ignored. Every route captures dark-mode
 desktop (1280x800) and mobile (390x740) PNGs; `full:` captures the full page at both
-widths. The sticky comment renders `Route`, `Desktop`, and `Mobile` columns. Requests are
+widths. The desktop pass is also recorded to WebM and converted to a GIF preview in the
+read-only capture job; the trusted publisher only checks the WebM/GIF magic bytes, size,
+GIF dimensions and hashes, and never runs ffmpeg or any other decoder on artifact bytes. The sticky comment renders `Route`, `Desktop`, and `Mobile` columns. Requests are
 limited to 10 known UI routes and reject whitespace, controls, schemes, hosts,
 backslashes, malformed encoding, and path traversal.
 

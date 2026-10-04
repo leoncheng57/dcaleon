@@ -14,6 +14,7 @@ concurrency:
 permissions:
   actions: read
   contents: write
+  pages: read
   pull-requests: write
 
 jobs:
@@ -185,6 +186,15 @@ jobs:
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({ ...context.repo, run_id: Number(process.env.RUN_ID), per_page: 100 });
             const artifact = artifacts.data.artifacts.find((item) => item.name === `pr-screenshots-${issue_number}-${sha}`);
             const artifactUrl = artifact ? `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.RUN_ID}/artifacts/${artifact.id}` : context.payload.workflow_run.html_url;
+            // Recordings link to the WebM on GitHub Pages, where a browser plays it
+            // directly; raw.githubusercontent.com would only offer a download.
+            let pagesBase = base;
+            try {
+              const { data: pages } = await github.rest.repos.getPages(context.repo);
+              pagesBase = `${pages.html_url.replace(/^http:/, 'https:').replace(/\/$/, '')}/pr-screenshots/pr-${issue_number}`;
+            } catch (error) {
+              core.warning(`GitHub Pages URL unavailable; recordings link to raw files: ${error.message}`);
+            }
             const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
             const lines = [marker, '## PR screenshots', ''];
             if (manifest.coverage) lines.push(escapeHtml(manifest.coverage.reason), '', ...(manifest.coverage.needsLocalReview ? ['**Local AI review pending:** these are baseline scenarios; run the local gallery workflow for change-specific states.', ''] : []));
@@ -193,7 +203,8 @@ jobs:
               // inner block's own fence, which left a stray ``` in the rendered comment.
               lines.push('Capture skipped for this commit. To override, add routes or `scenario:<id>` lines in a `screenshots` block.');
             } else {
-              lines.push('| Route | Desktop (dark) | Mobile (dark) |', '| --- | --- | --- |');
+              const recorded = manifest.screenshots.some((shot) => shot.recording);
+              lines.push(`| Route | Desktop (dark) | Mobile (dark) |${recorded ? ' Recording (desktop) |' : ''}`, `| --- | --- | --- |${recorded ? ' --- |' : ''}`);
               for (const shot of manifest.screenshots) {
                 const route = escapeHtml(shot.scenarioId ? `scenario:${shot.scenarioId} — ${shot.requestedRoute}` : shot.requestedRoute).replaceAll('|', '&#124;');
                 const alt = escapeHtml(shot.requestedRoute);
@@ -201,7 +212,13 @@ jobs:
                 const mobileUrl = `${base}/${encodeURIComponent(shot.captures.mobile.filename)}?sha=${shortSha}`;
                 const desktop = `[<img src="${desktopUrl}" width="500" alt="${alt} desktop">](${desktopUrl})<br>[Open full size](${desktopUrl})`;
                 const mobile = `[<img src="${mobileUrl}" width="220" alt="${alt} mobile">](${mobileUrl})<br>[Open full size](${mobileUrl})`;
-                lines.push(`| <code>${route}</code>${shot.fullPage ? ' (full page)' : ''} | ${desktop} | ${mobile} |`);
+                let recording = '';
+                if (recorded && shot.recording) {
+                  const previewUrl = `${base}/${encodeURIComponent(shot.recording.preview.filename)}?sha=${shortSha}`;
+                  const videoUrl = `${pagesBase}/${encodeURIComponent(shot.recording.video.filename)}?sha=${shortSha}`;
+                  recording = ` [<img src="${previewUrl}" width="320" alt="${alt} recording">](${videoUrl})<br>[▶ Full video](${videoUrl}) |`;
+                } else if (recorded) recording = ' — |';
+                lines.push(`| <code>${route}</code>${shot.fullPage ? ' (full page)' : ''} | ${desktop} | ${mobile} |${recording}`);
               }
               lines.push('', `Source: \`${shortSha}\` | [Download artifact](${artifactUrl})`);
             }

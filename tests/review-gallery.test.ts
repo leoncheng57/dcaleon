@@ -6,7 +6,7 @@ import { parse } from "yaml";
 import { createGalleryManifest, galleryComment, galleryFilename, validateGallery, validateScenarios, GALLERY_MARKER } from "../scripts/review-gallery.js";
 import { reviewScenario, selectReviewScenarios } from "../scripts/review-scenarios.js";
 import { assertAssetPushSafe, assertPublishTarget, publishGallery, updateGalleryComment } from "../scripts/review-github.js";
-import { createManifest, normalizeScreenshotRequests, parseScreenshotBlock, validateAndPublishBundle } from "../scripts/pr-screenshots.js";
+import { createManifest, normalizeScreenshotRequests, parseScreenshotBlock, recordingFilenames, validateAndPublishBundle } from "../scripts/pr-screenshots.js";
 
 const temporary: string[] = [];
 afterEach(() => temporary.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true })));
@@ -75,6 +75,34 @@ describe("gallery artifact validation", () => {
     manifest.screenshots[0].scenarioId = "untrusted-new-route";
     writeFileSync(path.join(directory, "manifest.json"), JSON.stringify(manifest));
     expect(() => validateAndPublishBundle(directory, dest, 123, sha)).toThrow("unknown");
+  });
+  it("publishes a declared recording and rejects tampered, oversized or undeclared ones", () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), "review-recording-test-")); temporary.push(directory);
+    const dest = `${directory}-published`; temporary.push(dest);
+    const requests = normalizeScreenshotRequests([{ scenarioId: "hub-projects" }]);
+    for (const filename of Object.values(requests[0].filenames)) writeFileSync(path.join(directory, filename), png);
+    const gif = (width: number, height: number) => { const buffer = Buffer.from("GIF89a\0\0\0\0;", "latin1"); buffer.writeUInt16LE(width, 6); buffer.writeUInt16LE(height, 8); return buffer; };
+    const webm = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x02]);
+    const { video, preview } = recordingFilenames(requests[0].filenames.desktop);
+    const publish = () => { writeFileSync(path.join(directory, "manifest.json"), JSON.stringify(createManifest(directory, requests, 123, sha))); return validateAndPublishBundle(directory, dest, 123, sha); };
+
+    writeFileSync(path.join(directory, video), webm);
+    writeFileSync(path.join(directory, preview), gif(640, 400));
+    expect(publish().screenshots[0].recording?.preview.dimensions).toEqual({ width: 640, height: 400 });
+    expect(readFileSync(path.join(dest, video))).toEqual(webm);
+
+    const manifest = JSON.parse(readFileSync(path.join(directory, "manifest.json"), "utf8"));
+    writeFileSync(path.join(directory, preview), gif(320, 200));
+    expect(() => validateAndPublishBundle(directory, dest, 123, sha)).toThrow("recording");
+
+    delete manifest.screenshots[0].recording;
+    writeFileSync(path.join(directory, "manifest.json"), JSON.stringify(manifest));
+    expect(() => validateAndPublishBundle(directory, dest, 123, sha)).toThrow("unexpected");
+
+    writeFileSync(path.join(directory, preview), gif(1280, 800));
+    expect(() => publish()).toThrow("dimensions");
+    writeFileSync(path.join(directory, video), png);
+    expect(() => publish()).toThrow("WebM");
   });
   it("escapes labels and requires immutable HTML image links", () => {
     const { manifest } = fixture();

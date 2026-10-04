@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-import { resolveCaptureConfig, screenshotRequestLabel, screenshotStableRoot, SCREENSHOT_VIEWPORTS, VIEWPORTS, type ScreenshotRequest } from "../../scripts/pr-screenshots.js";
+import { recordingFilenames, resolveCaptureConfig, screenshotRequestLabel, screenshotStableRoot, SCREENSHOT_VIEWPORTS, VIEWPORTS, type ScreenshotRequest } from "../../scripts/pr-screenshots.js";
 import { reviewScenario } from "../../scripts/review-scenarios.js";
 import { installReviewFixtures, prepareReviewState } from "./review-capture.js";
 
@@ -18,11 +18,18 @@ test.describe("requested PR screenshots", () => {
     return;
   }
   for (const request of requests) {
-    test(`${request.scenarioId ?? screenshotRequestLabel(request.requestedRoute, request.fullPage)} @shots`, async ({ page }) => {
-      await installReviewFixtures(page);
-      await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-      await page.addInitScript(() => localStorage.setItem("theme", "dark"));
+    test(`${request.scenarioId ?? screenshotRequestLabel(request.requestedRoute, request.fullPage)} @shots`, async ({ page: mobilePage, browser, baseURL }) => {
+      // The desktop pass runs in its own context so it can be recorded at exactly
+      // the desktop viewport; the runner turns the WebM into the comment's GIF.
+      const recordingDir = path.join(config.outputDir, ".recording");
+      const desktopContext = await browser.newContext({ baseURL, viewport: VIEWPORTS.desktop, recordVideo: { dir: recordingDir, size: VIEWPORTS.desktop } });
+      const desktopPage = await desktopContext.newPage();
+      const pages: Record<(typeof SCREENSHOT_VIEWPORTS)[number], Page> = { desktop: desktopPage, mobile: mobilePage };
       for (const viewport of SCREENSHOT_VIEWPORTS) {
+        const page = pages[viewport];
+        await installReviewFixtures(page);
+        await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+        await page.addInitScript(() => localStorage.setItem("theme", "dark"));
         await page.setViewportSize(VIEWPORTS[viewport]);
         if (request.scenarioId) {
           const scenario = reviewScenario(request.scenarioId);
@@ -63,6 +70,10 @@ test.describe("requested PR screenshots", () => {
         await expect(page.getByTestId("opencode-error")).toHaveCount(0);
         await page.screenshot({ path: path.join(config.outputDir, request.filenames[viewport]), fullPage: request.fullPage });
       }
+      // Hold the settled state for a beat so the clip doesn't end on its first frame.
+      await desktopPage.waitForTimeout(1_000);
+      await desktopContext.close();
+      await desktopPage.video()?.saveAs(path.join(config.outputDir, recordingFilenames(request.filenames.desktop).video));
     });
   }
 });
