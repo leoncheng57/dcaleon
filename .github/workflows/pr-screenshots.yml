@@ -40,6 +40,11 @@ jobs:
         if: steps.selection.outputs.count != '0'
         run: npx playwright install --with-deps chromium
 
+      # Turns each desktop recording into the GIF preview shown in the PR comment.
+      - name: Install ffmpeg
+        if: steps.selection.outputs.count != '0'
+        run: sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Capture and validate screenshots
         run: >-
           npm run screenshots --

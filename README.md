@@ -306,7 +306,11 @@ full:/sessions/ses_mock_done?directory=/tmp/mock-project
 CI accepts up to 10 routes and captures each one in dark mode at desktop (1280x800) and
 mobile (390x740) widths. The sticky PR comment shows `Route`, `Desktop`, and `Mobile`
 columns with public full-size links; a 30-day Actions artifact contains both PNGs per
-route. `full:` captures the full scroll height at both widths. A route may appear once on
+route. `full:` captures the full scroll height at both widths.
+The desktop pass of each route is also recorded: CI converts the WebM to a GIF of up to
+15 seconds (640px wide) for an inline **Recording** column, and the GIF links to the WebM
+on GitHub Pages so it plays in the browser. Locally, recordings are kept only when
+`ffmpeg` is on `PATH`; otherwise the bundle is screenshots-only. A route may appear once on
 its own and once as `full:`; requesting the exact same route and mode twice is rejected
 when the block is parsed, before any browser starts. Blank and `#` comment lines
 are ignored. Routes cannot contain whitespace, hosts, schemes, controls, backslashes, or
@@ -326,7 +330,8 @@ npm run screenshots:local
 Publication requires Actions to allow the workflow's declared `contents: write` and
 `pull-requests: write` permissions. The trusted publisher creates `gh-pages` on its first
 image publication; GitHub Pages itself does not need to be enabled because comments use
-public `raw.githubusercontent.com` URLs. The `workflow_run` publisher must exist on the
+public `raw.githubusercontent.com` URLs. Only the full-video links use Pages, and fall
+back to raw (download-only) links when Pages is off. The `workflow_run` publisher must exist on the
 default branch, so this bootstrap PR can prove capture via its artifact but will not
 self-publish until the workflows are merged.
 

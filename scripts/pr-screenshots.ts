@@ -7,6 +7,9 @@ export const MAX_SCREENSHOTS = 10;
 export const MAX_ROUTE_LENGTH = 2_048;
 export const MAX_BLOCK_LENGTH = 24_000;
 export const MAX_PNG_BYTES = 10 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+export const MAX_GIF_BYTES = 8 * 1024 * 1024;
+export const MAX_GIF_WIDTH = 640;
 export const MAX_MANIFEST_BYTES = 128 * 1024;
 export const MAX_FULL_PAGE_HEIGHT = 20_000;
 export const VIEWPORTS = {
@@ -76,6 +79,15 @@ type ScreenshotCapture = {
   sha256: string;
 };
 
+type RecordingFile = { filename: string; bytes: number; sha256: string };
+
+// The desktop pass of each request, recorded as it ran. The GIF is the inline
+// preview; the WebM is the full-quality original, linked from the GIF.
+export type ScreenshotRecording = {
+  video: RecordingFile;
+  preview: RecordingFile & { dimensions: { width: number; height: number } };
+};
+
 export type ScreenshotManifest = {
   schemaVersion: 2;
   prNumber: number;
@@ -84,6 +96,7 @@ export type ScreenshotManifest = {
   coverage?: { reason: string; needsLocalReview: boolean };
   screenshots: Array<Omit<ScreenshotRequest, "filenames"> & {
     captures: Record<ScreenshotViewport, ScreenshotCapture>;
+    recording?: ScreenshotRecording;
   }>;
 };
 
@@ -237,6 +250,44 @@ export function pngDimensions(buffer: Buffer): { width: number; height: number }
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
+export function recordingFilenames(desktopFilename: string): { video: string; preview: string } {
+  const stem = desktopFilename.replace(/\.png$/u, "");
+  return { video: `${stem}.webm`, preview: `${stem}.gif` };
+}
+
+export function gifDimensions(buffer: Buffer): { width: number; height: number } {
+  const header = buffer.toString("ascii", 0, 6);
+  if (buffer.length < 10 || (header !== "GIF87a" && header !== "GIF89a")) throw new Error("file is not a GIF");
+  return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+}
+
+export function assertWebm(buffer: Buffer): void {
+  if (buffer.length < 4 || !buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) throw new Error("file is not a WebM video");
+}
+
+function validPreviewDimensions(dimensions: { width: number; height: number }): boolean {
+  return dimensions.width > 0 && dimensions.width <= MAX_GIF_WIDTH && dimensions.height > 0 && dimensions.height <= MAX_GIF_WIDTH;
+}
+
+function readRecording(directory: string, desktopFilename: string): ScreenshotRecording | undefined {
+  const filenames = recordingFilenames(desktopFilename);
+  const videoPath = path.join(directory, filenames.video);
+  const previewPath = path.join(directory, filenames.preview);
+  if (!existsSync(videoPath) || !existsSync(previewPath)) return undefined;
+  const video = readFileSync(videoPath);
+  const preview = readFileSync(previewPath);
+  assertWebm(video);
+  const dimensions = gifDimensions(preview);
+  if (video.length > MAX_VIDEO_BYTES) throw new Error(`${filenames.video} exceeds ${MAX_VIDEO_BYTES} bytes`);
+  if (preview.length > MAX_GIF_BYTES) throw new Error(`${filenames.preview} exceeds ${MAX_GIF_BYTES} bytes`);
+  if (!validPreviewDimensions(dimensions)) throw new Error(`${filenames.preview} has invalid dimensions`);
+  const sha256 = (buffer: Buffer) => createHash("sha256").update(buffer).digest("hex");
+  return {
+    video: { filename: filenames.video, bytes: video.length, sha256: sha256(video) },
+    preview: { filename: filenames.preview, bytes: preview.length, sha256: sha256(preview), dimensions },
+  };
+}
+
 export function validCaptureDimensions(request: Pick<ScreenshotRequest, "fullPage" | "scenarioId">, viewport: ScreenshotViewport, dimensions: { width: number; height: number }): boolean {
   const expected = VIEWPORTS[viewport];
   if (request.scenarioId && reviewScenario(request.scenarioId).target) return dimensions.width > 0 && dimensions.width <= expected.width && dimensions.height > 0 && dimensions.height <= MAX_FULL_PAGE_HEIGHT;
@@ -263,7 +314,8 @@ export function createManifest(outputDir: string, requests: ScreenshotRequest[],
         sha256: createHash("sha256").update(buffer).digest("hex"),
       }];
     })) as Record<ScreenshotViewport, ScreenshotCapture>;
-    return { requestedRoute, fullPage, ...(scenarioId ? { scenarioId } : {}), captures };
+    const recording = readRecording(outputDir, filenames.desktop);
+    return { requestedRoute, fullPage, ...(scenarioId ? { scenarioId } : {}), captures, ...(recording ? { recording } : {}) };
   });
   return { schemaVersion: 2, prNumber, sourceSha, capturedAt, screenshots };
 }
@@ -283,7 +335,17 @@ export function validateAndPublishBundle(bundleDir: string, destination: string,
     assertRecord(item, `manifest screenshot ${index + 1}`);
     return { requestedRoute: item.requestedRoute, fullPage: item.fullPage, ...(item.scenarioId !== undefined ? { scenarioId: item.scenarioId } : {}) };
   }));
-  const expectedFiles = new Set(["manifest.json", ...requests.flatMap(({ filenames }) => SCREENSHOT_VIEWPORTS.map((viewport) => filenames[viewport]))]);
+  // A recording is optional per request, so the untrusted manifest decides which
+  // ones are expected; every declared file is then held to the same checks as a PNG.
+  const declaredRecordings = requests.map((request, index) => {
+    const item = (raw.screenshots as unknown[])[index] as Record<string, unknown>;
+    return item.recording === undefined ? undefined : recordingFilenames(request.filenames.desktop);
+  });
+  const expectedFiles = new Set([
+    "manifest.json",
+    ...requests.flatMap(({ filenames }) => SCREENSHOT_VIEWPORTS.map((viewport) => filenames[viewport])),
+    ...declaredRecordings.flatMap((recording) => (recording ? [recording.video, recording.preview] : [])),
+  ]);
   if (entries.length !== expectedFiles.size || entries.some((entry) => !expectedFiles.has(entry))) throw new Error("bundle contains an unexpected or missing file");
 
   const manifest = raw as unknown as ScreenshotManifest;
@@ -304,15 +366,27 @@ export function validateAndPublishBundle(bundleDir: string, destination: string,
         throw new Error(`${expectedFilename} does not match its manifest metadata`);
       }
     }
+    const recordingNames = declaredRecordings[index];
+    if (recordingNames) {
+      assertRecord(declared.recording, `manifest screenshot ${index + 1} recording`);
+      const actual = readRecording(bundleDir, request.filenames.desktop);
+      const claimed = declared.recording;
+      if (!actual
+        || claimed.video?.filename !== recordingNames.video || claimed.video.bytes !== actual.video.bytes || claimed.video.sha256 !== actual.video.sha256
+        || claimed.preview?.filename !== recordingNames.preview || claimed.preview.bytes !== actual.preview.bytes || claimed.preview.sha256 !== actual.preview.sha256
+        || claimed.preview.dimensions?.width !== actual.preview.dimensions.width || claimed.preview.dimensions?.height !== actual.preview.dimensions.height) {
+        throw new Error(`recording for screenshot ${index + 1} does not match its manifest metadata`);
+      }
+    }
   }
 
   rmSync(destination, { recursive: true, force: true });
   if (requests.length === 0) return manifest;
   mkdirSync(destination, { recursive: true });
-  for (const { filenames } of requests) {
-    for (const viewport of SCREENSHOT_VIEWPORTS) {
-      copyFileSync(path.join(bundleDir, filenames[viewport]), path.join(destination, filenames[viewport]));
-    }
+  for (const [index, { filenames }] of requests.entries()) {
+    const recording = declaredRecordings[index];
+    const files = [...SCREENSHOT_VIEWPORTS.map((viewport) => filenames[viewport]), ...(recording ? [recording.video, recording.preview] : [])];
+    for (const file of files) copyFileSync(path.join(bundleDir, file), path.join(destination, file));
   }
   writeFileSync(path.join(destination, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
