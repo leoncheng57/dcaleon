@@ -233,6 +233,32 @@ test.describe("workspace files tab", () => {
     await expect(page.getByTestId("opencode-file-tab")).toHaveCount(1);
   });
 
+  test("shows file-type icons and compact rows", async ({ page }) => {
+    await page.getByTestId("opencode-mobile-workspace-open").click();
+    const tree = page.getByTestId("opencode-file-tree");
+    const readme = tree.getByTestId("opencode-tree-file").filter({ hasText: "README.md" });
+    const readmeIcon = readme.getByTestId("opencode-file-icon");
+    await expect(readmeIcon).toHaveAttribute("data-kind", "markdown");
+    await expect(readmeIcon).toHaveAttribute("aria-hidden", "true");
+    await expect(readme).toHaveAccessibleName("README.md");
+    const readmeBox = await readme.boundingBox();
+    expect(readmeBox).not.toBeNull();
+    expect(readmeBox!.height).toBeLessThanOrEqual(28);
+
+    const src = tree.getByTestId("opencode-tree-directory").filter({ hasText: "src" });
+    await expect(src.getByTestId("opencode-file-icon")).toHaveAttribute("data-kind", "folder");
+    await src.click();
+    await expect(src.getByTestId("opencode-file-icon")).toHaveAttribute("data-kind", "folder-open");
+    await expect(
+      tree.getByTestId("opencode-tree-file").filter({ hasText: "index.ts" }).getByTestId("opencode-file-icon"),
+    ).toHaveAttribute("data-kind", "code");
+
+    await tree.getByTestId("opencode-tree-directory").filter({ hasText: "assets" }).click();
+    await expect(
+      tree.getByTestId("opencode-tree-file").filter({ hasText: "logo.bin" }).getByTestId("opencode-file-icon"),
+    ).toHaveAttribute("data-kind", "file");
+  });
+
   // A flex item defaults to `min-width: auto`, so CodeMirror's intrinsic line
   // width once pushed this toolbar 93px past the drawer's edge. Nothing
   // scrolled to reveal it and the drawer clipped it silently, so `Wrap` was
@@ -318,6 +344,20 @@ test.describe("workspace files on a phone", () => {
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ requests: [] }) }),
     );
     await page.setViewportSize({ width: 390, height: 740 });
+  });
+
+  test("keeps file rows reachable and shows their icons", async ({ page }) => {
+    await page.goto(conversation);
+    await page.getByTestId("opencode-mobile-workspace-open").click();
+
+    const readme = page
+      .getByTestId("opencode-file-tree")
+      .getByTestId("opencode-tree-file")
+      .filter({ hasText: "README.md" });
+    const box = await readme.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    await expect(readme.getByTestId("opencode-file-icon")).toBeVisible();
   });
 
   test("moves between Tree and File with an accessible back action", async ({ page }) => {

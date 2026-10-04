@@ -14,11 +14,31 @@
 // enough width to be read.
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  File,
+  FileBraces,
+  FileCode,
+  FileCog,
+  FileImage,
+  FileKey,
+  FileLock,
+  FileTerminal,
+  FileText,
+  Folder,
+  FolderOpen,
+  GitBranch,
+  Globe,
+  Palette,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Alert } from "../ds/alert.js";
 import { Button } from "../ds/button.js";
 import { cn } from "../ds/utils.js";
 import { api, type VcsFileDiff, type WorkspaceFile, type WorkspaceNode } from "../lib/api.js";
+import { FILE_ICON_TONE, fileIconKind, type FileIconKind, type FileIconTone } from "../lib/fileIcons.js";
 import { describeLineRange, type WorkspaceTarget } from "../lib/fileReferences.js";
 import { WORKSPACE_TREE_ROOT, useWorkspaceTree, type WorkspaceTree } from "../lib/useWorkspaceTree.js";
 
@@ -41,6 +61,32 @@ const CHANGE_LETTER: Record<NonNullable<VcsFileDiff["status"]>, string> = {
   deleted: "D",
 };
 
+const FILE_ICON_COMPONENT: Record<FileIconKind, LucideIcon> = {
+  folder: Folder,
+  "folder-open": FolderOpen,
+  code: FileCode,
+  json: FileBraces,
+  markdown: FileText,
+  style: Palette,
+  html: Globe,
+  image: FileImage,
+  config: FileCog,
+  shell: FileTerminal,
+  lock: FileLock,
+  env: FileKey,
+  git: GitBranch,
+  text: FileText,
+  file: File,
+};
+
+const FILE_ICON_TONE_CLASS: Record<FileIconTone, string> = {
+  info: "text-[var(--color-text-info)]",
+  success: "text-[var(--color-text-success)]",
+  warning: "text-[var(--color-text-warning)]",
+  danger: "text-[var(--color-text-danger)]",
+  muted: "text-[var(--color-text-muted)]",
+};
+
 function fileName(path: string): string {
   return path.split("/").filter(Boolean).pop() ?? path;
 }
@@ -57,6 +103,20 @@ function ChangeBadge({ status }: { status?: string }) {
     >
       {status}
     </span>
+  );
+}
+
+function FileIcon({ name, type, expanded }: { name: string; type: "file" | "directory"; expanded?: boolean }) {
+  const kind = fileIconKind(name, type, expanded);
+  const Icon = FILE_ICON_COMPONENT[kind];
+  return (
+    <Icon
+      size={14}
+      aria-hidden="true"
+      className={cn("shrink-0", FILE_ICON_TONE_CLASS[FILE_ICON_TONE[kind]])}
+      data-testid="opencode-file-icon"
+      data-kind={kind}
+    />
   );
 }
 
@@ -146,15 +206,16 @@ function TreeRow({
         {...(directory ? { "aria-expanded": expanded } : { "aria-current": active ? ("true" as const) : undefined })}
         style={{ paddingInlineStart: `${0.5 + depth * 0.75}rem` }}
         className={cn(
-          "flex min-h-9 w-full items-center gap-1.5 rounded pe-2 text-left text-[13px] hover:bg-[var(--hh-row-hover)] pointer-coarse:min-h-11",
+          "flex min-h-11 w-full items-center gap-1.5 rounded pe-2 text-left text-[13px] hover:bg-[var(--hh-row-hover)] sm:pointer-fine:min-h-6",
           active && "bg-[var(--color-background-surface-neutral-muted)] font-semibold",
         )}
         data-testid={directory ? "opencode-tree-directory" : "opencode-tree-file"}
         data-path={node.path}
       >
-        <span className="w-3 shrink-0 text-[10px] text-[var(--color-text-muted)]" aria-hidden>
-          {directory ? (expanded ? "▾" : "▸") : ""}
+        <span className="flex w-3 shrink-0 items-center justify-center text-[var(--color-text-muted)]" aria-hidden="true">
+          {directory && (expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
         </span>
+        <FileIcon name={node.name} type={node.type} expanded={expanded} />
         <span className="min-w-0 truncate">{node.name}</span>
         <ChangeBadge status={changes.get(node.path)} />
       </button>
@@ -223,12 +284,17 @@ function FilterResults({
             type="button"
             onClick={() => (node.type === "directory" ? tree.toggle(node.path) : onOpenFile(node.path))}
             className={cn(
-              "flex min-h-9 w-full items-center gap-1.5 rounded px-2 text-left text-[13px] hover:bg-[var(--hh-row-hover)] pointer-coarse:min-h-11",
+              "flex min-h-11 w-full items-center gap-1.5 rounded px-2 text-left text-[13px] hover:bg-[var(--hh-row-hover)] sm:pointer-fine:min-h-6",
               activePath === node.path && "bg-[var(--color-background-surface-neutral-muted)] font-semibold",
             )}
             data-testid={node.type === "directory" ? "opencode-tree-directory" : "opencode-tree-file"}
             data-path={node.path}
           >
+            <FileIcon
+              name={node.name}
+              type={node.type}
+              expanded={node.type === "directory" ? tree.expanded.has(node.path) : undefined}
+            />
             <span className="min-w-0 truncate" title={node.path}>
               {node.path}
             </span>
