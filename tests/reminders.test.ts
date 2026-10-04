@@ -239,6 +239,23 @@ describe("shipped catalogue", () => {
     expect(reminder!.body).toContain("stop without mutation");
     expect(reminder!.body).toContain("instead of substituting an independent root session");
   });
+
+  it("ships Session Wrap-Up as a local Documentation & Delivery reminder", () => {
+    const reminder = reminderCatalogue().find(({ id }) => id === "session-wrap-up");
+    expect(reminder).toBeDefined();
+    expect(reminder!.source).toBeUndefined();
+    expect(reminder!.tags).toContain("docs");
+    for (const heading of [
+      "**Artifacts created**",
+      "**Current state**",
+      "**Suggested next actions**",
+      "**Open questions / decisions needed**",
+      "**Relevant context**",
+    ]) {
+      expect(reminder!.body).toContain(heading);
+    }
+    expect(REMINDER_GROUPS.find(({ label }) => label === "Documentation & Delivery")?.ids).toContain("session-wrap-up");
+  });
 });
 
 describe("reminderTag / withReminderTag", () => {
