@@ -637,7 +637,7 @@ export function HubPage() {
               type="search"
               value={projectSearch}
               onChange={(event) => setProjectSearch(event.target.value)}
-              placeholder="Search projects"
+              placeholder="Search projects…"
               className="h-10 w-full rounded-md border border-[var(--color-border-default)] bg-transparent pl-9 pr-3 text-sm"
               data-testid="opencode-project-search"
             />
