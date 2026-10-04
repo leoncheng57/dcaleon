@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 2,
+  "prNumber": 194,
+  "sourceSha": "627141b5f06f7cc70115cb3c2505c9abf4a31ba5",
+  "capturedAt": "2026-10-04T22:21:39.431Z",
+  "screenshots": [
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project",
+      "fullPage": false,
+      "captures": {
+        "desktop": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-f303650c--desktop.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 84634,
+          "sha256": "86c321f10eb8984a0ccc41f3bca5501afc3fcd0b0e836a4178b588f1fe8f713b"
+        },
+        "mobile": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-c19a59d5--mobile.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 44802,
+          "sha256": "b0d99e6a396f6331714a7154659f954c9aebe02ce095de23f66ad7617f0eb15d"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-f303650c--desktop.webm",
+          "bytes": 335801,
+          "sha256": "03de4f6989c55bb359200f6068dcff896ccd7b3714f44d01f1d4c00c22b3ec84"
+        },
+        "preview": {
+          "filename": "01-sessions-ses_mock_done-directory-tmp-mock-project-f303650c--desktop.gif",
+          "bytes": 744577,
+          "sha256": "d7bb1dd26afd19c91f460c5903ac0b8372e5987e46768b877b2972425e1011dc",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    },
+    {
+      "requestedRoute": "/sessions/ses_mock_done?directory=/tmp/mock-project",
+      "fullPage": true,
+      "captures": {
+        "desktop": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-383588eb--desktop--full.png",
+          "dimensions": {
+            "width": 1280,
+            "height": 800
+          },
+          "bytes": 84634,
+          "sha256": "86c321f10eb8984a0ccc41f3bca5501afc3fcd0b0e836a4178b588f1fe8f713b"
+        },
+        "mobile": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-f1b9b001--mobile--full.png",
+          "dimensions": {
+            "width": 390,
+            "height": 740
+          },
+          "bytes": 44802,
+          "sha256": "e307c5c88f7388a6e9a87333806f2b81cecee806fbe747d80b403e4043c9ea69"
+        }
+      },
+      "recording": {
+        "video": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-383588eb--desktop--full.webm",
+          "bytes": 231943,
+          "sha256": "7ccc4a38124a6f2e053b2647df2fe981ba02e05ddcb538bbf4a87fa85ff9a6b0"
+        },
+        "preview": {
+          "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-383588eb--desktop--full.gif",
+          "bytes": 660607,
+          "sha256": "f43647d0dadcb2a3b14aee233abfbea5c77bdac316cb17352106fb56b3196ec2",
+          "dimensions": {
+            "width": 640,
+            "height": 400
+          }
+        }
+      }
+    }
+  ],
+  "coverage": {
+    "reason": "Author override from the screenshots block (an empty block explicitly skips capture).",
+    "needsLocalReview": false
+  }
+}
