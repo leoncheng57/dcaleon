@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
+import { evidenceUse } from "./tests/e2e/evidence.js";
 import { e2eStateFiles, prepareE2EStateFiles } from "./tests/e2e/state-files.js";
 import { ensureGitFixture } from "./tests/e2e/git-fixture.js";
 
@@ -191,8 +192,7 @@ export const appServer = {
 
 export const baseUse = {
   baseURL: `http://127.0.0.1:${PORT}`,
-  trace: "retain-on-failure",
-  screenshot: "only-on-failure",
+  ...evidenceUse(),
 } as const;
 
 export default defineConfig({
