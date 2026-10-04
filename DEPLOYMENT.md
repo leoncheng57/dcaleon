@@ -42,6 +42,12 @@ updated, and updating the production service does not restart a development serv
 The version label in the application navigation shows the commit baked into the
 served client bundle.
 
+A development BFF does not deliver notifications by default (`npm run dev` sets
+`NOTIFICATION_DELIVERY=off` for the stack). That matters because the dev and
+supervised BFFs share one `.env` and `.state`: a dev BFF started with delivery
+enabled alongside the supervised one double-delivers every notification (#320).
+`NOTIFICATION_DELIVERY=on npm run dev` opts back in from the invoking shell.
+
 ### Port map
 
 There are three independent layers, and seeing one port respond does not prove
@@ -309,7 +315,9 @@ quiet box means only that nothing has asked for a token yet. The BFF pushes a
 Web Push notification when the state *enters* `missing`, and again when it
 recovers — once per transition, not once per probe, so a box that stays broken
 does not push hourly until you mute it. Without VAPID keys or a subscribed
-device the alert still reaches the log.
+device the alert still reaches the log. The push is also skipped when the
+BFF's notification delivery is off (`NOTIFICATION_DELIVERY=off`, the
+`npm run dev` default).
 
 **Logs.** The Linux supervisor rotates `.state/logs/bff.tmux.log` past 32 MiB,
 keeping one previous generation, between runs of the server rather than on a

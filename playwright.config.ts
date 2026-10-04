@@ -129,6 +129,9 @@ export const appServer = {
     NOTIFICATION_HISTORY_FILE: stateFiles.NOTIFICATION_HISTORY_FILE,
     INSTRUCTION_AUDIT_FILE: stateFiles.INSTRUCTION_AUDIT_FILE,
     AUTO_APPROVE_STATE_FILE: stateFiles.AUTO_APPROVE_STATE_FILE,
+    // Same reason as vitest.config.ts: the first correlationId() call must not
+    // mint the repo's real `.state/notification-audit-hmac.key`.
+    NOTIFICATION_AUDIT_HMAC_KEY: "e2e-audit-hmac-key",
     LOG_DIR,
     PREVIEW_ALLOWED_PORTS: String(PREVIEW_PORT),
     PUBLIC_APP_URL: "https://ide.e2e.example.test:8443",

@@ -34,6 +34,10 @@ interface PreflightOptions {
   serverVersion?: string;
   /** Set when the run is expected to warn on stderr. */
   allowStderr?: boolean;
+  /** Invoking-shell NOTIFICATION_DELIVERY; undefined deletes it from the env. */
+  deliveryEnv?: string;
+  /** Contents for a temp file pointed at by DCA_ENV_FILE (default: missing file). */
+  envFile?: string;
 }
 
 async function runPreflight(
@@ -42,7 +46,7 @@ async function runPreflight(
   const options: PreflightOptions = typeof passwordOrOptions === "string"
     ? { password: passwordOrOptions }
     : passwordOrOptions ?? {};
-  const { password, pinVersion = "1.18.21", serverVersion = "1.18.21", allowStderr = false } = options;
+  const { password, pinVersion = "1.18.21", serverVersion = "1.18.21", allowStderr = false, deliveryEnv, envFile } = options;
   let authorization: string | undefined;
   let requests = 0;
   const server = createServer((req, res) => {
@@ -68,9 +72,16 @@ async function runPreflight(
   const env = { ...process.env };
   delete env.OPENCODE_SERVER_PASSWORD;
   delete env.OPENCODE_SERVER_USERNAME;
+  delete env.NOTIFICATION_DELIVERY;
+  let envFilePath = path.join(tempRoot, "missing.env");
+  if (envFile !== undefined) {
+    envFilePath = path.join(tempRoot, "custom.env");
+    await writeFile(envFilePath, envFile);
+  }
   Object.assign(env, {
     BASH_COMPAT: "32",
-    DCA_ENV_FILE: path.join(tempRoot, "missing.env"),
+    DCA_ENV_FILE: envFilePath,
+    ...(deliveryEnv !== undefined ? { NOTIFICATION_DELIVERY: deliveryEnv } : {}),
     DEV_HEALTHCHECK_ONLY: "1",
     OPENCODE_URL: `http://127.0.0.1:${address.port}`,
     PORT: String(await availablePort()),
@@ -115,5 +126,22 @@ describe("scripts/dev.sh health preflight", () => {
     const result = await runPreflight({ pinVersion: "1.18.23+dca.2", serverVersion: "1.18.23", allowStderr: true });
     expect(result.stderr).toContain("version skew");
     expect(result.stderr).toContain("1.18.23+dca.2");
+  });
+
+  it("defaults notification delivery to off for a dev stack", async () => {
+    const result = await runPreflight();
+    expect(result.stdout).toContain("notification delivery: off");
+  });
+
+  it("honours NOTIFICATION_DELIVERY=on from the invoking shell", async () => {
+    const result = await runPreflight({ deliveryEnv: "on" });
+    expect(result.stdout).toContain("notification delivery: on");
+  });
+
+  it("ignores NOTIFICATION_DELIVERY set in the shared .env", async () => {
+    // The .env describes the supervised BFF; a value in it must not opt a dev
+    // stack into delivery (#320).
+    const result = await runPreflight({ envFile: "NOTIFICATION_DELIVERY=on\n" });
+    expect(result.stdout).toContain("notification delivery: off");
   });
 });

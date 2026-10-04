@@ -89,3 +89,8 @@ warns to the console and the manual re-save still works.
   any leftover `Unlinked` row.
 - PWA push fails but ntfy works: leave ntfy enabled while checking browser permission and
   subscription state; the channels do not disable one another.
+- Every notification arrives twice on all devices: a second BFF is delivering from the
+  same `.env`/`.state` — check for a stray `npm run dev` started with
+  `NOTIFICATION_DELIVERY=on` (`lsof -nP -iTCP -sTCP:LISTEN | grep node`). Since audit
+  correlation IDs now share a persisted key, the duplicate pair shows an identical
+  `sessionCorrelation` milliseconds apart in `.state/logs/audit.jsonl`.

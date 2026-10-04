@@ -158,6 +158,13 @@ reversible and its state is persisted on the server.
 
 The page also lists every notification the BFF classified, including ones that were never
 delivered, because "why was I never asked?" is the question that log exists to answer.
+
+A development BFF started by `npm run dev` does not deliver notifications by default —
+no Web Push, no ntfy, and no notification history — because its `.env`/`.state` is shared
+with the supervised production BFF and two delivering BFFs double every ping. Opt a dev
+stack back in by setting `NOTIFICATION_DELIVERY=on` in the invoking shell
+(`NOTIFICATION_DELIVERY=on npm run dev`); a value in `.env` is ignored on purpose.
+
 `ntfy` and PWA push report `sent`, `off` or `failed`; `desktop` reports only whether server-backed
 desktop notifications were **allowed**, since the BFF cannot observe whether a tab rendered
 one. Sound and speech are device-local and therefore absent from the server log.

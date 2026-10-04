@@ -1,3 +1,4 @@
+import { notificationDeliveryEnabled } from "../notifications/delivery.js";
 import { readCredentialHealth, isAlertable, type CredentialHealth, type CredentialState } from "./credentialHealth.js";
 import type { PushSubscriptionStore } from "../notifications/webpush.js";
 import { sendWebPush, webPushConfig } from "../notifications/webpush.js";
@@ -23,6 +24,8 @@ export interface CredentialWatchOptions {
   /** Seam for tests; defaults to the real probe. */
   probe?: () => Promise<CredentialHealth>;
   send?: typeof sendWebPush;
+  /** Defaults to the process-wide notification delivery switch (#320). */
+  deliveryEnabled?: boolean;
   config?: () => ReturnType<typeof webPushConfig>;
   log?: (message: string) => void;
 }
@@ -67,6 +70,7 @@ export class CredentialWatch {
   private readonly send: typeof sendWebPush;
   private readonly config: () => ReturnType<typeof webPushConfig>;
   private readonly log: (message: string) => void;
+  private readonly deliveryEnabled: boolean;
 
   constructor(private readonly options: CredentialWatchOptions) {
     this.intervalMs = options.intervalMs ?? DEFAULT_PROBE_INTERVAL_MS;
@@ -74,6 +78,7 @@ export class CredentialWatch {
     this.send = options.send ?? sendWebPush;
     this.config = options.config ?? webPushConfig;
     this.log = options.log ?? ((message) => console.warn(message));
+    this.deliveryEnabled = options.deliveryEnabled ?? notificationDeliveryEnabled();
   }
 
   /** The most recent observation, for `/api/health`. */
@@ -103,6 +108,11 @@ export class CredentialWatch {
    */
   private async push(message: { title: string; body: string }): Promise<void> {
     try {
+      // A second web-push path that would otherwise page phones from a dev BFF.
+      if (!this.deliveryEnabled) {
+        this.log("[claude] notification delivery is off — credential alert stays in the log only");
+        return;
+      }
       if (!this.config()) {
         this.log("[claude] no Web Push configuration — credential alert stays in the log only");
         return;

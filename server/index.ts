@@ -30,6 +30,7 @@ import { notificationRoutes } from "./routes/notifications.js";
 import { PreferenceStore } from "./notifications/preferences.js";
 import { HistoryStore } from "./notifications/history.js";
 import { NotificationService } from "./notifications/service.js";
+import { notificationDeliveryEnabled } from "./notifications/delivery.js";
 import { PushSubscriptionStore, webPushConfig } from "./notifications/webpush.js";
 import { forgeRoutes } from "./routes/forge.js";
 import { planningRoutes } from "./routes/planning.js";
@@ -115,6 +116,9 @@ if (claudeApprovals) {
   // call sat for the full timeout with no ping and no row (decision 34c).
   bindClaudeApprovalEvents(bus, claudeApprovals, claudeStore);
 }
+// #320: one switch covers both web-push paths (the notification service and
+// the credential watch) so a dev BFF defaults to delivering nothing.
+const notificationDelivery = notificationDeliveryEnabled();
 const notificationService = new NotificationService(
   opencode,
   bus,
@@ -141,6 +145,7 @@ const notificationService = new NotificationService(
     if (isClaudeSessionId(pending.sessionID)) return claudeApprovals?.list(pending.sessionID).some((item) => item.id === pending.id) ?? false;
     return (await listPermissions(opencode, directory)).some((item) => item.id === pending.id);
   },
+  notificationDelivery,
 );
 notificationService.start();
 
@@ -151,6 +156,7 @@ notificationService.start();
 const credentialWatch = new CredentialWatch({
   subscriptions: pushSubscriptions,
   available: islands.claude.available && claude.enabled,
+  deliveryEnabled: notificationDelivery,
 });
 credentialWatch.start();
 // Without the OpenCode island there is no upstream to subscribe to, and

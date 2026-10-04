@@ -7,14 +7,23 @@
  * logs — only their correlation IDs do. This lets operators correlate events
  * across the pipeline without exposing sensitive paths or identifiers.
  *
- * The HMAC key is read from `NOTIFICATION_AUDIT_HMAC_KEY`. If absent, a random
- * key is generated at startup. This is acceptable because:
- * 1. Correlation still works within a single process lifetime
- * 2. Cross-restart correlation is a nice-to-have, not a requirement
- * 3. The alternative (failing closed) would block the entire notification system
+ * The HMAC key resolves in three stages, tried in order:
+ * 1. `NOTIFICATION_AUDIT_HMAC_KEY` — an explicit override that never touches
+ *    disk and always wins.
+ * 2. A persisted key file (`.state/notification-audit-hmac.key`, overridable
+ *    via `NOTIFICATION_AUDIT_HMAC_KEY_FILE`) — created atomically on first
+ *    use and reused by every process sharing this checkout, so correlation
+ *    IDs join across restarts AND across BFFs sharing one .env/.state
+ *    (#320: per-process random keys meant a dev BFF and the supervised BFF
+ *    produced different correlation IDs for the same session, which hid the
+ *    duplicate deliveries).
+ * 3. A per-process random key — the last resort, never thrown, because
+ *    failing closed would block the entire notification system.
  */
 
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { linkSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import { auditLogWriter } from "./auditLog.js";
 import type { SuppressionReason } from "./history.js";
@@ -24,9 +33,81 @@ import type { NotifyEvent } from "./preferences.js";
 // HMAC correlation ID generation
 // -----------------------------------------------------------------------------
 
-const HMAC_KEY: Buffer = process.env.NOTIFICATION_AUDIT_HMAC_KEY
-  ? Buffer.from(process.env.NOTIFICATION_AUDIT_HMAC_KEY, "utf8")
-  : randomBytes(32);
+/** The persisted key's path: the env override, else `.state/` under cwd. */
+export function auditHmacKeyPath(env: NodeJS.ProcessEnv = process.env): string {
+  return env.NOTIFICATION_AUDIT_HMAC_KEY_FILE
+    || resolve(process.cwd(), ".state/notification-audit-hmac.key");
+}
+
+const HEX_KEY = /^[0-9a-f]{64}$/i;
+
+/**
+ * Resolve the audit HMAC key once per process (see the module header for the
+ * three stages). Sync fs is deliberate: it runs once, lazily, on the first
+ * correlation ID the process mints.
+ *
+ * Key file creation is atomic-with-content: the candidate is written to a
+ * unique sibling temp file and hard-linked into place, so two processes
+ * racing the create both converge on the winner's bytes — the loser re-reads
+ * the file rather than keeping its own key.
+ *
+ * Never throws. An unreadable or invalid existing file is left untouched and
+ * reported, then falls back to a per-process key: the key is secret, so the
+ * warning names the path and the error — never the key or the file contents.
+ */
+export function resolveAuditHmacKey(
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (message: string) => void = (message) => console.warn(message),
+): Buffer {
+  const configured = env.NOTIFICATION_AUDIT_HMAC_KEY?.trim();
+  if (configured) return Buffer.from(configured, "utf8");
+
+  const file = auditHmacKeyPath(env);
+  const fallback = (reason: string): Buffer => {
+    warn(`[notifications] cannot use audit HMAC key file ${file} (${reason}); falling back to a per-process key, so audit correlation IDs will not join across processes. Set NOTIFICATION_AUDIT_HMAC_KEY to provide a fixed key.`);
+    return randomBytes(32);
+  };
+
+  let existing: string;
+  try {
+    existing = readFileSync(file, "utf8").trim();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? String(error);
+    if (code !== "ENOENT") return fallback(`read failed: ${code}`);
+    try {
+      mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+      const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+      try {
+        writeFileSync(temp, `${randomBytes(32).toString("hex")}\n`, { mode: 0o600, flag: "wx" });
+        try {
+          linkSync(temp, file);
+        } catch (linkError) {
+          // EEXIST means another process won the race; its key wins and ours
+          // is discarded, so every racer converges on the same bytes.
+          if ((linkError as NodeJS.ErrnoException).code !== "EEXIST") throw linkError;
+        }
+      } finally {
+        try {
+          unlinkSync(temp);
+        } catch {
+          // The temp is already gone if the link or a cleanup raced us.
+        }
+      }
+      existing = readFileSync(file, "utf8").trim();
+    } catch (createError) {
+      const createCode = (createError as NodeJS.ErrnoException).code ?? String(createError);
+      return fallback(`create failed: ${createCode}`);
+    }
+  }
+
+  if (HEX_KEY.test(existing)) return Buffer.from(existing, "hex");
+  return fallback("contents are not a 64-hex-digit key");
+}
+
+let cachedKey: Buffer | undefined;
+function hmacKey(): Buffer {
+  return cachedKey ??= resolveAuditHmacKey();
+}
 
 /**
  * Generate a privacy-safe correlation ID from a sensitive identifier.
@@ -38,7 +119,7 @@ const HMAC_KEY: Buffer = process.env.NOTIFICATION_AUDIT_HMAC_KEY
  */
 export function correlationId(value: string | undefined | null): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  return createHmac("sha256", HMAC_KEY).update(value).digest("hex").slice(0, 16);
+  return createHmac("sha256", hmacKey()).update(value).digest("hex").slice(0, 16);
 }
 
 // -----------------------------------------------------------------------------

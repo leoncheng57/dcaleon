@@ -9,6 +9,7 @@ import {
   type SessionMetadata,
 } from "../opencode/sessions.js";
 import { correlationId, logAuditEvent } from "./audit.js";
+import { NOTIFICATION_DELIVERY_OFF_MESSAGE, notificationDeliveryEnabled } from "./delivery.js";
 import { sendNtfy, type NotificationMessage } from "./ntfy.js";
 import {
   HistoryStore,
@@ -271,6 +272,7 @@ export class NotificationService {
     private readonly pushSubscriptions = new PushSubscriptionStore(),
     lookupSessionExcerpt?: SessionExcerptLookup,
     isPermissionPending?: PendingPermissionLookup,
+    private readonly deliveryEnabled: boolean = notificationDeliveryEnabled(),
   ) {
     this.isPermissionPending = isPermissionPending
       ?? (async (directory, pending) => (await listPermissions(this.config, directory)).some((item) => item.id === pending.id));
@@ -319,6 +321,13 @@ export class NotificationService {
   }
 
   start(): void {
+    // Not subscribing is the whole gate (#320): it skips web push, ntfy,
+    // history appends/setDelivery/markParked, parked timers,
+    // `notification.recorded` emits and `notification_decided` audit lines.
+    if (!this.deliveryEnabled) {
+      console.warn(NOTIFICATION_DELIVERY_OFF_MESSAGE);
+      return;
+    }
     this.bus.on("event", this.onEvent);
   }
 
