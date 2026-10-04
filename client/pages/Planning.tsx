@@ -8,8 +8,10 @@ import { Button } from "../ds/button.js";
 import { LoadingIndicator } from "../ds/loading-indicator.js";
 import { CreateIssueDialog } from "../components/create-issue-dialog.js";
 import { PlanningItemDialog } from "../components/planning-item-dialog.js";
+import { PlanningRateLimitAlert } from "../components/planning-rate-limit-alert.js";
 import {
   api,
+  isPlanningGithubTokenMissing,
   type PlanningItem,
   type PlanningItemState,
   type PlanningItemType,
@@ -385,6 +387,7 @@ export function PlanningPage() {
   const [params, setParams] = useSearchParams();
   const [snapshot, setSnapshot] = useState<PlanningSnapshot | null>(null);
   const [error, setError] = useState("");
+  const [tokenMissing, setTokenMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [stateFilter, setStateFilter] = useState<StateFilter>("open");
@@ -396,9 +399,13 @@ export function PlanningPage() {
   const load = (refresh = false) => {
     setLoading(true);
     setError("");
+    setTokenMissing(false);
     return api.planningItems(refresh)
       .then(setSnapshot)
-      .catch((reason: Error) => setError(reason.message))
+      .catch((reason: unknown) => {
+        setTokenMissing(isPlanningGithubTokenMissing(reason));
+        setError(reason instanceof Error ? reason.message : "Unavailable");
+      })
       .finally(() => setLoading(false));
   };
 
@@ -406,12 +413,16 @@ export function PlanningPage() {
     let active = true;
     setLoading(true);
     setError("");
+    setTokenMissing(false);
     void api.planningItems()
       .then((value) => {
         if (active) setSnapshot(value);
       })
-      .catch((reason: Error) => {
-        if (active) setError(reason.message);
+      .catch((reason: unknown) => {
+        if (active) {
+          setTokenMissing(isPlanningGithubTokenMissing(reason));
+          setError(reason instanceof Error ? reason.message : "Unavailable");
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -589,7 +600,9 @@ export function PlanningPage() {
         </div>
       </section>
 
-      {error && <Alert variant="danger">Planning data is unavailable: {error}</Alert>}
+      {error && (tokenMissing
+        ? <PlanningRateLimitAlert data-testid="opencode-planning-rate-limit-warning" />
+        : <Alert variant="danger">Planning data is unavailable: {error}</Alert>)}
       {created && (
         <Alert data-testid="opencode-planning-create-success" role="status" variant="success">
           Issue #{created.number} created.{" "}

@@ -25,6 +25,7 @@ export const PLANNING_LIMITS = {
   titleCharacters: 300,
   timeoutMs: 10_000,
   cacheMs: 60_000,
+  detailCacheEntries: 50,
   labelCacheMs: 5 * 60_000,
   createTitleCharacters: 256,
   createBodyCharacters: 65_536,
@@ -121,6 +122,14 @@ class PlanningFetchError extends Error {
  */
 export function planningErrorMessage(error: unknown): PlanningError {
   return error instanceof PlanningFetchError ? error.safeMessage : "Unavailable";
+}
+
+/** Adds a safe setup hint only for unauthenticated rate limits; never exposes the token. */
+export function planningErrorBody(error: unknown): { error: PlanningError; code?: "PLANNING_GITHUB_TOKEN_MISSING" } {
+  const message = planningErrorMessage(error);
+  return message === "Rate limited" && !process.env.GITHUB_TOKEN
+    ? { error: message, code: "PLANNING_GITHUB_TOKEN_MISSING" }
+    : { error: message };
 }
 
 export function planningErrorStatus(error: unknown): number {
@@ -431,8 +440,7 @@ function trustedPlanningItem(raw: Record<string, unknown>): PlanningItem | null 
   return item;
 }
 
-export async function getPlanningItemDetails(value: unknown): Promise<PlanningItemDetails> {
-  const number = validatePlanningNumber(value);
+async function loadPlanningItemDetails(number: number): Promise<PlanningItemDetails> {
   const [itemResult, commentsResult] = await Promise.allSettled([
     planningRequest(itemUrl(number)),
     planningRequest(commentsUrl(number)),
@@ -468,6 +476,33 @@ export async function getPlanningItemDetails(value: unknown): Promise<PlanningIt
     commentsTruncated,
     commentsError,
   };
+}
+
+export function getPlanningItemDetails(value: unknown): Promise<PlanningItemDetails> {
+  const number = validatePlanningNumber(value);
+  const cachedDetails = detailsCached.get(number);
+  if (cachedDetails && cachedDetails.expiresAt > Date.now()) return Promise.resolve(cachedDetails.details);
+  if (cachedDetails) detailsCached.delete(number);
+  const existingRequest = detailsInFlight.get(number);
+  if (existingRequest) return existingRequest;
+
+  const generation = cacheGeneration;
+  const request = loadPlanningItemDetails(number)
+    .then((details) => {
+      if (generation === cacheGeneration && details.commentsError === null) {
+        detailsCached.set(number, { details, expiresAt: Date.now() + PLANNING_LIMITS.cacheMs });
+        if (detailsCached.size > PLANNING_LIMITS.detailCacheEntries) {
+          const oldest = detailsCached.keys().next().value;
+          if (oldest !== undefined) detailsCached.delete(oldest);
+        }
+      }
+      return details;
+    })
+    .finally(() => {
+      if (detailsInFlight.get(number) === request) detailsInFlight.delete(number);
+    });
+  detailsInFlight.set(number, request);
+  return request;
 }
 
 /** Runs `worker` over every index with at most `limit` in flight. No dependency. */
@@ -551,6 +586,8 @@ async function loadSnapshot(): Promise<PlanningSnapshot> {
 let cached: { snapshot: PlanningSnapshot; expiresAt: number } | null = null;
 let inFlight: Promise<PlanningSnapshot> | null = null;
 let cacheGeneration = 0;
+const detailsCached = new Map<number, { details: PlanningItemDetails; expiresAt: number }>();
+const detailsInFlight = new Map<number, Promise<PlanningItemDetails>>();
 let labelsCached: { labels: PlanningLabel[]; truncated: boolean; expiresAt: number } | null = null;
 let labelsInFlight: Promise<{ labels: PlanningLabel[]; truncated: boolean }> | null = null;
 
@@ -558,6 +595,8 @@ function invalidatePlanningSnapshot(): void {
   cacheGeneration += 1;
   cached = null;
   inFlight = null;
+  detailsCached.clear();
+  detailsInFlight.clear();
 }
 
 /** Tests only. Module-level cache would otherwise leak between cases. */
@@ -565,14 +604,15 @@ export function resetPlanningCache(): void {
   cached = null;
   inFlight = null;
   cacheGeneration += 1;
+  detailsCached.clear();
+  detailsInFlight.clear();
   labelsCached = null;
   labelsInFlight = null;
 }
 
 /**
- * Cached for PLANNING_LIMITS.cacheMs and coalesced while in flight: the page
- * polls, and several browser tabs must not multiply into several GitHub calls
- * against a shared rate limit.
+ * Snapshot and per-item details are cached for PLANNING_LIMITS.cacheMs and
+ * coalesced while in flight so browser tabs share GitHub's rate limit.
  */
 export function getPlanningSnapshot(refresh = false): Promise<PlanningSnapshot> {
   if (!refresh && cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.snapshot);
