@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "prNumber": 535,
-  "sourceSha": "352123d0438d269ad4a8f18232d181441c4a98cc",
-  "capturedAt": "2026-10-05T03:17:50.562Z",
+  "sourceSha": "46385a8fab4fa5c97189b61a9b82b037bd8cc451",
+  "capturedAt": "2026-10-05T03:23:03.641Z",
   "screenshots": [
     {
       "requestedRoute": "/opencode?directory=/tmp/mock-project",
@@ -15,8 +15,8 @@
             "width": 848,
             "height": 281
           },
-          "bytes": 17717,
-          "sha256": "0558b40bc41a13349d2ad771135eb69e3694ed769981b4b762e1e7b476898faf"
+          "bytes": 17711,
+          "sha256": "1682d2dda07508cb136f2f0d748330b72cc58d07c99d9e756b8e230b2f496982"
         },
         "mobile": {
           "filename": "01-opencode-directory-tmp-mock-project-c65e4a9d--mobile.png",
@@ -25,19 +25,19 @@
             "height": 269
           },
           "bytes": 16165,
-          "sha256": "ddd1d3e628df5a3539da855d9dad3cf9c6b4366f86ab0ca61e1aaa0ab33594f6"
+          "sha256": "8bb22c18933505f33e313190b88f221c2fcc85d0b0d97a1ab025e2307b6e7022"
         }
       },
       "recording": {
         "video": {
           "filename": "01-opencode-directory-tmp-mock-project-357a957d--desktop.webm",
-          "bytes": 297196,
-          "sha256": "cba6d559c83698d9f1eb69c039e40bca54adbab3a4a6d80bfbcd792bf3452034"
+          "bytes": 192097,
+          "sha256": "8ba43408a1b4e67bee607d1eb0c18a0dad46c50731af46f8b91e8dbd5bf1be7e"
         },
         "preview": {
           "filename": "01-opencode-directory-tmp-mock-project-357a957d--desktop.gif",
-          "bytes": 531449,
-          "sha256": "1c5fc05b98ede3ab8da9a50beb6fdcf86c4887d925e0a71d76bdad0d2eda134f",
+          "bytes": 439729,
+          "sha256": "6977c37c60b92590488563202ef0a016befd4925e0b2617d18b67a811172abda",
           "dimensions": {
             "width": 640,
             "height": 400
@@ -72,13 +72,13 @@
       "recording": {
         "video": {
           "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-37b8f494--desktop.webm",
-          "bytes": 319765,
-          "sha256": "a9d0779d6c05cb5085b7afdc57d737c7a7d2e969b74d218c29dbf72806c3309f"
+          "bytes": 204304,
+          "sha256": "ac06eafec75b3a6da24d9b11a865f7ccc073f247a31cee92d000dbb3752faff0"
         },
         "preview": {
           "filename": "02-sessions-ses_mock_done-directory-tmp-mock-project-panel-todo-37b8f494--desktop.gif",
-          "bytes": 734977,
-          "sha256": "c84e85b7c8e4df1bfecd5ce31c4f9c074540e88bd954695a742177a63bb20568",
+          "bytes": 593960,
+          "sha256": "0bd0f0aa7be15c6b59f3acee2b88eb14f3cf9da3b6389964ab37cdf85d7a3d2c",
           "dimensions": {
             "width": 640,
             "height": 400
