@@ -61,6 +61,9 @@ export function claudeRoutes(
       ...(session.worktree ? { branch: session.worktree.branch } : {}),
       ...(session.prUrl ? { prUrl: session.prUrl } : {}),
       ...(session.tokenUsage ? { tokenUsage: session.tokenUsage } : {}),
+      // Omitted until the agent calls `TodoWrite` even once, so the panel can
+      // distinguish "never reported" from "reported an empty list".
+      ...(session.todos ? { todos: session.todos } : {}),
       worktreeClosed: session.isolation === "worktree" && session.events.some((event) => event.kind === "status" && ["Merged into project", "Worktree discarded"].includes(event.label)),
       permissionLane: lane,
       // Only a gated lane can have anything waiting; the list is what the

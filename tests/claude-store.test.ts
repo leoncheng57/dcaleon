@@ -54,6 +54,57 @@ describe("Claude session store", () => {
     expect(session.started).toBe(true);
   });
 
+  it("captures the TodoWrite checklist, replaces it wholesale, and bounds what it keeps", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "plan it");
+    // Never called => absent, which is a different answer from an empty list.
+    expect(session.todos).toBeUndefined();
+
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_1", name: "TodoWrite", input: { todos: [
+        { content: "Trace the option list", status: "completed", priority: "high" },
+        { content: "Wire the panel", status: "in_progress", priority: "medium" },
+      ] } },
+    ] } });
+    expect(session.todos).toEqual([
+      { content: "Trace the option list", status: "completed", priority: "high" },
+      { content: "Wire the panel", status: "in_progress", priority: "medium" },
+    ]);
+
+    // The CLI resends the whole list, so the newest call replaces rather than
+    // merges: a dropped row must not be resurrected.
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_2", name: "TodoWrite", input: { todos: [{ content: "Wire the panel", status: "completed", priority: "medium" }] } },
+    ] } });
+    expect(session.todos).toEqual([{ content: "Wire the panel", status: "completed", priority: "medium" }]);
+
+    // Unusable rows are skipped, missing fields default, and content is capped.
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_3", name: "TodoWrite", input: { todos: [
+        { content: "   " }, null, "nope", { status: "pending" },
+        { activeForm: "Falling back to activeForm" },
+        { content: "x".repeat(900), status: "pending", priority: "low" },
+      ] } },
+    ] } });
+    expect(session.todos).toEqual([
+      { content: "Falling back to activeForm", status: "pending", priority: "medium" },
+      { content: "x".repeat(500), status: "pending", priority: "low" },
+    ]);
+
+    // An explicit clear is recorded as an empty list, not as "never reported".
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_4", name: "TodoWrite", input: { todos: [] } },
+    ] } });
+    expect(session.todos).toEqual([]);
+
+    // A malformed payload leaves the last good list alone.
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_5", name: "TodoWrite", input: { todos: "not a list" } },
+    ] } });
+    expect(session.todos).toEqual([]);
+  });
+
   it("accumulates authoritative per-turn cost without recomputing earlier rows", async () => {
     const { instance } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });

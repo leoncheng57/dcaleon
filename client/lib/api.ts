@@ -231,6 +231,8 @@ export interface ClaudeSessionSummary {
   running: boolean;
   interrupted?: boolean;
   tokenUsage?: ClaudeTokenUsage;
+  /** The newest `TodoWrite` checklist. Absent means the agent never reported one. */
+  todos?: Todo[];
 }
 export interface ClaudeUsageBucket { utilization: number; resetsAt: string | null }
 export type ClaudeUsage =

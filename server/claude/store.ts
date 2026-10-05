@@ -62,6 +62,20 @@ export interface ClaudeSession {
   sawResult?: boolean;
   interrupted?: boolean;
   tokenUsage?: ClaudeTokenUsage;
+  /**
+   * The newest checklist the agent reported through `TodoWrite`, or absent when
+   * it never called it. Absent and empty are different answers and the UI tells
+   * them apart: absent means nothing was ever reported, `[]` means the agent
+   * explicitly cleared the list.
+   */
+  todos?: Todo[];
+}
+
+/** Mirrors `server/opencode/sessions.ts`; the inspector renders both lanes' rows. */
+export interface Todo {
+  content: string;
+  status: string;
+  priority: string;
 }
 
 export interface ClaudeRunRecord {
@@ -83,8 +97,44 @@ interface SessionIndex { version: 1; sessions: ClaudeSession[] }
 
 const MAX_EVENTS = 1_000;
 const MAX_PATCH_FILES = 50;
+const MAX_TODOS = 200;
+const MAX_TODO_CONTENT = 500;
 const FILE_TOOLS = new Set(["Read", "Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const MUTATION_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/**
+ * The checklist a `TodoWrite` call carried. The CLI sends the COMPLETE list on
+ * every call rather than a delta, so the newest call replaces the previous one
+ * wholesale — merging would resurrect items the agent deliberately dropped.
+ *
+ * Bounded on write like every other model-authored field on a durable record:
+ * this is the only barrier between an agent's output and `sessions.json`.
+ * Anything that is not a usable row is skipped rather than coerced into one —
+ * a blank todo is noise on a checklist, and inventing a status would make the
+ * panel's counts lie about what the agent actually reported.
+ */
+function normalizeTodos(input: unknown): Todo[] | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const raw = (input as Record<string, unknown>).todos;
+  if (!Array.isArray(raw)) return undefined;
+  const todos: Todo[] = [];
+  for (const item of raw.slice(0, MAX_TODOS)) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    // `activeForm` is the CLI's present-tense variant; `content` is the label
+    // the panel shows, so fall back to it rather than rendering an empty row.
+    // Trimmed before the emptiness check: `stringField` rejects "" but not a
+    // whitespace-only string, which would render as a blank checklist row.
+    const content = (stringField(row, "content") ?? stringField(row, "activeForm"))?.trim().slice(0, MAX_TODO_CONTENT);
+    if (!content) continue;
+    todos.push({
+      content,
+      status: stringField(row, "status")?.trim().slice(0, 40) || "pending",
+      priority: stringField(row, "priority")?.trim().slice(0, 40) || "medium",
+    });
+  }
+  return todos;
+}
 
 /** Reverse index search (ES2023 `findLastIndex` is unavailable under the server lib target). */
 function findLastIndex<T>(array: T[], predicate: (item: T) => boolean): number {
@@ -293,6 +343,13 @@ export class ClaudeSessionStore extends EventEmitter {
           const filePath = FILE_TOOLS.has(name) ? stringField(block.input, "file_path") ?? stringField(block.input, "notebook_path") : undefined;
           const command = name === "Bash" ? stringField(block.input, "command") : undefined;
           if (filePath && MUTATION_TOOLS.has(name)) edited.add(path.relative(session.directory, filePath) || filePath);
+          // The checklist rides in the tool's own input and is read here because
+          // this is the only place the raw block is still in hand — every other
+          // field of `block.input` is dropped on the next line.
+          if (name === "TodoWrite") {
+            const todos = normalizeTodos(block.input);
+            if (todos) session.todos = todos;
+          }
           const bashPreview = command ? command.split("\n")[0].trim().slice(0, 120) : undefined;
           session.events.push({
             id, messageId: id, timestamp: now, kind: "tool", status: "running", name, attachments: [],
