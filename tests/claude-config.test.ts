@@ -132,7 +132,8 @@ describe("Claude runtime configuration", () => {
     const item = await fixture();
     const defaults = readClaudeConfig(baseEnv(item));
     expect(defaults.models).toContain("claude-opus-5");
-    expect(defaults.models.length).toBeGreaterThanOrEqual(8);
+    expect(defaults.models).toEqual(expect.arrayContaining(["claude-opus-5-5", "claude-fable-5-1"]));
+    expect(defaults.models.length).toBeGreaterThanOrEqual(10);
     // The preset's own model is always selectable even if not in the list.
     const custom = readClaudeConfig({ ...baseEnv(item), CLAUDE_MODELS: JSON.stringify(["claude-sonnet-5", "claude-haiku-4-5"]) });
     expect(custom.models[0]).toBe("claude-opus-5"); // preset model, prepended

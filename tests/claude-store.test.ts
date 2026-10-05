@@ -54,6 +54,105 @@ describe("Claude session store", () => {
     expect(session.started).toBe(true);
   });
 
+  it("captures the TodoWrite checklist, replaces it wholesale, and bounds what it keeps", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "plan it");
+    // Never called => absent, which is a different answer from an empty list.
+    expect(session.todos).toBeUndefined();
+
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_1", name: "TodoWrite", input: { todos: [
+        { content: "Trace the option list", status: "completed", priority: "high" },
+        { content: "Wire the panel", status: "in_progress", priority: "medium" },
+      ] } },
+    ] } });
+    expect(session.todos).toEqual([
+      { content: "Trace the option list", status: "completed", priority: "high" },
+      { content: "Wire the panel", status: "in_progress", priority: "medium" },
+    ]);
+
+    // The CLI resends the whole list, so the newest call replaces rather than
+    // merges: a dropped row must not be resurrected.
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_2", name: "TodoWrite", input: { todos: [{ content: "Wire the panel", status: "completed", priority: "medium" }] } },
+    ] } });
+    expect(session.todos).toEqual([{ content: "Wire the panel", status: "completed", priority: "medium" }]);
+
+    // Unusable rows are skipped, missing fields default, and content is capped.
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_3", name: "TodoWrite", input: { todos: [
+        { content: "   " }, null, "nope", { status: "pending" },
+        { activeForm: "Falling back to activeForm" },
+        { content: "x".repeat(900), status: "pending", priority: "low" },
+      ] } },
+    ] } });
+    expect(session.todos).toEqual([
+      { content: "Falling back to activeForm", status: "pending", priority: "medium" },
+      { content: "x".repeat(500), status: "pending", priority: "low" },
+    ]);
+
+    // An explicit clear is recorded as an empty list, not as "never reported".
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_4", name: "TodoWrite", input: { todos: [] } },
+    ] } });
+    expect(session.todos).toEqual([]);
+
+    // A malformed payload leaves the last good list alone.
+    instance.applyFrame(session.id, { type: "assistant", message: { content: [
+      { type: "tool_use", id: "tu_todo_5", name: "TodoWrite", input: { todos: "not a list" } },
+    ] } });
+    expect(session.todos).toEqual([]);
+  });
+
+  it("builds the checklist from TaskCreate / TaskUpdate results, as CLI 2.1.28x emits them", async () => {
+    const { instance } = await store();
+    const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });
+    instance.startRun(session, "plan it");
+    const call = (id: string, name: string, input: unknown) =>
+      instance.applyFrame(session.id, { type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } });
+    const result = (id: string, content: string, toolUseResult?: unknown, isError = false) =>
+      instance.applyFrame(session.id, { type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content, ...(isError ? { is_error: true } : {}) }] }, ...(toolUseResult ? { tool_use_result: toolUseResult } : {}) });
+
+    // A create learns its id from the result, not the call: nothing lands until then.
+    call("tu_c1", "TaskCreate", { subject: "  alpha step  ", description: "Alpha task" });
+    expect(session.todos).toBeUndefined();
+    result("tu_c1", "Task #1 created successfully: alpha step", { task: { id: "1", subject: "alpha step" } });
+    // Falls back to the result text when the structured result is missing.
+    call("tu_c2", "TaskCreate", { subject: "beta step" });
+    result("tu_c2", "Task #2 created successfully: beta step");
+    call("tu_c3", "TaskCreate", { subject: "gamma step" });
+    result("tu_c3", "Task #3 created successfully: gamma step", { task: { id: "3", subject: "gamma step" } });
+    expect(session.todos).toEqual([
+      { id: "1", content: "alpha step", status: "pending", priority: "medium" },
+      { id: "2", content: "beta step", status: "pending", priority: "medium" },
+      { id: "3", content: "gamma step", status: "pending", priority: "medium" },
+    ]);
+
+    call("tu_u1", "TaskUpdate", { taskId: "1", status: "completed" });
+    result("tu_u1", "Updated task #1 status");
+    call("tu_u2", "TaskUpdate", { taskId: "2", status: "in_progress", subject: "beta, renamed" });
+    result("tu_u2", "Updated task #2 status, subject");
+    call("tu_u3", "TaskUpdate", { taskId: "3", status: "deleted" });
+    result("tu_u3", "Updated task #3 deleted");
+    // A failed update moves nothing; an update to an unknown id is ignored.
+    call("tu_u4", "TaskUpdate", { taskId: "1", status: "pending" });
+    result("tu_u4", "Task not found", undefined, true);
+    call("tu_u5", "TaskUpdate", { taskId: "99", status: "completed" });
+    result("tu_u5", "Updated task #99 status");
+    expect(session.todos).toEqual([
+      { id: "1", content: "alpha step", status: "completed", priority: "medium" },
+      { id: "2", content: "beta, renamed", status: "in_progress", priority: "medium" },
+    ]);
+
+    // The list survives into the next turn so its updates still find their rows.
+    instance.applyFrame(session.id, { type: "result", subtype: "success", is_error: false, total_cost_usd: 0 });
+    instance.startRun(session, "keep going");
+    call("tu_u6", "TaskUpdate", { taskId: "2", status: "completed" });
+    result("tu_u6", "Updated task #2 status");
+    expect(session.todos?.map((todo) => todo.status)).toEqual(["completed", "completed"]);
+  });
+
   it("accumulates authoritative per-turn cost without recomputing earlier rows", async () => {
     const { instance } = await store();
     const session = instance.create({ presetId: "ro", workspaceId: "ws", workspaceLabel: "WS", mode: "read-only", isolation: "direct", directory: "/tmp/ws", projectDirectory: "/tmp/ws" });

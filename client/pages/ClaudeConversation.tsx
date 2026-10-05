@@ -859,6 +859,14 @@ export function ClaudeConversationPage() {
             directory={id}
             sessionID={id}
             events={events}
+            // Passed explicitly because the shared inspector defaults to
+            // `todos = [], todosLoaded = true`: a caller that supplies nothing
+            // renders a confident "No todos reported." instead of saying it was
+            // never wired, which is exactly how this lane looked wired for
+            // months while carrying no todo data at all.
+            todos={session?.todos ?? []}
+            todosLoaded={session !== undefined}
+            todosError={null}
             runLogOverride={<Button onClick={() => setRunlogOpen(true)} data-testid="claude-inspector-runlog">Open complete run log</Button>}
             requestedTab={requestedInspectorTab}
             mobileOpen={inspectorOpen}
