@@ -63,8 +63,9 @@ export interface ClaudeSession {
   interrupted?: boolean;
   tokenUsage?: ClaudeTokenUsage;
   /**
-   * The newest checklist the agent reported through `TodoWrite`, or absent when
-   * it never called it. Absent and empty are different answers and the UI tells
+   * The newest checklist the agent reported — through `TodoWrite`, or built up
+   * from `TaskCreate` / `TaskUpdate` on CLIs that replaced it — or absent when
+   * it never reported one. Absent and empty are different answers and the UI tells
    * them apart: absent means nothing was ever reported, `[]` means the agent
    * explicitly cleared the list.
    */
@@ -76,6 +77,8 @@ export interface Todo {
   content: string;
   status: string;
   priority: string;
+  /** The CLI's task id, present only on rows built from `TaskCreate`. */
+  id?: string;
 }
 
 export interface ClaudeRunRecord {
@@ -99,6 +102,7 @@ const MAX_EVENTS = 1_000;
 const MAX_PATCH_FILES = 50;
 const MAX_TODOS = 200;
 const MAX_TODO_CONTENT = 500;
+const TASK_TOOLS = new Set(["TaskCreate", "TaskUpdate"]);
 const FILE_TOOLS = new Set(["Read", "Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const MUTATION_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
@@ -136,6 +140,33 @@ function normalizeTodos(input: unknown): Todo[] | undefined {
   return todos;
 }
 
+/**
+ * Fold one successful `TaskCreate` / `TaskUpdate` into the checklist. Newer
+ * CLIs (2.1.28x) ship these instead of `TodoWrite`: a create carries only the
+ * subject and learns its id from the tool RESULT (`tool_use_result.task.id`,
+ * or "Task #N created" in the text), while an update names a task by id and
+ * carries only the fields it changes. `status: "deleted"` removes the row.
+ * Applied on the result, not the call, so a failed update never moves a row.
+ */
+function applyTaskCall(current: Todo[] | undefined, name: string, input: unknown, result: unknown, resultText: string): Todo[] | undefined {
+  const todos = [...(current ?? [])];
+  if (name === "TaskCreate") {
+    const content = (stringField(input, "subject") ?? stringField(input, "activeForm"))?.trim().slice(0, MAX_TODO_CONTENT);
+    const task = result && typeof result === "object" ? (result as Record<string, unknown>).task : undefined;
+    const id = stringField(task, "id") ?? /Task #(\w+) created/.exec(resultText)?.[1];
+    if (!content || !id || todos.length >= MAX_TODOS) return current;
+    return [...todos.filter((todo) => todo.id !== id), { id: id.slice(0, 40), content, status: "pending", priority: "medium" }];
+  }
+  const id = stringField(input, "taskId");
+  const index = id ? todos.findIndex((todo) => todo.id === id) : -1;
+  if (index < 0) return current;
+  const status = stringField(input, "status")?.trim().slice(0, 40);
+  if (status === "deleted") return todos.filter((_, i) => i !== index);
+  const content = stringField(input, "subject")?.trim().slice(0, MAX_TODO_CONTENT);
+  todos[index] = { ...todos[index], ...(status ? { status } : {}), ...(content ? { content } : {}) };
+  return todos;
+}
+
 /** Reverse index search (ES2023 `findLastIndex` is unavailable under the server lib target). */
 function findLastIndex<T>(array: T[], predicate: (item: T) => boolean): number {
   for (let i = array.length - 1; i >= 0; i--) if (predicate(array[i])) return i;
@@ -159,6 +190,8 @@ export class ClaudeSessionStore extends EventEmitter {
   private readonly transcripts = new Map<string, ClaudeTranscriptIndex>();
   private readonly toolIndex = new Map<string, Map<string, string>>();
   private readonly editedFiles = new Map<string, Set<string>>();
+  /** Task tool inputs awaiting their result, by session then `tool_use` id. */
+  private readonly taskCalls = new Map<string, Map<string, { name: string; input: unknown }>>();
   private readonly runModes = new Map<string, "plan" | "build">();
   private ledger: Ledger = { version: 1, records: [] };
   private loaded = false;
@@ -267,6 +300,7 @@ export class ClaudeSessionStore extends EventEmitter {
       this.transcripts.delete(id);
       this.toolIndex.delete(id);
       this.editedFiles.delete(id);
+      this.taskCalls.delete(id);
       this.runModes.delete(id);
       this.persistSessions();
       this.emit("update", id);
@@ -299,6 +333,7 @@ export class ClaudeSessionStore extends EventEmitter {
     });
     this.toolIndex.set(session.id, new Map());
     this.editedFiles.set(session.id, new Set());
+    this.taskCalls.set(session.id, new Map());
     const record: ClaudeRunRecord = {
       id: randomUUID(), sessionId: session.id, presetId: session.presetId, workspaceId: session.workspaceId, mode: session.mode,
       taskClass: "conversation", startedAt: now, outcome: "running", costUsd: 0, interventions: 0,
@@ -318,6 +353,8 @@ export class ClaudeSessionStore extends EventEmitter {
     const now = new Date().toISOString();
     const tools = this.toolIndex.get(sessionId) ?? new Map<string, string>();
     const edited = this.editedFiles.get(sessionId) ?? new Set<string>();
+    const taskCalls = this.taskCalls.get(sessionId) ?? new Map<string, { name: string; input: unknown }>();
+    this.taskCalls.set(sessionId, taskCalls);
 
     const turnMode = this.runModes.get(sessionId);
 
@@ -349,6 +386,8 @@ export class ClaudeSessionStore extends EventEmitter {
           if (name === "TodoWrite") {
             const todos = normalizeTodos(block.input);
             if (todos) session.todos = todos;
+          } else if (TASK_TOOLS.has(name)) {
+            taskCalls.set(block.id, { name, input: block.input });
           }
           const bashPreview = command ? command.split("\n")[0].trim().slice(0, 120) : undefined;
           session.events.push({
@@ -360,14 +399,23 @@ export class ClaudeSessionStore extends EventEmitter {
         }
       }
     } else if (frame.type === "user") {
-      for (const block of blocksOf(frame)) {
-        if (block.type !== "tool_result" || typeof block.tool_use_id !== "string") continue;
+      const results = blocksOf(frame).filter((block) => block.type === "tool_result");
+      for (const block of results) {
+        if (typeof block.tool_use_id !== "string") continue;
+        const isError = block.is_error === true;
+        const text = typeof block.content === "string" ? block.content
+          : Array.isArray(block.content) ? block.content.map((part) => (part as Record<string, unknown>).text).filter((value) => typeof value === "string").join("") : "";
+        const taskCall = taskCalls.get(block.tool_use_id);
+        if (taskCall) {
+          taskCalls.delete(block.tool_use_id);
+          // `tool_use_result` is frame-level, so it is only attributable to
+          // this block when the frame carries a single result.
+          const structured = results.length === 1 ? frame.tool_use_result : undefined;
+          if (!isError) session.todos = applyTaskCall(session.todos, taskCall.name, taskCall.input, structured, text);
+        }
         const eventId = tools.get(block.tool_use_id);
         const event = eventId ? session.events.find((item) => item.id === eventId) : undefined;
         if (event?.kind === "tool") {
-          const isError = block.is_error === true;
-          const text = typeof block.content === "string" ? block.content
-            : Array.isArray(block.content) ? block.content.map((part) => (part as Record<string, unknown>).text).filter((value) => typeof value === "string").join("") : "";
           session.events[session.events.indexOf(event)] = {
             ...event, status: isError ? "error" : "completed",
             ...(text ? isError ? { error: text } : { output: text } : {}),
@@ -548,6 +596,7 @@ export class ClaudeSessionStore extends EventEmitter {
     session.activeRunId = undefined;
     this.toolIndex.delete(session.id);
     this.editedFiles.delete(session.id);
+    this.taskCalls.delete(session.id);
     this.runModes.delete(session.id);
     const record = [...this.ledger.records].reverse().find((item) => item.id === activeRunId);
     if (record) {
